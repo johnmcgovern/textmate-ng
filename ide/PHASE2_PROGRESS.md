@@ -61,9 +61,14 @@ generator bugs (each masked earlier by stale/partial build state):
 Rebuild check: `xcodebuild -project TextMate.xcodeproj -target AllLibs -configuration Release clean build` → 50 `.a` in `build/Release/`.
 
 ## Next actions (in order)
-1. ~~Fix the AllLibs parallel-PCH issue.~~ **DONE** (commit 9dd5daed) — all 50 libs
-   → `.a`. **START HERE →** task 2 below.
-2. **CLI tools + loadable bundles** (task 7). Product types already assigned
+1. ~~Fix the AllLibs parallel-PCH issue.~~ **DONE** (commit 9dd5daed) — all 50 libs → `.a`.
+2. ~~**CLI tools + loadable bundles.**~~ **DONE** (commit 88126b8d). Pass 2 in the seed
+   links executables/bundles against their transitive lib closure (.a in Frameworks
+   phase + target dep; no lib↔lib edges) + external `-l…`/`-framework …` unioned over
+   the closure. Release now defines **NDEBUG** (else oak/debug asserts reference the
+   unlinked libOakDebug.a). Bundles get `INFOPLIST_FILE` → their real template plist +
+   ad-hoc `CODE_SIGN_IDENTITY="-"`. All 11 tools + Dialog/Dialog2/TextMateQL build clean.
+   **START HERE →** task 3 below (the app). Product types already assigned
    (`:command_line_tool`, `:bundle` with `WRAPPER_EXTENSION` tmplugin/qlgenerator).
    Still TODO: **link wiring** — for each tool/bundle, compute `lib_closure()`
    (already implemented in the seed) and add each lib product to the target's
@@ -104,5 +109,5 @@ Rebuild check: `xcodebuild -project TextMate.xcodeproj -target AllLibs -configur
 - [x] Slice 3: Ragel + Cap'n Proto build rules
 - [x] Extractor (`ide/extract_specs.rb`, 66 targets)
 - [x] Emit + compile all 50 libs (commit 9dd5daed)
-- [ ] CLI tools + loadable bundles (link wiring)
+- [x] CLI tools + loadable bundles (link wiring) (commit 88126b8d)
 - [ ] TextMate.app: link + bundle phases + Info.plist + entitlements + codesign

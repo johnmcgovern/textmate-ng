@@ -29,7 +29,10 @@ else
 	done
 
 	for lib in capnp kj; do
-		test -f "${prefix}/lib/lib${lib}."* || error "*** dependency missing: ‘${prefix}/lib/lib${lib}.*’. Install dependency and/or update ‘local.rave’ with correct path."
+		# `ls`, not `test -f …*`: the glob can match several files (e.g. Homebrew
+		# ships libcapnp.dylib + libcapnp.X.Y.Z.dylib + libcapnp.a), and
+		# `test -f a b c` errors with "too many arguments".
+		ls "${prefix}/lib/lib${lib}."* >/dev/null 2>&1 || error "*** dependency missing: ‘${prefix}/lib/lib${lib}.*’. Install dependency and/or update ‘local.rave’ with correct path."
 	done
 fi
 

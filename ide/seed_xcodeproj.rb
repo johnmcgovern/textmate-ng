@@ -48,7 +48,10 @@ GLOBAL_DEFINE_FLAGS = [
 # generated .capnp.cpp/.cc) under a single GCC_PREFIX_HEADER.
 PREFIX_HEADER = "Shared/PCH/prelude.h"
 
-GEN_INCLUDE = "ide/gen/include"           # generated <fw/header.h> symlink farm
+GEN_INCLUDE     = "ide/gen/include"       # generated <fw/header.h> symlink farm
+GEN_INCLUDE_NOU = "ide/gen/include-nou"   # variant farm w/o the <fw>.h umbrella, for
+                                          # system-colliding frameworks on WebKit-pulling
+                                          # targets (see header_farm_dirs / option 4)
 
 # System frameworks (lowercased) in the active SDK. A TM framework whose name
 # case-collides with one of these (e.g. `network` vs Apple's Network.framework)
@@ -136,14 +139,28 @@ def target_includes?(t, fw)
   end
 end
 
-# The farm include dirs (`ide/gen/include/<fw>`) a target compiles with: its
-# transitive header closure, minus system-colliding frameworks the target doesn't
-# actually include (those would shadow the real system framework — see
-# SYSTEM_FRAMEWORKS).
+# ObjC/ObjC++ sources compile with prelude.m/.mm, which #import <WebKit/WebKit.h> —
+# and on the current SDK that transitively pulls <Network/Network.h>. So a target
+# with any .m/.mm source is a "WebKit-pulling" target.
+def pulls_webkit?(t)
+  t["sources"].any? { |rel| rel.end_with?(".m", ".mm") }
+end
+
+# The farm include dirs a target compiles with: its transitive header closure. A
+# system-colliding framework (e.g. `network` vs Apple's Network.framework) is only
+# added when the target actually includes <fw/...> (else it would shadow the system
+# header). When such a target ALSO pulls WebKit, it uses the no-umbrella variant
+# farm so <Network/Network.h> resolves to Apple, not TM (option 4).
 def header_farm_dirs(t)
-  header_closure(t["name"]).select do |fw|
-    !SYSTEM_FRAMEWORKS.include?(fw.downcase) || target_includes?(t, fw)
-  end.map { |fw| "$(SRCROOT)/#{GEN_INCLUDE}/#{fw}" }
+  header_closure(t["name"]).map do |fw|
+    if SYSTEM_FRAMEWORKS.include?(fw.downcase)
+      next nil unless target_includes?(t, fw)
+      base = pulls_webkit?(t) ? GEN_INCLUDE_NOU : GEN_INCLUDE
+      "$(SRCROOT)/#{base}/#{fw}"
+    else
+      "$(SRCROOT)/#{GEN_INCLUDE}/#{fw}"
+    end
+  end.compact
 end
 
 # Rewrite relative -I flags to $(SRCROOT)-anchored ones for Xcode.
@@ -159,7 +176,9 @@ end
 
 def build_include_farm(specs)
   farm = File.join(ROOT, GEN_INCLUDE)
+  nou  = File.join(ROOT, GEN_INCLUDE_NOU)
   FileUtils.rm_rf(farm)
+  FileUtils.rm_rf(nou)
   specs.each do |spec|
     next if spec["headers"].empty?
     # Double-nested (rave's _Include/<fw>/<fw>/*.h): the *search dir* added to a
@@ -168,9 +187,23 @@ def build_include_farm(specs)
     # (e.g. <Network/Network.h>) does NOT — unless <fw> is on this target's path.
     dest_dir = File.join(farm, spec["name"], spec["name"])
     FileUtils.mkdir_p(dest_dir)
+    # For system-colliding frameworks (e.g. `network`), also build a variant farm
+    # that omits the <fw>.h umbrella. A WebKit-pulling target that includes <fw/...>
+    # uses this variant so the umbrella include the SDK does (<Network/Network.h>)
+    # falls through to the real system framework instead of TM's header.
+    colliding = SYSTEM_FRAMEWORKS.include?(spec["name"].downcase)
+    umbrella  = "#{spec['name'].downcase}.h"
+    nou_dir   = File.join(nou, spec["name"], spec["name"])
+    FileUtils.mkdir_p(nou_dir) if colliding
     spec["headers"].each do |rel|
-      link = File.join(dest_dir, File.basename(rel))
-      FileUtils.ln_s(File.join(ROOT, rel), link) unless File.exist?(link)
+      base = File.basename(rel)
+      src  = File.join(ROOT, rel)
+      link = File.join(dest_dir, base)
+      FileUtils.ln_s(src, link) unless File.exist?(link)
+      if colliding && base.downcase != umbrella
+        nlink = File.join(nou_dir, base)
+        FileUtils.ln_s(src, nlink) unless File.exist?(nlink)
+      end
     end
   end
   puts "built include farm for #{specs.count { |s| !s['headers'].empty? }} targets"
@@ -352,9 +385,16 @@ specs.each do |t|
   fworks   = link_scope.flat_map { |n| BY_NAME[n] ? BY_NAME[n]["frameworks"] : [] }.uniq
   ld_fw    = fworks.flat_map { |f| ["-framework", f] }
 
+  # Per-target `ln_flags` propagate to whatever links the target (rave semantics),
+  # e.g. license's `-Wl,-U,__Z15revoked_serialsv` (allow the weak-import
+  # revoked_serials() to be undefined). `-bundle` is excluded — it's a product-type
+  # marker already handled by MACH_O_TYPE, not something to force onto an executable.
+  ld_extra = link_scope.flat_map { |n| BY_NAME[n] ? BY_NAME[n]["ln_flags"] : [] }
+                       .uniq.reject { |f| f == "-bundle" }
+
   target.build_configurations.each do |config|
     bs = config.build_settings
-    bs["OTHER_LDFLAGS"] = ["$(inherited)"] + ld_libs + ld_fw
+    bs["OTHER_LDFLAGS"] = ["$(inherited)"] + ld_libs + ld_fw + ld_extra
   end
   puts "linked #{t['name']} [#{k}]: #{closure.size} libs, #{ext_libs.size} ext-libs, #{fworks.size} frameworks"
 end

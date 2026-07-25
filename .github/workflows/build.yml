@@ -4,15 +4,17 @@ on: [push]
 
 jobs:
   build:
-    runs-on: macOS-latest
+    runs-on: macos-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
     - name: Setup
       run: brew install boost capnp google-sparsehash multimarkdown ninja ragel
     - name: Configure
+      # ./configure now auto-detects Homebrew's prefix (/opt/homebrew on the
+      # Apple-Silicon macos-latest runners, /usr/local on Intel).
       run: ./configure
     - name: Build
       run: ninja TextMate

@@ -18,6 +18,7 @@ require "xcodeproj"
 require "pathname"
 require "fileutils"
 require "json"
+require "set"
 
 ROOT      = File.expand_path("..", __dir__)
 PROJ_PATH = File.join(ROOT, "TextMate.xcodeproj")
@@ -27,6 +28,11 @@ HOME       = ENV["HOME"]
 NIX_ARM    = "#{HOME}/nix-sdk/arm64"
 NIX_X86    = "#{HOME}/nix-sdk/x86_64"    # boost (header-only) lives only here
 DEPLOY_TGT = "15.0"                       # migration floor (Stream 4); also > SDK min 10.13
+
+# App version, captured the way rave does (grep the latest Changes.md heading). Fed
+# to the app Info.plist as the ${APP_VERSION} build-setting expansion.
+APP_VERSION = (File.read(File.join(File.expand_path("..", __dir__),
+                "Applications/TextMate/about/Changes.md"))[/^## .* \(v(.*)\)$/, 1] || "0.0.0")
 
 # Preprocessor defs from default.rave's global FLAGS. Passed as verbatim -D tokens
 # in OTHER_CFLAGS (GCC_PREPROCESSOR_DEFINITIONS strips the inner quotes that make
@@ -43,6 +49,15 @@ GLOBAL_DEFINE_FLAGS = [
 PREFIX_HEADER = "Shared/PCH/prelude.h"
 
 GEN_INCLUDE = "ide/gen/include"           # generated <fw/header.h> symlink farm
+
+# System frameworks (lowercased) in the active SDK. A TM framework whose name
+# case-collides with one of these (e.g. `network` vs Apple's Network.framework)
+# must NOT be blanket-added to every requiring target's -I path: on case-insensitive
+# APFS it would shadow the system header that the WebKit PCH pulls in
+# (<Network/Network.h>, a newer-SDK addition). Such a farm dir is added only to
+# targets that actually include <fw/...> themselves (see header_farm_dirs).
+SYSTEM_FRAMEWORKS = Dir.glob(File.join(`xcrun --sdk macosx --show-sdk-path`.strip,
+  "System/Library/Frameworks/*.framework")).map { |p| File.basename(p, ".framework").downcase }.to_set
 
 # NOTE: the generated <fw/header.h> farm is deliberately NOT here. Adding the flat
 # farm root to every target lets one framework's dir shadow a same-named *system*
@@ -110,6 +125,25 @@ def header_closure(name)
     queue.concat(t["require"] + t["require_headers"])
   end
   seen.keys.select { |d| BY_NAME[d] && !BY_NAME[d]["headers"].empty? }
+end
+
+# Does target t's own sources/headers angle-include <fw/...>?
+def target_includes?(t, fw)
+  re = /#\s*(?:include|import)\s*<#{Regexp.escape(fw)}\//i
+  (t["sources"] + t["headers"]).uniq.any? do |rel|
+    path = File.join(ROOT, rel)
+    File.file?(path) && File.foreach(path).any? { |ln| ln =~ re }
+  end
+end
+
+# The farm include dirs (`ide/gen/include/<fw>`) a target compiles with: its
+# transitive header closure, minus system-colliding frameworks the target doesn't
+# actually include (those would shadow the real system framework — see
+# SYSTEM_FRAMEWORKS).
+def header_farm_dirs(t)
+  header_closure(t["name"]).select do |fw|
+    !SYSTEM_FRAMEWORKS.include?(fw.downcase) || target_includes?(t, fw)
+  end.map { |fw| "$(SRCROOT)/#{GEN_INCLUDE}/#{fw}" }
 end
 
 # Rewrite relative -I flags to $(SRCROOT)-anchored ones for Xcode.
@@ -187,6 +221,7 @@ def apply_common_settings(config, extra = {})
   bs["CLANG_ENABLE_MODULES"]        = "NO"
   bs["ALWAYS_SEARCH_USER_PATHS"]    = "NO"   # keep USER_HEADER_SEARCH_PATHS quote-only (-iquote)
   bs["CODE_SIGN_IDENTITY"]          = "-"    # ad-hoc (rave CS_IDENTITY); enough for a local launchable build
+  bs["APP_MIN_OS"]                  = DEPLOY_TGT  # for ${APP_MIN_OS} expansion in Info.plist templates
   bs["HEADER_SEARCH_PATHS"]         = ["$(inherited)"] + COMMON_HEADER_PATHS
   bs["LIBRARY_SEARCH_PATHS"]        = ["$(inherited)", "#{NIX_ARM}/lib"]
   bs["OTHER_CFLAGS"]                = [
@@ -210,6 +245,18 @@ def infoplist_for(t)
     (f["inputs"] || []).each { |i| return i if File.basename(i) == "Info.plist" }
   end
   nil
+end
+
+# The app's Entitlements.plist is a template with ${CS_GET_TASK_ALLOW}. Xcode won't
+# reliably expand a custom var inside an entitlements file, so pre-substitute it
+# (release => false, per default.rave `config release`) into a concrete generated
+# file and point CODE_SIGN_ENTITLEMENTS at that. Returns the SRCROOT-relative path.
+def generate_entitlements(name, src_rel)
+  out_rel = "#{GEN_INCLUDE.sub('include', 'entitlements')}/#{name}.plist"
+  out_abs = File.join(ROOT, out_rel)
+  FileUtils.mkdir_p(File.dirname(out_abs))
+  File.write(out_abs, File.read(File.join(ROOT, src_rel)).gsub("${CS_GET_TASK_ALLOW}", "false"))
+  out_rel
 end
 
 # ---------------------------------------------------------------------------
@@ -260,7 +307,7 @@ specs.each do |t|
     # in by the prelude must NOT resolve to a same-named header in the target's own
     # src dir (e.g. regexp/src/glob.h shadowing POSIX <glob.h>).
     bs["USER_HEADER_SEARCH_PATHS"] = ["$(inherited)"] + own_dirs
-    bs["HEADER_SEARCH_PATHS"] += header_closure(t["name"]).map { |d| "$(SRCROOT)/#{GEN_INCLUDE}/#{d}" }
+    bs["HEADER_SEARCH_PATHS"] += header_farm_dirs(t)
     bs["OTHER_CFLAGS"] += per_target_cflags unless per_target_cflags.empty?
     bs["OTHER_CPLUSPLUSFLAGS"] = ["$(inherited)"] + per_target_cxxflags unless per_target_cxxflags.empty?
     if k == :plugin || k == :qlgen
@@ -268,6 +315,14 @@ specs.each do |t|
       bs["MACH_O_TYPE"] = "mh_bundle"
       ip = infoplist_for(t)
       bs["INFOPLIST_FILE"] = "$(SRCROOT)/#{ip}" if ip
+    end
+    if k == :app
+      ip = infoplist_for(t)
+      bs["INFOPLIST_FILE"] = "$(SRCROOT)/#{ip}" if ip
+      bs["APP_VERSION"] = APP_VERSION                 # ${APP_VERSION} in Info.plist
+      if t["entitlements"] && !t["entitlements"].empty?
+        bs["CODE_SIGN_ENTITLEMENTS"] = "$(SRCROOT)/#{generate_entitlements(t['name'], t['entitlements'])}"
+      end
     end
   end
   puts "target #{t['name']} [#{k}] (#{t['sources'].size} src)"

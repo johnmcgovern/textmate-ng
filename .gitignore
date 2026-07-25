@@ -1,3 +1,9 @@
 build.ninja
 local.rave
 Frameworks/license/src/revoked_serials.cc
+
+# Xcode migration (Phase 2 / Stream 1)
+# /build/    = xcodebuild output; /ide/gen/ = generated <fw> include symlink farm
+/build/
+/ide/gen/
+.DS_Store

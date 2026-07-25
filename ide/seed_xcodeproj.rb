@@ -44,9 +44,14 @@ PREFIX_HEADER = "Shared/PCH/prelude.h"
 
 GEN_INCLUDE = "ide/gen/include"           # generated <fw/header.h> symlink farm
 
+# NOTE: the generated <fw/header.h> farm is deliberately NOT here. Adding the flat
+# farm root to every target lets one framework's dir shadow a same-named *system*
+# framework (e.g. TM's `network` fw shadows Apple's <Network/Network.h>, which the
+# WebKit PCH pulls in) — this broke AllLibs. Instead each target gets ONLY the farm
+# dirs for its transitive require closure (see header_closure), mirroring rave's
+# per-target `-I _Include/<fw>` scoping.
 COMMON_HEADER_PATHS = [
   "$(SRCROOT)/Shared/include",
-  "$(SRCROOT)/#{GEN_INCLUDE}",
   "$(DERIVED_FILE_DIR)",                   # generated capnp/ragel headers
   "#{NIX_ARM}/include",                    # capnp, kj, sparsehash, google
   "#{NIX_X86}/include",                    # boost (header-only; arch-independent)
@@ -89,6 +94,24 @@ def lib_closure(name, seen = {})
   seen
 end
 
+# Transitive closure over `require` + `require_headers` (mirrors rave's
+# required_targets(include_weak: true), excluding self). These are the frameworks
+# whose farm include dirs a target may see. Scoping to this set — rather than the
+# whole farm — is what stops same-named system frameworks from being shadowed.
+def header_closure(name)
+  seen = {}
+  root = BY_NAME[name]
+  queue = (root["require"] + root["require_headers"]).dup
+  until queue.empty?
+    dep = queue.shift
+    next if seen[dep] || dep == name
+    seen[dep] = true
+    t = BY_NAME[dep] or next
+    queue.concat(t["require"] + t["require_headers"])
+  end
+  seen.keys.select { |d| BY_NAME[d] && !BY_NAME[d]["headers"].empty? }
+end
+
 # Rewrite relative -I flags to $(SRCROOT)-anchored ones for Xcode.
 def fix_include_flags(flags)
   flags.map do |f|
@@ -105,7 +128,11 @@ def build_include_farm(specs)
   FileUtils.rm_rf(farm)
   specs.each do |spec|
     next if spec["headers"].empty?
-    dest_dir = File.join(farm, spec["name"])
+    # Double-nested (rave's _Include/<fw>/<fw>/*.h): the *search dir* added to a
+    # target is ide/gen/include/<fw>, and it contains only a <fw>/ subdir. So
+    # `<fw/header.h>` resolves here, but a same-named system framework umbrella
+    # (e.g. <Network/Network.h>) does NOT — unless <fw> is on this target's path.
+    dest_dir = File.join(farm, spec["name"], spec["name"])
     FileUtils.mkdir_p(dest_dir)
     spec["headers"].each do |rel|
       link = File.join(dest_dir, File.basename(rel))
@@ -158,6 +185,7 @@ def apply_common_settings(config, extra = {})
   bs["CLANG_ENABLE_OBJC_ARC"]       = "YES"
   bs["GCC_CHAR_IS_UNSIGNED_CHAR"]   = "YES"
   bs["CLANG_ENABLE_MODULES"]        = "NO"
+  bs["ALWAYS_SEARCH_USER_PATHS"]    = "NO"   # keep USER_HEADER_SEARCH_PATHS quote-only (-iquote)
   bs["HEADER_SEARCH_PATHS"]         = ["$(inherited)"] + COMMON_HEADER_PATHS
   bs["LIBRARY_SEARCH_PATHS"]        = ["$(inherited)", "#{NIX_ARM}/lib"]
   bs["OTHER_CFLAGS"]                = [
@@ -177,7 +205,6 @@ end
 build_include_farm(specs)
 
 project = Xcodeproj::Project.new(PROJ_PATH)
-build_rules = make_build_rules(project)
 targets = {}
 
 PRODUCT_TYPE = { lib: :static_library, tool: :command_line_tool,
@@ -187,7 +214,11 @@ PRODUCT_TYPE = { lib: :static_library, tool: :command_line_tool,
 specs.each do |t|
   k = kind(t)
   target = project.new_target(PRODUCT_TYPE[k], t["name"], :osx, DEPLOY_TGT)
-  target.build_rules.replace(build_rules)
+  # Append with << (NOT ObjectList#replace): replace fails to parent the rule
+  # objects, so they drop out of the object graph on save and every target ends up
+  # referencing dangling UUIDs — Xcode then reports "no rule to process file" for
+  # *.capnp / *.rl. Fresh objects per target (a shared rule reparents away).
+  make_build_rules(project).each { |rule| target.build_rules << rule }
   targets[t["name"]] = target
 
   group = project.main_group.new_group(t["name"], t["dir"])
@@ -205,7 +236,12 @@ specs.each do |t|
     extra["GCC_OPTIMIZATION_LEVEL"] = "s" if config.name == "Release"
     apply_common_settings(config, extra)
     bs = config.build_settings
-    bs["HEADER_SEARCH_PATHS"] += own_dirs
+    # Own source dirs go on the QUOTE-only path (-iquote), not -I: a framework's
+    # `#include "foo.h"` resolves here, but a system `<glob.h>` / `<version.h>` pulled
+    # in by the prelude must NOT resolve to a same-named header in the target's own
+    # src dir (e.g. regexp/src/glob.h shadowing POSIX <glob.h>).
+    bs["USER_HEADER_SEARCH_PATHS"] = ["$(inherited)"] + own_dirs
+    bs["HEADER_SEARCH_PATHS"] += header_closure(t["name"]).map { |d| "$(SRCROOT)/#{GEN_INCLUDE}/#{d}" }
     bs["OTHER_CFLAGS"] += per_target_cflags unless per_target_cflags.empty?
     bs["OTHER_CPLUSPLUSFLAGS"] = ["$(inherited)"] + per_target_cxxflags unless per_target_cxxflags.empty?
     if k == :plugin || k == :qlgen

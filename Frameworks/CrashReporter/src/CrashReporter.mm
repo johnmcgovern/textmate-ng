@@ -35,26 +35,19 @@ static NSString* GetHardwareInfo (int field, BOOL isInteger = NO)
 {
 	if(self = [super init])
 	{
-		if(@available(macos 10.14, *))
-		{
-			UNUserNotificationCenter.currentNotificationCenter.delegate = self;
-		}
-		else
-		{
-			NSUserNotificationCenter.defaultUserNotificationCenter.delegate = self;
-		}
+		UNUserNotificationCenter.currentNotificationCenter.delegate = self;
 	}
 	return self;
 }
 
-- (void)userNotificationCenter:(UNUserNotificationCenter*)center didReceiveNotificationResponse:(UNNotificationResponse*)response withCompletionHandler:(void(^)(void))completionHandler API_AVAILABLE(macosx(10.14))
+- (void)userNotificationCenter:(UNUserNotificationCenter*)center didReceiveNotificationResponse:(UNNotificationResponse*)response withCompletionHandler:(void(^)(void))completionHandler
 {
 	if(NSString* urlString = response.notification.request.content.userInfo[@"url"])
 		[NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:urlString]];
 	completionHandler();
 }
 
-- (void)userNotificationCenter:(UNUserNotificationCenter*)center willPresentNotification:(UNNotification*)notification withCompletionHandler:(void(^)(UNNotificationPresentationOptions options))completionHandler API_AVAILABLE(macosx(10.14))
+- (void)userNotificationCenter:(UNUserNotificationCenter*)center willPresentNotification:(UNNotification*)notification withCompletionHandler:(void(^)(UNNotificationPresentationOptions options))completionHandler
 {
 	completionHandler(UNNotificationPresentationOptionAlert);
 }
@@ -137,36 +130,25 @@ static NSString* GetHardwareInfo (int field, BOOL isInteger = NO)
 					if(NSString* locationURLString = ((NSHTTPURLResponse*)response).allHeaderFields[@"Location"])
 					{
 						os_log(OS_LOG_DEFAULT, "Crash report available at %{public}@", locationURLString);
-						if(@available(macos 10.14, *))
-						{
-							[UNUserNotificationCenter.currentNotificationCenter requestAuthorizationWithOptions:UNAuthorizationOptionAlert completionHandler:^(BOOL granted, NSError* error){
-								if(granted)
-								{
-									UNMutableNotificationContent* content = [[UNMutableNotificationContent alloc] init];
-									content.title    = @"Crash Report Sent";
-									content.body     = @"Diagnostic information has been sent to MacroMates.com regarding your last crash.";
-									content.userInfo = @{ @"path": reportPath, @"url": locationURLString };
+						[UNUserNotificationCenter.currentNotificationCenter requestAuthorizationWithOptions:UNAuthorizationOptionAlert completionHandler:^(BOOL granted, NSError* error){
+							if(granted)
+							{
+								UNMutableNotificationContent* content = [[UNMutableNotificationContent alloc] init];
+								content.title    = @"Crash Report Sent";
+								content.body     = @"Diagnostic information has been sent to MacroMates.com regarding your last crash.";
+								content.userInfo = @{ @"path": reportPath, @"url": locationURLString };
 
-									UNNotificationRequest* request = [UNNotificationRequest requestWithIdentifier:[NSUUID UUID].UUIDString content:content trigger:nil];
-									[UNUserNotificationCenter.currentNotificationCenter addNotificationRequest:request withCompletionHandler:^(NSError* error){
-										if(error)
-											os_log_error(OS_LOG_DEFAULT, "Failed to show notification: %{public}@", error.localizedDescription);
-									}];
-								}
-								else
-								{
-									os_log_info(OS_LOG_DEFAULT, "User notifications disallowed");
-								}
-							}];
-						}
-						else
-						{
-							NSUserNotification* notification = [[NSUserNotification alloc] init];
-							notification.title           = @"Crash Report Sent";
-							notification.informativeText = @"Diagnostic information has been sent to MacroMates.com regarding your last crash.";
-							notification.userInfo        = @{ @"path": reportPath, @"url": locationURLString };
-							[NSUserNotificationCenter.defaultUserNotificationCenter deliverNotification:notification];
-						}
+								UNNotificationRequest* request = [UNNotificationRequest requestWithIdentifier:[NSUUID UUID].UUIDString content:content trigger:nil];
+								[UNUserNotificationCenter.currentNotificationCenter addNotificationRequest:request withCompletionHandler:^(NSError* error){
+									if(error)
+										os_log_error(OS_LOG_DEFAULT, "Failed to show notification: %{public}@", error.localizedDescription);
+								}];
+							}
+							else
+							{
+								os_log_info(OS_LOG_DEFAULT, "User notifications disallowed");
+							}
+						}];
 					}
 				}
 				else

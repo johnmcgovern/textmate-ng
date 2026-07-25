@@ -823,11 +823,8 @@ static std::string shell_quote (std::vector<std::string> paths)
 
 	NSString* appearance = [NSUserDefaults.standardUserDefaults stringForKey:@"themeAppearance"];
 	BOOL darkMode = [appearance isEqualToString:@"dark"];
-	if(@available(macos 10.14, *))
-	{
-		if(!darkMode && ![appearance isEqualToString:@"light"]) // If it is not ‘light’ then assume ‘auto’
-			darkMode = [[self.effectiveAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] isEqualToString:NSAppearanceNameDarkAqua];
-	}
+	if(!darkMode && ![appearance isEqualToString:@"light"]) // If it is not ‘light’ then assume ‘auto’
+		darkMode = [[self.effectiveAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] isEqualToString:NSAppearanceNameDarkAqua];
 
 	return [NSUserDefaults.standardUserDefaults stringForKey:darkMode ? @"darkModeThemeUUID" : @"universalThemeUUID"];
 }
@@ -1718,7 +1715,7 @@ doScroll:
 	return [self nsRangeForRange:ng::range_t(index, index + length)];
 }
 
-- (NSArray*)accessibilityCustomRotors API_AVAILABLE(macos(10.13))
+- (NSArray*)accessibilityCustomRotors
 {
 	return @[
 		[[NSAccessibilityCustomRotor alloc] initWithLabel:@"Symbols" itemSearchDelegate:self],
@@ -1809,7 +1806,7 @@ doScroll:
 // = NSAccessibilityCustomRotorItemSearchDelegate =
 // ================================================
 
-- (NSAccessibilityCustomRotorItemResult*)rotor:(NSAccessibilityCustomRotor*)rotor resultForSearchParameters:(NSAccessibilityCustomRotorSearchParameters*)searchParameters API_AVAILABLE(macos(10.13))
+- (NSAccessibilityCustomRotorItemResult*)rotor:(NSAccessibilityCustomRotor*)rotor resultForSearchParameters:(NSAccessibilityCustomRotorSearchParameters*)searchParameters
 {
 	auto const symbols = documentView->symbols();
 

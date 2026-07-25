@@ -58,19 +58,24 @@ entitlements / version / linking are all wired and working. The blocker is a
 - Scoping the farm (done — `header_farm_dirs`) fixes every target that only *links*
   network, but not AppController.mm, which genuinely *includes* it.
 
+**Confirmed:** `AppController.mm` uses **both** WebKit *and* `<network/tbz.h>` in the
+one TU (verified), so the WebKit include can't simply be moved off it.
+
 **Decision needed — pick one (all are out of scope for a pure generator edit):**
-1. **Drop `<WebKit/WebKit.h>` from the shared PCH** (`Shared/PCH/prelude.m`) and
-   include WebKit only in the ~handful of TUs that use it. Cleanest, but edits a
-   shared source file and diverges from rave's prelude; need to confirm WebKit-using
-   and network-using TUs don't overlap.
+1. ~~Drop `<WebKit/WebKit.h>` from the shared PCH~~ — **insufficient**: AppController.mm
+   references WebKit itself, so it would re-include it and hit the same collision.
 2. **Rename TM's `network` framework** include prefix (e.g. `tm_network`) so it can't
-   collide with Apple's. Touches every `<network/…>` include site (network + updater
-   + AppController.mm).
-3. **Generate a case-sensitive header map** for the farm so `<network/…>` and
-   `<Network/…>` resolve independently. Most complex; needs verifying hmap case
-   semantics.
-Recommendation: **option 1** if the TU sets are disjoint (quick to check), else 2.
-Progress committed through 419c9b22. Loop stopped pending this call.
+   collide with Apple's `Network.framework`. Touches the `<network/…>` include sites
+   (network, updater, AppController.mm) + the farm dir name. Most robust.
+3. **Generate a case-sensitive header map** for the farm so `<network/tbz.h>` resolves
+   to TM while `<Network/Network.h>` falls through to Apple. Generator-only if hmaps
+   are case-sensitive (needs verifying).
+4. **Per-target farm variant**: give WebKit-overlapping targets a `network` farm dir
+   *without* the `network.h` umbrella (only AppController.mm needs it, and it includes
+   `tbz.h`, not the umbrella), so `<Network/Network.h>` falls through to Apple. Pure C++
+   network consumers (updater) keep the full farm. Generator-only but fiddly.
+Recommendation: **option 2** (most robust) or **option 4** (keeps it in the generator).
+Progress committed through a73a68c4. Loop stopped pending this call.
 
 ## KNOWN ISSUE — RESOLVED 2026-07-25 (commit 9dd5daed)
 `xcodebuild -target AllLibs` now builds all **50** static libs clean. The

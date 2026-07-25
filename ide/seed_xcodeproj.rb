@@ -186,6 +186,7 @@ def apply_common_settings(config, extra = {})
   bs["GCC_CHAR_IS_UNSIGNED_CHAR"]   = "YES"
   bs["CLANG_ENABLE_MODULES"]        = "NO"
   bs["ALWAYS_SEARCH_USER_PATHS"]    = "NO"   # keep USER_HEADER_SEARCH_PATHS quote-only (-iquote)
+  bs["CODE_SIGN_IDENTITY"]          = "-"    # ad-hoc (rave CS_IDENTITY); enough for a local launchable build
   bs["HEADER_SEARCH_PATHS"]         = ["$(inherited)"] + COMMON_HEADER_PATHS
   bs["LIBRARY_SEARCH_PATHS"]        = ["$(inherited)", "#{NIX_ARM}/lib"]
   bs["OTHER_CFLAGS"]                = [
@@ -199,6 +200,16 @@ end
 
 def dir_of(rel)
   "$(SRCROOT)/#{File.dirname(rel)}"
+end
+
+# The Info.plist a bundle/app declares among its `files` (dest "." inputs). rave
+# copies it to Contents/Info.plist; in Xcode that's the INFOPLIST_FILE setting, and
+# Xcode auto-expands ${TARGET_NAME} etc. from build settings (no cpp preprocess).
+def infoplist_for(t)
+  (t["files"] || []).each do |f|
+    (f["inputs"] || []).each { |i| return i if File.basename(i) == "Info.plist" }
+  end
+  nil
 end
 
 # ---------------------------------------------------------------------------
@@ -233,7 +244,15 @@ specs.each do |t|
 
   target.build_configurations.each do |config|
     extra = { "PRODUCT_NAME" => t["name"] }
-    extra["GCC_OPTIMIZATION_LEVEL"] = "s" if config.name == "Release"
+    if config.name == "Release"
+      extra["GCC_OPTIMIZATION_LEVEL"] = "s"
+      # rave's `config release` defines NDEBUG (default.rave). This compiles out the
+      # oak/debug asserts + debug-log paths that reference OakBadAssertion /
+      # oak::to_s — symbols that live in libOakDebug.a, which release deliberately
+      # does NOT link (OakDebug is `require`d only in `config debug`). Without this,
+      # executables fail to link with undefined oak::* symbols.
+      extra["GCC_PREPROCESSOR_DEFINITIONS"] = ["$(inherited)", "NDEBUG"]
+    end
     apply_common_settings(config, extra)
     bs = config.build_settings
     # Own source dirs go on the QUOTE-only path (-iquote), not -I: a framework's
@@ -247,9 +266,42 @@ specs.each do |t|
     if k == :plugin || k == :qlgen
       bs["WRAPPER_EXTENSION"] = (k == :qlgen ? "qlgenerator" : "tmplugin")
       bs["MACH_O_TYPE"] = "mh_bundle"
+      ip = infoplist_for(t)
+      bs["INFOPLIST_FILE"] = "$(SRCROOT)/#{ip}" if ip
     end
   end
   puts "target #{t['name']} [#{k}] (#{t['sources'].size} src)"
+end
+
+# Pass 2: link wiring for executables & loadable bundles (tools/plugins/qlgen/app).
+# Each static lib in the link closure is added to the Frameworks build phase (so it
+# links) plus a target dependency (so it builds first). We deliberately add NO
+# lib<->lib edges (Xcode forbids cycles; ld64 resolves static-archive cycles at
+# link time). External `libraries` and `frameworks` are unioned over the closure +
+# the target itself and passed as -l… / -framework … in OTHER_LDFLAGS.
+specs.each do |t|
+  k = kind(t)
+  next if k == :lib
+  target = targets[t["name"]]
+
+  closure = lib_closure(t["name"]).keys        # lib target names to link
+  closure.each do |lib|
+    lt = targets[lib] or next
+    target.frameworks_build_phase.add_file_reference(lt.product_reference)
+    target.add_dependency(lt)
+  end
+
+  link_scope = closure + [t["name"]]
+  ext_libs = link_scope.flat_map { |n| BY_NAME[n] ? BY_NAME[n]["libraries"] : [] }.uniq
+  ld_libs  = ext_libs.flat_map { |l| LIB_LDFLAGS[l] || (warn("*** no LIB_LDFLAGS mapping for '#{l}' (#{t['name']})"); []) }
+  fworks   = link_scope.flat_map { |n| BY_NAME[n] ? BY_NAME[n]["frameworks"] : [] }.uniq
+  ld_fw    = fworks.flat_map { |f| ["-framework", f] }
+
+  target.build_configurations.each do |config|
+    bs = config.build_settings
+    bs["OTHER_LDFLAGS"] = ["$(inherited)"] + ld_libs + ld_fw
+  end
+  puts "linked #{t['name']} [#{k}]: #{closure.size} libs, #{ext_libs.size} ext-libs, #{fworks.size} frameworks"
 end
 
 # Aggregate to compile-check every static library at once.

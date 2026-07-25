@@ -41,27 +41,28 @@ Individually, these all compile clean to `build/Release/*.a`:
   Ragel (`*.rl`→`.cc`) and Cap'n Proto (`*.capnp`→`.capnp.cpp`+`.h`, auto-compiled);
   quote-surviving `-DNULL_STR`/`-DREST_API`; per-arch nix-sdk include/lib paths.
 
-## KNOWN ISSUE (start here)
-`xcodebuild -target AllLibs` fails, but **every lib builds fine in isolation.**
-Failures manifest as `no type named 'string' in namespace 'std'` cascading from
-`oak/algorithm.h` / `<fw>/*.h` during **PCH precompilation** under the parallel
-build. Strong hypothesis: **parallel shared-PCH contention** — all targets share
-one prefix-header path, so `build/SharedPrecompiledHeaders/` entries collide/race.
-- **First thing to try:** confirm with a serial build:
-  `xcodebuild -target AllLibs -jobs 1 -configuration Release build`
-  If that passes, it's the race. Fixes to try (in order):
-  1. Per-target precomp dir: set `SHARED_PRECOMPS_DIR = $(OBJROOT)/PCH/$(TARGET_NAME)`
-     in `apply_common_settings` (in `ide/seed_xcodeproj.rb`).
-  2. Or give each target a distinct `GCC_PREFIX_HEADER` copy (less clean).
-  3. Or, worst case, `GCC_PRECOMPILE_PREFIX_HEADER = NO` (slower but correct).
-- Logs from the last run: `ide/gen/alllibs_build.log`, `ide/gen/network_build.log`.
+## KNOWN ISSUE — RESOLVED 2026-07-25 (commit 9dd5daed)
+`xcodebuild -target AllLibs` now builds all **50** static libs clean. The
+parallel-PCH-race hypothesis was **wrong** — it failed serially too. Three real
+generator bugs (each masked earlier by stale/partial build state):
+1. **Build rules dropped from the object graph.** `PBXBuildRule`s were shared
+   across targets and attached via `ObjectList#replace`, which doesn't parent
+   them — they never serialized, so every target referenced dangling UUIDs and
+   Xcode said "no rule to process file" for `*.capnp`/`*.rl`. Fix: fresh rule
+   objects per target, appended with `<<` (not `replace`).
+2. **Flat farm shadowed a system framework.** One flat `-I ide/gen/include` on
+   every target let TM's `network` fw shadow Apple's `<Network/Network.h>` (pulled
+   in by the WebKit PCH). Fix: double-nested farm (`ide/gen/include/<fw>/<fw>/*.h`)
+   + per-target header paths scoped to the transitive `require`/`require_headers`
+   closure (`header_closure`), mirroring rave's per-target `-I _Include/<fw>`.
+3. **Own src dir on the angle path shadowed system headers.** `regexp/src/glob.h`
+   shadowed POSIX `<glob.h>`. Fix: own dirs go on the quote-only path
+   (`USER_HEADER_SEARCH_PATHS` + `ALWAYS_SEARCH_USER_PATHS=NO`).
+Rebuild check: `xcodebuild -project TextMate.xcodeproj -target AllLibs -configuration Release clean build` → 50 `.a` in `build/Release/`.
 
 ## Next actions (in order)
-1. **Fix the AllLibs parallel-PCH issue** (above). Success = all 50 libs → `.a`.
-   Expect a handful of genuine per-lib compile errors underneath the race; fix
-   each (likely: vendored `Onigmo`/`kvdb` flag/PCH quirks; missing farm umbrellas
-   for bare-name includes like `<oniguruma.h>`; a target needing its own `src` on
-   the header path). Iterate `seed → build AllLibs → fix`.
+1. ~~Fix the AllLibs parallel-PCH issue.~~ **DONE** (commit 9dd5daed) — all 50 libs
+   → `.a`. **START HERE →** task 2 below.
 2. **CLI tools + loadable bundles** (task 7). Product types already assigned
    (`:command_line_tool`, `:bundle` with `WRAPPER_EXTENSION` tmplugin/qlgenerator).
    Still TODO: **link wiring** — for each tool/bundle, compute `lib_closure()`
@@ -102,6 +103,6 @@ one prefix-header path, so `build/SharedPrecompiledHeaders/` entries collide/rac
 - [x] Slice 1: `text` leaf lib   - [x] Slice 2: `cf` inter-target
 - [x] Slice 3: Ragel + Cap'n Proto build rules
 - [x] Extractor (`ide/extract_specs.rb`, 66 targets)
-- [ ] Emit + compile all 50 libs (blocked on AllLibs parallel-PCH; see above)
+- [x] Emit + compile all 50 libs (commit 9dd5daed)
 - [ ] CLI tools + loadable bundles (link wiring)
 - [ ] TextMate.app: link + bundle phases + Info.plist + entitlements + codesign

@@ -399,6 +399,46 @@ specs.each do |t|
   puts "linked #{t['name']} [#{k}]: #{closure.size} libs, #{ext_libs.size} ext-libs, #{fworks.size} frameworks"
 end
 
+# Pass 3: bundle layout for app/plugin/qlgen targets. Each `files`/`copy` entry
+# becomes a Copy Files build phase. Plain inputs are copied from source; @refs are
+# built products (tools/bundles) copied in + a target dependency so they build
+# first. The Info.plist entry is skipped (handled by INFOPLIST_FILE in Pass 1).
+def copy_dest(dest)
+  case dest
+  when "Resources"     then [:resources, ""]
+  when "MacOS"         then [:executables, ""]
+  when "PlugIns"       then [:plug_ins, ""]
+  when "SharedSupport" then [:shared_support, ""]
+  when "."             then [:wrapper, "Contents"]     # :wrapper is the .app ROOT
+  when %r{\AResources/(.+)\z} then [:resources, $1]
+  else [:wrapper, "Contents/#{dest}"]                  # e.g. Contents/Library/QuickLook
+  end
+end
+
+specs.each do |t|
+  k = kind(t)
+  next unless [:app, :plugin, :qlgen].include?(k)
+  target = targets[t["name"]]
+  (t["files"] + t["copy"]).each do |entry|
+    inputs = (entry["inputs"] || []).reject { |i| File.basename(i) == "Info.plist" }
+    refs   = entry["refs"] || []
+    next if inputs.empty? && refs.empty?
+    spec, sub = copy_dest(entry["dest"])
+    phase = target.new_copy_files_build_phase("Copy to #{entry['dest']}")
+    phase.symbol_dst_subfolder_spec = spec
+    phase.dst_path = sub
+    inputs.each do |rel|
+      phase.add_file_reference(project.main_group.new_file(File.join(ROOT, rel)))
+    end
+    refs.each do |r|
+      rt = targets[r.sub(/\A@/, "")] or next   # refs carry an `@` prefix in the spec
+      phase.add_file_reference(rt.product_reference)
+      target.add_dependency(rt)
+    end
+  end
+  puts "bundled #{t['name']} [#{k}]"
+end
+
 # Aggregate to compile-check every static library at once.
 all_libs = project.new_aggregate_target("AllLibs", [], :osx, DEPLOY_TGT)
 specs.select { |t| kind(t) == :lib }.each { |t| all_libs.add_dependency(targets[t["name"]]) }

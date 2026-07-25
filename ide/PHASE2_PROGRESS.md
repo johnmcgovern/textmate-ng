@@ -41,6 +41,37 @@ Individually, these all compile clean to `build/Release/*.a`:
   Ragel (`*.rl`→`.cc`) and Cap'n Proto (`*.capnp`→`.capnp.cpp`+`.h`, auto-compiled);
   quote-surviving `-DNULL_STR`/`-DREST_API`; per-arch nix-sdk include/lib paths.
 
+## ⛔ BLOCKED — needs a user decision (2026-07-25, task 3 / the app)
+`xcodebuild -target TextMate` fails to compile the app. Everything else is green:
+50 libs (AllLibs), all 11 CLI tools, all 3 bundles, and the app's Info.plist /
+entitlements / version / linking are all wired and working. The blocker is a
+**genuine new-SDK header collision**, not a generator bug:
+
+- `Applications/TextMate/src/AppController.mm` is ObjC++, so its PCH pulls
+  `<WebKit/WebKit.h>` → `WKWebsiteDataStore.h` → `#import <Network/Network.h>`
+  (an addition in the current SDK; the old rave SDK didn't do this).
+- The **same TU** also does `#import <network/tbz.h>` (TM's own `network` fw).
+- On case-insensitive APFS, TM's `network` farm dir and Apple's `Network.framework`
+  are the same name, so `<Network/Network.h>` resolves to TM's `network/network.h`
+  (→ `std::string` errors). No include-path ordering satisfies both a TM
+  `<network/…>` and an Apple `<Network/…>` include in one compilation.
+- Scoping the farm (done — `header_farm_dirs`) fixes every target that only *links*
+  network, but not AppController.mm, which genuinely *includes* it.
+
+**Decision needed — pick one (all are out of scope for a pure generator edit):**
+1. **Drop `<WebKit/WebKit.h>` from the shared PCH** (`Shared/PCH/prelude.m`) and
+   include WebKit only in the ~handful of TUs that use it. Cleanest, but edits a
+   shared source file and diverges from rave's prelude; need to confirm WebKit-using
+   and network-using TUs don't overlap.
+2. **Rename TM's `network` framework** include prefix (e.g. `tm_network`) so it can't
+   collide with Apple's. Touches every `<network/…>` include site (network + updater
+   + AppController.mm).
+3. **Generate a case-sensitive header map** for the farm so `<network/…>` and
+   `<Network/…>` resolve independently. Most complex; needs verifying hmap case
+   semantics.
+Recommendation: **option 1** if the TU sets are disjoint (quick to check), else 2.
+Progress committed through 419c9b22. Loop stopped pending this call.
+
 ## KNOWN ISSUE — RESOLVED 2026-07-25 (commit 9dd5daed)
 `xcodebuild -target AllLibs` now builds all **50** static libs clean. The
 parallel-PCH-race hypothesis was **wrong** — it failed serially too. Three real

@@ -41,6 +41,19 @@ Individually, these all compile clean to `build/Release/*.a`:
   Ragel (`*.rl`→`.cc`) and Cap'n Proto (`*.capnp`→`.capnp.cpp`+`.h`, auto-compiled);
   quote-surviving `-DNULL_STR`/`-DREST_API`; per-arch nix-sdk include/lib paths.
 
+## ✅ STREAM 1 COMPLETE (2026-07-25, commit c8c34262)
+`xcodebuild -target TextMate` produces a complete, ad-hoc-signed, **launchable**
+`TextMate.app` (50 libs + 11 tools + 3 bundles + app; `codesign --verify --deep
+--strict` passes; launches without crashing). The blocker below was resolved with
+**option 4**: a no-umbrella variant farm (`ide/gen/include-nou`) lets WebKit-pulling
+targets resolve `<Network/Network.h>` to Apple while keeping TM's `<network/…>`.
+Also: per-target `ln_flags` propagation (license weak-import), app Info.plist/
+entitlements/version, and Pass 3 bundle layout (Copy Files phases for files/copy +
+@ref products). Seed regenerates the whole project: `ruby ide/extract_specs.rb >
+ide/gen/specs.json && ruby ide/seed_xcodeproj.rb`. Streams 2/3/5/6 + Phase 3 remain.
+
+<details><summary>Resolved blocker (was: WebKit↔network SDK collision)</summary>
+
 ## ⛔ BLOCKED — needs a user decision (2026-07-25, task 3 / the app)
 `xcodebuild -target TextMate` fails to compile the app. Everything else is green:
 50 libs (AllLibs), all 11 CLI tools, all 3 bundles, and the app's Info.plist /
@@ -76,6 +89,7 @@ one TU (verified), so the WebKit include can't simply be moved off it.
    network consumers (updater) keep the full farm. Generator-only but fiddly.
 Recommendation: **option 2** (most robust) or **option 4** (keeps it in the generator).
 Progress committed through a73a68c4. Loop stopped pending this call.
+</details>
 
 ## KNOWN ISSUE — RESOLVED 2026-07-25 (commit 9dd5daed)
 `xcodebuild -target AllLibs` now builds all **50** static libs clean. The
@@ -146,4 +160,4 @@ Rebuild check: `xcodebuild -project TextMate.xcodeproj -target AllLibs -configur
 - [x] Extractor (`ide/extract_specs.rb`, 66 targets)
 - [x] Emit + compile all 50 libs (commit 9dd5daed)
 - [x] CLI tools + loadable bundles (link wiring) (commit 88126b8d)
-- [ ] TextMate.app: link + bundle phases + Info.plist + entitlements + codesign
+- [x] TextMate.app: link + bundle phases + Info.plist + entitlements + codesign (c8c34262)

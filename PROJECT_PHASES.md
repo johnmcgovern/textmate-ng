@@ -1,6 +1,7 @@
 # TextMate → Swift-native macOS: Project Phases & Progress
 
-_High-level progress tracker. Last updated: 2026-07-25 (post-overnight-loop)._
+_High-level progress tracker. Last updated: 2026-07-26 (Streams 7 & 8, rave parity
+audit, rave/ninja retirement, arm64-only decision, Phase 2.5 formalized)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -19,16 +20,25 @@ duplicating it here goes stale within hours while the loop runs.
 
 ---
 
-## Roadmap (6 phases)
+## Roadmap (6 phases + Phase 2.5 cleanup)
 
 | # | Phase | Status | Effort / Risk |
 |---|-------|--------|---------------|
 | 1 | **Build bring-up** (rave → ninja compiling) | ✅ Done / pre-existing | — |
-| 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress | Large / Med |
+| 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress (signing left) | Large / Med |
+| 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | ⬜ Not started | Med / Low |
 | 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ⬜ Not started | Small–Med / Med |
 | 4 | **Swift-ify the AppKit/UI shell, leaf-first** | ⬜ Not started | Very large / Med |
 | 5 | **App shell & lifecycle in Swift** (= recommended end state) | ⬜ Not started | Med / Low–Med |
 | 6 | **(Optional) core engine → Swift** | ⬜ Likely skip | Huge / High ⚠️ |
+
+Numbered as **2.5**, not renumbered into the sequence, so it doesn't invalidate the
+"Phase 2"/"Phase 3" language already used in commit messages and other docs
+(`ide/PHASE2_PROGRESS.md`, `ide/NEXT_SESSION_HANDOFF.md`). It sits here because
+several of its items — the license/CrashReporter/SoftwareUpdate MacroMates coupling
+— are naturally decided alongside Stream 3's `CFBundleIdentifier` move (both are
+"stop being MacroMates"), and because the dependency-cycle refactors should land
+before Phase 3/4 touch the same lib graph for Swift modularization.
 
 **Phase 3** — enable Clang modules (Phase 2 currently `CLANG_ENABLE_MODULES=NO`;
 Swift needs modules), module maps, C++ interop mode, bridging header, toolchain
@@ -290,15 +300,64 @@ Milestones:
 
 ---
 
+## Phase 2.5 detail — Cleanup & de-MacroMates
+
+Not started. Candidate list below; each item needs its own remove-or-replace
+decision, so this phase is a set of independent, low-risk cleanups rather than a
+single change. None of it blocks Phase 3 — it's listed here because it *should*
+happen before Phase 3/4 touch the same lib graph and bundle identity again.
+
+**Dead code:**
+- **`bin/CxxTest`** — a large vendored tree serving exactly 3 files
+  (`OakAppKit`/`ns`/`layout`'s `gui_*.mm`), and those 3 don't even run under
+  `xcodebuild test` (see Stream 7: they subclass `CxxTest::TestSuite`, not
+  `XCTestCase`, and would block in `[NSApp run]` if invoked). Blocked on rewriting
+  those 3 suites into real, asserting `XCTestCase`s (tracked as a Stream 7
+  follow-up) — once that's done, `bin/CxxTest` and its `.gitmodules` entry can go.
+- **`Applications/NewApplication`** — an unused Xcode-template scaffold app;
+  `ide/seed_xcodeproj.rb`'s `SKIP_TARGETS` already excludes it from the generated
+  project. No blocker; just delete the directory.
+- **`bin/gen_credits.rb`, `bin/show_log`** — found during the rave parity audit
+  (2026-07-26) to have zero references anywhere in the tree or its history. Already
+  orphaned before rave was deleted; no blocker.
+- **Dependency-cycle refactors.** 3 cyclic SCCs in the lib graph, all breakable
+  with ~4 small refactors (cut `command→OakAppKit`, `io→ns`, `document→FileBrowser`,
+  `OakCommand→BundleEditor`). The seed sidesteps them (no lib↔lib target edges;
+  ld64 resolves archive cycles), so they don't block anything today — but cycles
+  will fight modularization and Swift target boundaries in Phase 3/4, so do them
+  before then.
+
+**MacroMates-coupled services** (verified live in the current tree, 2026-07-26 —
+none of this is hypothetical):
+- **`license`** — a full serial-number purchase/registration flow (`LicenseManager.mm`:
+  "Buy"/"Register" buttons, `visitOnlineStore:` hardcoded to
+  `https://shop.macromates.com`, `revoked_serials()` validation). The About window
+  currently reads *"This copy of TextMate is unregistered. Add license."* There is
+  no commercial licensing model for this fork; keeping this makes no sense as-is.
+  Remove the flow (and the UI it drives), or repurpose it if J23 Software ever
+  wants its own registration/licensing — a real decision, not a default.
+- **`CrashReporter`** — silently uploads crash reports to `https://api.textmate.org/crashes`
+  (`AppController.mm:619`, via `REST_API`) — MacroMates' server, for a fork
+  unaffiliated with them. Needs an explicit decision: point at a J23-controlled
+  endpoint, or disable crash reporting until one exists. Shipping this as-is is a
+  privacy problem, not a technical debt item.
+- **`SoftwareUpdate`** — its three channels (`release`/`beta`/`nightly`) all resolve
+  against `https://api.textmate.org/releases/...` (`AppController.mm:499-503`).
+  As shipped, TextMate-NG's "check for updates" checks *MacroMates' TextMate 2
+  release feed*, not TextMate-NG's own — a user could get pointed at an unrelated
+  upstream release. Needs its own update feed (e.g. GitHub Releases-backed) before
+  this can safely stay enabled, or should be disabled until one exists.
+
+All three of the above are naturally decided alongside Stream 3's move off
+`com.macromates.*` (same underlying question — "what is this fork's own identity,
+distinct from MacroMates' infrastructure") but don't have to wait for it.
+
+---
+
 ## Tracked but not yet scheduled
 
 - ~~**Test-suite migration.**~~ **Done 2026-07-26** — see Stream 7 below.
 - ~~**Default-bundles provisioning.**~~ **Done 2026-07-26** — see Stream 8 below.
-- **Dependency-cycle refactors.** 3 cyclic SCCs in the lib graph, all breakable
-  with ~4 small refactors (cut `command→OakAppKit`, `io→ns`, `document→FileBrowser`,
-  `OakCommand→BundleEditor`). The seed sidesteps them (no lib↔lib target edges;
-  ld64 resolves archive cycles), so they don't block Stream 1 — but do them before
-  Phase 3/4: cycles will fight modularization and Swift target boundaries.
 - **Branch integration order.** Stream 4 (`claude/upbeat-galileo-eae114`) and
   Stream 1 (`claude/xcode-stream1-seed`) are both unmerged, off master. Stream 1's
   seed already assumes the 15.0 floor, so merge Stream 4 first (or fold it in).

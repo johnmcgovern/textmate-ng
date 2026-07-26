@@ -3,6 +3,7 @@
 @protocol HOJSBridgeDelegate
 @property (nonatomic, getter = isBusy) BOOL busy;
 @property (nonatomic) double progress;
+@property (nonatomic) NSString* statusText; // link under the pointer; see HTMLOutput.js
 @end
 
 /*

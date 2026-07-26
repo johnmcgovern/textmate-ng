@@ -32,6 +32,11 @@ extern NSString* const kHOLocalFilePathPrefix;
 extern NSString* const kHOSyncCommandPathPrefix;
 extern NSString* const kHOSyncCommandHeader;
 
+// TextMate's own scheme for local files. Navigations are rewritten to file:// by
+// HOBrowserView (so directory/index.html resolution still applies), but
+// *sub-resources* have to be served, which the same handler does.
+extern NSString* const kHOTMFileURLScheme;
+
 @protocol HOSyncCommandRunner <NSObject>
 - (void)runSyncCommand:(NSString*)aCommand completionHandler:(void(^)(NSString* output, NSString* error, int status))aCompletionHandler;
 @end

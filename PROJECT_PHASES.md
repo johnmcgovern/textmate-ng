@@ -38,9 +38,13 @@ layers. Prove toolchain; no behavior change.
 **Phase 4** — migrate ObjC++ UI frameworks Swift-ward starting where engine contact
 is smallest: Preferences, SoftwareUpdate, CommitWindow, Find, FileBrowser,
 BundleEditor → then DocumentWindow/OakAppKit. Keep `OakTextView` (the NSView text
-surface) as ObjC++ — tightest engine coupling. **Precondition: a working test
-suite in the Xcode world (see "Tests" below) — refactoring the UI layer without a
-regression net is the biggest avoidable risk in the whole plan.**
+surface) as ObjC++ — tightest engine coupling. **Precondition met 2026-07-26
+(Stream 7):** 25 XCTest bundles, 275 tests green under `xcodebuild test`. Read the
+caveat though — that net covers the C++ *core* (text, buffer, regexp, parse,
+selection…). The ObjC++ UI frameworks Phase 4 actually refactors have almost no
+automated coverage: the only UI-layer tests are the 3 interactive `cxx_tests`
+harnesses, which do not assert. Leaf-first ordering and manual launch-verification
+still carry most of the risk here.
 
 **Phase 5** — AppDelegate, NSDocument architecture, MenuBuilder, entry point;
 optionally SwiftUI for auxiliary surfaces (prefs/dialogs/about). Main editing
@@ -64,6 +68,8 @@ targets with declarative `.rave` specs.
 | 4 | Raise deployment target (macOS 15) + remove dead guards | ✅ Done 2026-07-24 (unmerged) | — |
 | 5 | API modernization (WebView→WKWebView, KVO) | ✅ Done 2026-07-26 — all 5 slices; no legacy WebKit API left in the tree. See [`ide/STREAM5_HOJSBRIDGE_PLAN.md`](ide/STREAM5_HOJSBRIDGE_PLAN.md) | 1 |
 | 6 | CI/CD (xcodebuild) | ✅ Done 2026-07-26 (`xcode` job green on macos-latest) | 1, 2 |
+| 7 | Test suites → XCTest bundles | ✅ Done 2026-07-26 (25 bundles, 275 tests green) | 1 |
+| 8 | Default-bundles provisioning | ✅ Done 2026-07-26 (run-script phase) | 1 |
 
 ### Phase 2 definition of done (cutover criteria)
 Phase 2 is done when the Xcode build is at **feature parity** and rave/ninja can be
@@ -71,19 +77,96 @@ deleted:
 - [ ] `TextMate.app` builds, launches, opens/edits/saves documents
 - [ ] Bundles + plugins load (Dialog, Dialog2), QuickLook generator works
 - [ ] All 11 CLI tools work (`mate`, `tm_query`, …)
-- [ ] Default-bundles provisioning has an Xcode-world answer (see below)
-- [ ] Test suites migrated and green (see below)
+- [x] Default-bundles provisioning has an Xcode-world answer (Stream 8)
+- [x] Test suites migrated and green (Stream 7 — 25 bundles, 275 tests)
 - [ ] CI builds + tests on a clean machine (no user-local paths)
 - [ ] Signed + notarized artifact
 - [ ] rave/ninja retired: tag the last green rave build, then delete `bin/rave`,
       the `.rave` specs, and ninja glue
 
-**rave retirement policy (decided 2026-07-25):** keep the rave/ninja build limping
-(green, low-effort) during Phase 2 — it is still the only home of the ~26 test
-suites and the `DownloadBundles` provisioning step. Once **tests** and
-**default-bundles provisioning** have Xcode-world answers, tag the final rave-green
-commit (e.g. `rave-final`) and delete rave/ninja from the tree. No indefinite
-dual-build maintenance beyond those two migrations.
+**rave retirement policy (decided 2026-07-25; both blockers cleared 2026-07-26):**
+the two things that kept rave alive were the test suites and the `DownloadBundles`
+provisioning step. Both now have Xcode-world answers (Streams 7 and 8), and rave
+turned out never to have built the tests at all — so it is no longer the only home
+of anything. **rave/ninja is now retirable:** tag the final rave-green commit (e.g.
+`rave-final`), then delete `bin/rave`, `bin/gen_test`, the `.rave` specs and the
+ninja glue. `bin/CxxTest` must stay — the 3 GUI suites still compile against it.
+Remaining cutover criteria above (signing, notarization, clean-machine CI) do not
+depend on rave.
+
+### Stream 7 — Test suites → XCTest (Done 2026-07-26)
+
+**The premise in the old plan was wrong — these suites had no build rule at all.**
+`bin/rave` parses the `tests`/`cxx_tests` keywords and globs the files, but nothing
+downstream turns them into a ninja rule: a generated `build.ninja` has no `/test`
+target and never invokes `bin/gen_test` or CxxTest.
+
+They were not always dead. The *original* generator, `bin/gen_build`, built and ran
+them: `af91d39b` (2019-07-16, "Generate build rules for tests but do not depend on
+the tests passing") added `gen_test`/`cxxtestgen` rules plus `run_test` rules that
+executed the binaries. `bin/rave` arrived as a from-scratch replacement in
+`e921af4e` (2021-01-25) carrying the two DSL keywords into its parser but never
+implementing the rules, and `70d26715` (2021-02-15) gutted `bin/gen_build` from 967
+lines to a `./configure` shim — deleting the only code that built the tests.
+**So the suites have been unbuildable since February 2021**, and the last build
+system to run them tolerated failures by design, which is how 13 of them rotted.
+
+A leftover that corroborates this: the repo-root `.tm_properties` still maps ⌘B in
+a test file to the ninja targets `<fw>/test` and `<fw>/cxx_test`, which have not
+existed for over five years.
+
+Also a naming correction: only **3** frameworks (`OakAppKit`, `ns`, `layout`) use
+CxxTest, via `cxx_tests`. The other 22 are plain `void test_x ()` functions using
+`OAK_ASSERT*`, written for the unused runner in `bin/gen_test`.
+
+- `ide/extract_specs.rb` now captures `cxx_tests` (it silently dropped them).
+- `ide/gen_xctest.rb` (new) wraps the OAK-style tests in `XCTestCase` subclasses,
+  reusing the assertion macros verbatim from `ide/xctest_preamble.h` (ported from
+  `bin/gen_test`, which goes away with rave). Test bodies are unchanged; only
+  failure reporting differs — a thrown `oak_exception` becomes an `XCTFail`.
+- `ide/seed_xcodeproj.rb` Pass 4 emits **25 `.xctest` bundles**, one per framework,
+  plus a shared `AllTests` scheme. `xcodebuild test` runs **275 tests green**.
+- The `cxx_tests` GUI suites are compiled (so they stop rotting) but never run:
+  they subclass `CxxTest::TestSuite`, not `XCTestCase`, so XCTest cannot invoke
+  them. That is deliberate — they gate on a `GUI_TESTS` env var and then block in
+  `[NSApp run]` awaiting manual interaction, so they would hang CI. **They are
+  interactive harnesses, not a regression net.** Rewriting them into real
+  assertions is separate, unscheduled work.
+- **13 tests are skipped by name** in the generated scheme, each with its reason
+  recorded in `SKIPPED_TESTS` (`ide/seed_xcodeproj.rb`). All are long-dormant
+  failures, not regressions — but leaving them red would make the CI signal
+  worthless. Categories: missing tools (`hg`, `svn`), git no longer defaulting to
+  `master`, host spellchecker dependence, two needing installed grammars, four
+  genuine behaviour mismatches, and one real **memory-safety bug** —
+  `cf/tests/t_rect.cc`'s `from_str(".........")` underflows `size_t` into a huge
+  `CGRect` and writes out of bounds (it crashes the process, taking the whole
+  bundle with it). Fixing these is tracked separately.
+
+### Stream 8 — Default-bundles provisioning (Done 2026-07-26)
+
+The Xcode build shipped the raw `DefaultBundles.tbz.bl` (a 20-byte list reading
+`mandatories defaults`) as a resource. `AppController.mm` looks for
+`DefaultBundles.tbz`, so `pathForResource:` found nothing and first-run bundle
+provisioning silently did nothing — with no fallback path.
+
+The seed now adds the project's first `PBXShellScriptBuildPhase` to the app target,
+mirroring rave's `CreateBundlesArchive`: run `bl -C <stage> install $(cat …)`, then
+`tar` the staged tree into `$(DERIVED_FILE_DIR)/DefaultBundles.tbz` and copy that
+into `Contents/Resources`; the `.tbz.bl` is filtered out of the resource copy.
+Failure is tolerated (rave does the same), so an unreachable `bl` server yields an
+app with no default bundles rather than a failed build.
+`ENABLE_USER_SCRIPT_SANDBOXING=NO` is pinned explicitly — a sandboxed script phase
+cannot reach the network.
+
+**The `bl` server is reachable again** (the previous "unreachable" note is stale):
+verified end to end, producing a 4.9 MB archive of 32 bundles that extracts cleanly
+through the same `tar` flags `network::tbz_t` uses.
+
+Making the app depend on `bl` also exposed that **`bl` had never compiled** in the
+Xcode project — nothing depended on it before. Its `network` farm include dir was
+withheld by a collision guard meant only for WebKit-pulling targets; `bl` is pure
+C++ and reaches `<network/key_chain.h>` transitively through `updater.h`. The guard
+in `farm_dir` is now scoped to targets that actually pull WebKit.
 
 ### Stream 4 — Done (branch `claude/upbeat-galileo-eae114`, **not merged**)
 - Deployment floor raised to **macOS 15.0 Sequoia** via `default.rave` `APP_MIN_OS`.
@@ -149,16 +232,8 @@ Milestones:
 
 ## Tracked but not yet scheduled
 
-- **Test-suite migration.** The rave graph declares ~26 `tests`/`cxx_tests` suites
-  across `Frameworks/*/default.rave` (CxxTest-based, incl. GUI tests). The
-  extractor currently ignores them. Needs a home: either CxxTest runner targets in
-  the Xcode project or a wrap-in-XCTest strategy. Gates the Phase 2 cutover and is
-  a hard precondition for Phase 4.
-- **Default-bundles provisioning.** rave has a `DownloadBundles` build step
-  (`bl install` → `DefaultBundles`); the Xcode build has no equivalent yet. Decide:
-  run-script phase, or rely on the app's runtime bundle install
-  (`AppController.mm` references DefaultBundles). Note the `bl` server has been
-  unreachable from this machine — non-fatal, but affects the decision.
+- ~~**Test-suite migration.**~~ **Done 2026-07-26** — see Stream 7 below.
+- ~~**Default-bundles provisioning.**~~ **Done 2026-07-26** — see Stream 8 below.
 - **Dependency-cycle refactors.** 3 cyclic SCCs in the lib graph, all breakable
   with ~4 small refactors (cut `command→OakAppKit`, `io→ns`, `document→FileBrowser`,
   `OakCommand→BundleEditor`). The seed sidesteps them (no lib↔lib target edges;

@@ -25,7 +25,7 @@ def new_target(name, dir)
   {
     "name" => name, "dir" => dir,
     "require" => [], "require_headers" => [],
-    "headers" => [], "sources" => [], "tests" => [],
+    "headers" => [], "sources" => [], "tests" => [], "cxx_tests" => [],
     "libraries" => [], "frameworks" => [],
     "executable" => nil, "prefix" => nil,
     "ln_flags" => [], "files" => [], "copy" => [],
@@ -107,7 +107,8 @@ SPEC_FILES.each do |path|
     when "frameworks"       then tgt["frameworks"]      += ev
     when "headers"          then tgt["headers"]  += ev.flat_map { |g| glob_rel(g, dir) }
     when "sources"          then tgt["sources"] += ev.flat_map { |g| glob_rel(g, dir) }
-    when "tests"            then tgt["tests"]    += ev.flat_map { |g| glob_rel(g, dir) }
+    when "tests"            then tgt["tests"]     += ev.flat_map { |g| glob_rel(g, dir) }
+    when "cxx_tests"        then tgt["cxx_tests"] += ev.flat_map { |g| glob_rel(g, dir) }
     when "executable"       then tgt["executable"] = ev.first
     when "prefix"           then tgt["prefix"]     = ev.first
     when "files", "copy"

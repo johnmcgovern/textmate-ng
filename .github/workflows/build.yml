@@ -49,3 +49,10 @@ jobs:
         ruby ide/seed_xcodeproj.rb
     - name: Build
       run: xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release build
+    # Stream 7: the ~25 per-framework XCTest bundles. These suites had no build rule
+    # under rave and had not been built since Feb 2021, so a set of long-dormant
+    # failures is skipped by name in the generated AllTests scheme (see SKIPPED_TESTS
+    # in ide/seed_xcodeproj.rb, which records why each one fails). Green therefore
+    # means "nothing got worse", and any new failure here is a real regression.
+    - name: Test
+      run: xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug

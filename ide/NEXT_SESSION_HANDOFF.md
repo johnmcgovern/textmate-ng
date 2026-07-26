@@ -37,6 +37,12 @@ built and signed perfectly:
 
 Run the binary. Open a document. Click the thing.
 
+A fourth instance of the same shape turned up on 2026-07-26: the `bl` tool had
+**never once compiled** in the Xcode project. Nothing depended on it, so nothing
+ever asked it to build, and its absence was invisible until Stream 8 made the app
+depend on it. A target existing in the project is not evidence it builds — only
+`AllLibs`, the app, and now the test bundles are actually exercised.
+
 Two diagnostic traps that cost real time, both worth remembering:
 
 - `nm`/`otool` finding a **selector name** proves nothing — callers put selector
@@ -55,6 +61,8 @@ Two diagnostic traps that cost real time, both worth remembering:
    **Don't re-derive these.**
 3. `ide/STREAM5_HOJSBRIDGE_PLAN.md` — the WKWebView migration, complete, with the
    two design questions it answered.
+4. `ide/gen_xctest.rb` + `ide/xctest_preamble.h` — how the OAK-style tests become
+   XCTest bundles, and why everything compiles as ObjC++ with ARC off.
 
 ## How to build and run
 
@@ -64,6 +72,12 @@ export PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH"     # xcodeproj gem
 ruby ide/extract_specs.rb > ide/gen/specs.json && ruby ide/seed_xcodeproj.rb
 xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release build
 open -a "$PWD/build/Release/TextMate.app"
+```
+
+Tests (25 bundles, 275 green):
+
+```bash
+xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
 ```
 
 Requires Xcode selected (`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`)
@@ -80,13 +94,19 @@ and `brew install capnp ragel ninja multimarkdown boost google-sparsehash`.
   still runs on 2019–2020 Intel Macs. Decide before Stream 3 signs a shipping
   artifact.
 
-**Unscheduled, and both gate retiring rave:**
-- **Test-suite migration.** ~26 CxxTest suites declared in `Frameworks/*/default.rave`
-  have no Xcode home. This is also a hard precondition for Phase 4 — refactoring
-  the ObjC++ UI without a regression net is the biggest avoidable risk in the plan.
-- **Default-bundles provisioning.** rave has a `DownloadBundles` step; the Xcode
-  build has no equivalent. Note the `bl` server has been unreachable from this
-  machine.
+**Both rave blockers are cleared (2026-07-26)** — see Streams 7 and 8 in
+`PROJECT_PHASES.md`. rave/ninja is now retirable: tag a `rave-final` commit, then
+delete `bin/rave`, `bin/gen_test`, the `.rave` specs and the ninja glue. Keep
+`bin/CxxTest` — the 3 GUI suites still compile against it.
+
+Two follow-ups fell out of that work, neither blocking:
+- **13 skipped tests.** Listed with reasons in `SKIPPED_TESTS`
+  (`ide/seed_xcodeproj.rb`). Mostly environmental or stale fixtures, but one is a
+  real memory-safety bug: `cf/tests/t_rect.cc`'s `from_str(".........")` underflows
+  `size_t` into a huge `CGRect` and writes off the end of its canvas.
+- **The 3 GUI suites don't assert.** They compile but XCTest can't run them, and
+  they'd hang if it could. Rewriting them into real tests would be the only
+  automated coverage the ObjC++ UI layer has before Phase 4.
 
 **Then Phase 3** (Swift interop foundation): enable Clang modules — Phase 2 sets
 `CLANG_ENABLE_MODULES=NO` and Swift needs them — module maps, C++ interop mode,

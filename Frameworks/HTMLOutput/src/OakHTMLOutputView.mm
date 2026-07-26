@@ -10,6 +10,30 @@
 @interface HOStatusBar (BusyAndProgressProperties) <HOJSBridgeDelegate>
 @end
 
+static NSString* const kHOScriptMessageHandlerName = @"textmate";
+
+// The bundle-facing TextMate object (resources/HTMLOutput.js). Copied into every
+// bundle that links HTMLOutput by the seed's require-closure resource pass.
+static WKUserScript* BridgeUserScript ()
+{
+	NSURL* url = [[NSBundle bundleForClass:[OakHTMLOutputView class]] URLForResource:@"HTMLOutput" withExtension:@"js"];
+	if(!url)
+	{
+		os_log_error(OS_LOG_DEFAULT, "HTMLOutput: HTMLOutput.js missing from the bundle — the TextMate JavaScript API will be unavailable");
+		return nil;
+	}
+
+	NSError* error;
+	NSString* source = [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:&error];
+	if(!source)
+	{
+		os_log_error(OS_LOG_DEFAULT, "HTMLOutput: cannot read HTMLOutput.js: %{public}@", error.localizedDescription);
+		return nil;
+	}
+
+	return [[WKUserScript alloc] initWithSource:source injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
+}
+
 /*
 	HOAutoScroll watched the WebFrameView’s document view for frame changes. There
 	is no equivalent view to observe under WKWebView (the content lives in another
@@ -45,6 +69,7 @@ static WKUserScript* AutoScrollUserScript ()
 @property (nonatomic) NSURLRequest* initialRequest;
 @property (nonatomic) NSURL* jobURL;
 @property (nonatomic) CGFloat pendingScrollY;
+@property (nonatomic) HOJSBridge* jsBridge;
 @end
 
 @implementation OakHTMLOutputView
@@ -66,14 +91,53 @@ static WKUserScript* AutoScrollUserScript ()
 {
 	if(_jobURL)
 		[HOFileHandleRegistry.sharedInstance discardJobForURL:_jobURL];
+	[self teardownJavaScriptAPI];
+}
+
+// The legacy bridge was re-attached per navigation in didClearWindowObject:. A WK
+// user script and message handler are per-content-controller instead, so they are
+// installed for the life of a load and torn down before the next one.
+- (void)teardownJavaScriptAPI
+{
+	[_jsBridge invalidate];
+	_jsBridge = nil;
+
+	WKUserContentController* contentController = self.webView.configuration.userContentController;
+	// -removeScriptMessageHandlerForName: is a no-op when nothing is registered,
+	// but -addScriptMessageHandler:name: *raises* on a duplicate name, so the
+	// remove has to happen before every add.
+	[contentController removeScriptMessageHandlerForName:kHOScriptMessageHandlerName];
+}
+
+- (void)installJavaScriptAPI
+{
+	WKUserContentController* contentController = self.webView.configuration.userContentController;
+
+	WKUserScript* script = BridgeUserScript();
+	if(!script)
+		return;
+
+	_jsBridge          = [HOJSBridge new];
+	_jsBridge.delegate = self.statusBar;
+	_jsBridge.webView  = self.webView;
+	[_jsBridge setEnvironment:_environment];
+
+	[contentController addScriptMessageHandler:_jsBridge name:kHOScriptMessageHandlerName];
+	[contentController addUserScript:script];
 }
 
 - (void)loadRequest:(NSURLRequest*)aRequest environment:(std::map<std::string, std::string> const&)anEnvironment autoScrolls:(BOOL)flag
 {
+	[self teardownJavaScriptAPI];
+
 	WKUserContentController* contentController = self.webView.configuration.userContentController;
 	[contentController removeAllUserScripts];
 	if(flag)
 		[contentController addUserScript:AutoScrollUserScript()];
+
+	self.environment = anEnvironment; // the bridge copies this, so set it first
+	if(!self.disableJavaScriptAPI)
+		[self installJavaScriptAPI];
 
 	// Hand the streaming file handle to the scheme handler. We can still read the
 	// NSURLProtocol properties here because this is the original request object.
@@ -88,7 +152,6 @@ static WKUserScript* AutoScrollUserScript ()
 	}
 
 	self.initialRequest    = aRequest;
-	self.environment       = anEnvironment;
 	self.commandIdentifier = [NSURLProtocol propertyForKey:@"commandIdentifier" inRequest:aRequest];
 	self.runningCommand    = self.commandIdentifier != nil;
 

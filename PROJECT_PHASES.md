@@ -2,7 +2,7 @@
 
 _High-level progress tracker. Last updated: 2026-07-26 (Streams 7 & 8, rave parity
 audit, rave/ninja retirement, arm64-only decision, Phase 2.5 formalized and
-started: dead-code cleanup)._
+started: dead-code cleanup, dependency-cycle refactors done — 0 cyclic SCCs)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -313,34 +313,51 @@ happen before Phase 3/4 touch the same lib graph and bundle identity again.
   Xcode-template scaffold app; `SKIP_TARGETS` in the seed (its only reason to
   exist) went with it.
 - ~~`bin/show_log`~~ **Deleted 2026-07-26** — confirmed zero references anywhere.
+- ~~`bin/gen_credits.rb`~~ **correction (2026-07-26): not dead, kept.** The
+  original rave parity audit only grepped source/build files and missed that
+  `bin/gen_html` pipes a Markdown page's *rendered HTML* back through
+  `ERB.new(...).result(binding)` (`bin/gen_html`'s last line) — so the
+  `<% require 'bin/gen_credits'; ... %>` block embedded in
+  `Applications/TextMate/about/Contributions.md` genuinely executes at every
+  build, shelling out to `git log` to render the live commit list the About
+  window's Contributions tab shows. (Minor, unrelated aside for whenever the
+  MacroMates-coupled-services item below is tackled: `generate_credits` caches
+  GitHub username lookups to `~/Library/Caches/com.macromates.TextMate/githubcredits`
+  and queries `api.github.com/legacy/...`, a long-deprecated endpoint — likely
+  degrading silently to no GitHub links today, not a build break.)
 - **`bin/CxxTest`** — a large vendored tree serving exactly 3 files
   (`OakAppKit`/`ns`/`layout`'s `gui_*.mm`), and those 3 don't even run under
   `xcodebuild test` (see Stream 7: they subclass `CxxTest::TestSuite`, not
   `XCTestCase`, and would block in `[NSApp run]` if invoked). Blocked on rewriting
   those 3 suites into real, asserting `XCTestCase`s (tracked as a Stream 7
   follow-up) — once that's done, `bin/CxxTest` and its `.gitmodules` entry can go.
-- **`Applications/NewApplication`** — an unused Xcode-template scaffold app;
-  `ide/seed_xcodeproj.rb`'s `SKIP_TARGETS` already excludes it from the generated
-  project. No blocker; just delete the directory.
-- **`bin/show_log`** — zero references anywhere in the tree or its history; already
-  orphaned before rave was deleted. No blocker.
-  ~~`bin/gen_credits.rb`~~ **correction (2026-07-26): not dead.** The original rave
-  parity audit only grepped source/build files and missed that `bin/gen_html`
-  pipes a Markdown page's *rendered HTML* back through `ERB.new(...).result(binding)`
-  (`bin/gen_html`'s last line) — so the `<% require 'bin/gen_credits'; ... %>` block
-  embedded in `Applications/TextMate/about/Contributions.md` genuinely executes at
-  every build, shelling out to `git log` to render the live commit list the About
-  window's Contributions tab shows. Keep it. (Minor, unrelated aside for whenever
-  the MacroMates-coupled-services item below is tackled: `generate_credits` caches
-  GitHub username lookups to `~/Library/Caches/com.macromates.TextMate/githubcredits`
-  and queries `api.github.com/legacy/...`, a long-deprecated endpoint — likely
-  degrading silently to no GitHub links today, not a build break.)
-- **Dependency-cycle refactors.** 3 cyclic SCCs in the lib graph, all breakable
-  with ~4 small refactors (cut `command→OakAppKit`, `io→ns`, `document→FileBrowser`,
-  `OakCommand→BundleEditor`). The seed sidesteps them (no lib↔lib target edges;
-  ld64 resolves archive cycles), so they don't block anything today — but cycles
-  will fight modularization and Swift target boundaries in Phase 3/4, so do them
-  before then.
+- ~~**Dependency-cycle refactors.**~~ **Done 2026-07-26.** Recomputed the actual
+  graph (Tarjan's SCC over `ide/gen/specs.json`'s real `require`/`require_headers`
+  edges) rather than trust the old note — found 3 cyclic SCCs of sizes 3, 3, and
+  9 (the 9-node one, 17 internal edges, initially looked far worse than "~4
+  refactors" suggested; it wasn't — decomposed into exactly 2 necessary cuts).
+  Every one of the 4 cuts was a single file coupled to another framework for one
+  narrow, mechanical reason:
+  - `io → ns`: `intermediate.mm`'s two `NSString`/`std::string` conversions,
+    inlined using deps `io` already had (`OakFoundation`, `cf`).
+  - `command → OakAppKit`: `runner.mm`'s one `addButtons:` convenience call,
+    replaced with two direct `addButtonWithTitle:` calls.
+  - `document → FileBrowser`: `KEventManager`/`FileItemImage` relocated to
+    `TMFileReference` (a framework both sides already required) — a pure file
+    move, no new framework.
+  - `OakCommand → BundleEditor`: inverted via `NSNotificationCenter`
+    (`OakRevealBundleItemNotification`), matching a convention already in the
+    same file. Caught one real timing bug before it shipped: `BundleEditor` is
+    only ever instantiated lazily, so registering the observer in `-init` would
+    have silently dropped the very first crash-recovery reveal in any session
+    that hadn't yet opened the Bundle Editor. Fixed by registering in `+load`
+    instead, which runs unconditionally at process start — matching what the
+    original direct call actually guaranteed.
+
+  Verified: the resulting graph has **0 cyclic SCCs** (confirmed both by
+  simulation before editing and by recomputing from the real spec file after).
+  Landed as 4 independent, individually-verified steps — full build green and
+  all 275 tests green after each one, not just at the end.
 
 **MacroMates-coupled services** (verified live in the current tree, 2026-07-26 —
 none of this is hypothetical):

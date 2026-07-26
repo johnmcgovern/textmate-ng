@@ -4,8 +4,8 @@
 #import "EncodingView.h"
 #import "Printing.h"
 #import "merge.h"
-#import <FileBrowser/FileItemImage.h>
-#import <FileBrowser/KEventManager.h>
+#import <TMFileReference/FileItemImage.h>
+#import <TMFileReference/KEventManager.h>
 #import <OakFoundation/OakFoundation.h>
 #import <OakFoundation/NSString Additions.h>
 #import <OakAppKit/OakEncodingPopUpButton.h>

@@ -1,8 +1,25 @@
 #include "intermediate.h"
 #include "path.h"
-#include <ns/ns.h>
+#import <OakFoundation/NSString Additions.h>
 #include <text/format.h>
 #include <oak/debug.h>
+
+// Inlined from ns::to_s(NSString*) — this file used to require the `ns`
+// framework for two lines of NSString/std::string glue, which closed a 3-way
+// build cycle (io -> ns -> plist -> io). `to_ns` is replaced below with the
+// exact category method it forwarded to (io already requires OakFoundation).
+static std::string to_s (NSString* aString)
+{
+	if(!aString)
+		return NULL_STR;
+
+	CFRange range = CFRangeMake(0, CFStringGetLength((CFStringRef)aString));
+	CFIndex byteCount;
+	CFStringGetBytes((CFStringRef)aString, range, kCFStringEncodingUTF8, 0, false, NULL, 0, &byteCount);
+	std::string res(byteCount, '\0');
+	CFStringGetBytes((CFStringRef)aString, range, kCFStringEncodingUTF8, 0, false, (UInt8*)&res[0], byteCount, NULL);
+	return res;
+}
 
 __attribute__ ((format (printf, 1, 2))) static std::string format_error (char const* format, ...)
 {
@@ -211,7 +228,7 @@ namespace path
 			if(stat(dest.c_str(), &buf) == 0)
 				_mode = buf.st_mode;
 
-			NSURL* destURL = [NSURL fileURLWithPath:to_ns(dest) isDirectory:NO];
+			NSURL* destURL = [NSURL fileURLWithPath:[NSString stringWithCxxString:dest] isDirectory:NO];
 
 			NSError* error;
 			NSNumber* boolean;

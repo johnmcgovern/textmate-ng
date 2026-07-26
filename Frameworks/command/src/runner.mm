@@ -1,5 +1,4 @@
 #include "runner.h"
-#import <OakAppKit/NSAlert Additions.h>
 #include <OakSystem/process.h>
 #include <OakFoundation/NSString Additions.h>
 #include <io/path.h>
@@ -239,7 +238,11 @@ namespace command
 					NSAlert* alert        = [[NSAlert alloc] init];
 					alert.messageText     = [NSString stringWithFormat:@"Stop “%@”", [NSString stringWithCxxString:_command.name]];
 					alert.informativeText = @"Would you like to kill the current shell command?";
-					[alert addButtons:@"Kill Command", @"Cancel", nil];
+					// Was [alert addButtons:@"Kill Command", @"Cancel", nil] via OakAppKit's
+					// NSAlert category — that one call was command's only tie to OakAppKit,
+					// closing a 3-way build cycle (command -> OakAppKit -> file -> command).
+					[alert addButtonWithTitle:@"Kill Command"];
+					[alert addButtonWithTitle:@"Cancel"];
 					if([alert runModal] == NSAlertFirstButtonReturn) // "Kill Command"
 					{
 						_user_abort = true;

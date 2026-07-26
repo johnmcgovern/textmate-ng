@@ -13,6 +13,7 @@
 #import <document/OakDocument.h>
 #import <document/OakDocumentController.h>
 #import <BundlesManager/BundlesManager.h>
+#import <OakCommand/OakCommand.h> // OakRevealBundleItemNotification
 #import <command/runner.h> // fix_shebang
 #import <plist/ascii.h>
 #import <plist/delta.h>
@@ -146,6 +147,26 @@ static be::entry_ptr parent_for_column (NSBrowser* aBrowser, NSInteger aColumn, 
 }
 
 @implementation BundleEditor
+// OakCommand posts this instead of calling us directly — that direct call used
+// to close a cycle in the framework graph (OakCommand required BundleEditor,
+// BundleEditor required OakTextView, OakTextView required OakCommand).
+//
+// Registered in +load, not +sharedInstance/-init: BundleEditor is normally only
+// instantiated lazily (opening the Bundle Editor, or an earlier reveal call), so
+// a crash before that first happens would otherwise post into a class that was
+// never around to observe it. +load runs unconditionally at process startup,
+// matching what the original direct call actually did — [BundleEditor.sharedInstance
+// revealBundleItem:] created the instance on demand if it didn't exist yet, and
+// the notification-based version needs the same guarantee.
++ (void)load
+{
+	[NSNotificationCenter.defaultCenter addObserverForName:OakRevealBundleItemNotification object:nil queue:nil usingBlock:^(NSNotification* notification){
+		oak::uuid_t const uuid = to_s((NSString*)notification.userInfo[OakCommandUUIDKey]);
+		if(bundles::item_ptr item = bundles::lookup(uuid))
+			[BundleEditor.sharedInstance revealBundleItem:item];
+	}];
+}
+
 + (instancetype)sharedInstance
 {
 	static dispatch_once_t onceToken;

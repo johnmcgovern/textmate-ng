@@ -18,9 +18,10 @@
 #import <HTMLOutputWindow/HTMLOutputWindow.h>
 #import <OakSystem/process.h>
 #import <settings/settings.h>
-#import <BundleEditor/BundleEditor.h>
 
 NSNotificationName const OakCommandDidTerminateNotification = @"OakCommandDidTerminateNotification";
+NSNotificationName const OakRevealBundleItemNotification    = @"OakRevealBundleItemNotification";
+NSString* const OakCommandUUIDKey                           = @"uuid";
 NSString* const OakCommandErrorDomain                       = @"com.macromates.TextMate.ErrorDomain";
 
 // kHOFileHandleURLScheme is declared by HTMLOutput, which owns the scheme handler.
@@ -534,7 +535,7 @@ static pid_t run_command (dispatch_group_t rootGroup, std::string const& cmd, in
 		{
 			if(recoveryOptionIndex == 1)
 			{
-				[BundleEditor.sharedInstance revealBundleItem:bundles::lookup(_bundleCommand.uuid)];
+				[NSNotificationCenter.defaultCenter postNotificationName:OakRevealBundleItemNotification object:self userInfo:@{ OakCommandUUIDKey: to_ns(_bundleCommand.uuid) }];
 			}
 			else if(recoveryOptionIndex == 2)
 			{

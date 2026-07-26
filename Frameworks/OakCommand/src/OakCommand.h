@@ -1,6 +1,14 @@
 #include <command/parser.h>
 
 extern NSNotificationName const OakCommandDidTerminateNotification;
+// Posted instead of calling [BundleEditor.sharedInstance revealBundleItem:]
+// directly — that call was OakCommand's only tie to BundleEditor, closing a
+// cycle in the framework graph. userInfo carries the bundle item's UUID as an
+// NSString (OakCommandUUIDKey) rather than the C++ item_ptr itself, since a
+// std::shared_ptr can't go in an NSDictionary and the poster only has the UUID
+// at hand anyway; the observer looks the item up itself.
+extern NSNotificationName const OakRevealBundleItemNotification;
+extern NSString* const OakCommandUUIDKey;
 extern NSString* const OakCommandErrorDomain;
 
 NS_ENUM(NSInteger) {

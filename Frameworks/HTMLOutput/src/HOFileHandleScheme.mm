@@ -3,7 +3,9 @@
 #import <oak/debug.h>
 
 NSString* const kHOFileHandleURLScheme = @"x-txmt-filehandle";
-NSString* const kHOLocalFilePathPrefix = @"/__tm_local__";
+NSString* const kHOLocalFilePathPrefix  = @"/__tm_local__";
+NSString* const kHOSyncCommandPathPrefix = @"/__tm_sync__";
+NSString* const kHOSyncCommandHeader     = @"X-TextMate-Command";
 
 // Same scheme *and* same host as the job URL (x-txmt-filehandle://job/…), so the
 // rewritten sub-resources are same-origin with the page rather than merely
@@ -235,18 +237,25 @@ static std::string RewriteLocalURLs (std::string const& chunk, std::string& carr
 @implementation HOFileHandleSchemeHandler
 {
 	NSMapTable<id <WKURLSchemeTask>, HOFileHandleTask*>* _tasks;
+	NSMutableSet* _pendingSyncTasks; // in-flight synchronous TextMate.system() calls
 }
 
 - (instancetype)init
 {
 	if(self = [super init])
-		_tasks = [NSMapTable strongToStrongObjectsMapTable];
+	{
+		_tasks            = [NSMapTable strongToStrongObjectsMapTable];
+		_pendingSyncTasks = [NSMutableSet set];
+	}
 	return self;
 }
 
 - (void)webView:(WKWebView*)webView startURLSchemeTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
 	NSURL* url = urlSchemeTask.request.URL;
+
+	if([url.path hasPrefix:kHOSyncCommandPathPrefix])
+		return [self serveSyncCommandForTask:urlSchemeTask];
 
 	if([url.path hasPrefix:kHOLocalFilePathPrefix])
 		return [self serveLocalFileForTask:urlSchemeTask];
@@ -274,6 +283,8 @@ static std::string RewriteLocalURLs (std::string const& chunk, std::string& carr
 
 - (void)webView:(WKWebView*)webView stopURLSchemeTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
+	[_pendingSyncTasks removeObject:urlSchemeTask];
+
 	HOFileHandleTask* task = [_tasks objectForKey:urlSchemeTask];
 	[_tasks removeObjectForKey:urlSchemeTask];
 	[task stop];
@@ -282,6 +293,53 @@ static std::string RewriteLocalURLs (std::string const& chunk, std::string& carr
 - (void)forgetTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
 	[_tasks removeObjectForKey:urlSchemeTask];
+}
+
+/*
+	Answers a synchronous TextMate.system(). The page is blocked in a synchronous
+	XMLHttpRequest for the duration — but that only stalls the web content process,
+	so the app stays responsive and can still put up the 15-second warning alert.
+
+	The task is finished exactly once, from the runner's completion handler.
+*/
+- (void)serveSyncCommandForTask:(id <WKURLSchemeTask>)urlSchemeTask
+{
+	NSURL* url = urlSchemeTask.request.URL;
+
+	NSString* encoded = urlSchemeTask.request.allHTTPHeaderFields[kHOSyncCommandHeader];
+	NSData* decoded   = encoded ? [[NSData alloc] initWithBase64EncodedString:encoded options:0] : nil;
+	NSString* command = decoded ? [[NSString alloc] initWithData:decoded encoding:NSUTF8StringEncoding] : nil;
+
+	id <HOSyncCommandRunner> runner = self.syncRunner;
+	if(!command || !runner)
+	{
+		// No runner means the command opted out of the JavaScript API, so the page
+		// should not have been able to reach here at all.
+		os_log_error(OS_LOG_DEFAULT, "HTMLOutput: synchronous bridge unavailable (command %{public}s, runner %{public}s)", command ? "ok" : "missing", runner ? "ok" : "missing");
+		[urlSchemeTask didReceiveResponse:[[NSHTTPURLResponse alloc] initWithURL:url statusCode:503 HTTPVersion:@"HTTP/1.1" headerFields:nil]];
+		[urlSchemeTask didFinish];
+		return;
+	}
+
+	[_pendingSyncTasks addObject:urlSchemeTask];
+
+	[runner runSyncCommand:command completionHandler:^(NSString* output, NSString* error, int status){
+		// -stopURLSchemeTask: drops the task from the set. If it is gone the page
+		// navigated away mid-command, and touching the task now would raise.
+		if(![self->_pendingSyncTasks containsObject:urlSchemeTask])
+			return;
+		[self->_pendingSyncTasks removeObject:urlSchemeTask];
+
+		NSData* json = [NSJSONSerialization dataWithJSONObject:@{
+			@"outputString": output ?: @"",
+			@"errorString":  error  ?: @"",
+			@"status":       @(status),
+		} options:0 error:nullptr] ?: [NSData data];
+
+		[urlSchemeTask didReceiveResponse:[[NSURLResponse alloc] initWithURL:url MIMEType:@"application/json" expectedContentLength:json.length textEncodingName:@"utf-8"]];
+		[urlSchemeTask didReceiveData:json];
+		[urlSchemeTask didFinish];
+	}];
 }
 
 /*

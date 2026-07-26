@@ -42,15 +42,37 @@
 	var nextToken = 1;
 	var commands  = new Map();
 
+	/*
+		The synchronous form. There is no synchronous JS->native call in WKWebView,
+		so this goes out as a synchronous XMLHttpRequest to a path served by the
+		app's WKURLSchemeHandler: it blocks this (web content) process only, and the
+		app answers once the command exits.
+
+		Same scheme and host as the page, so the request is same-origin. The command
+		travels base64-encoded in a header because WKURLSchemeTask never receives a
+		POST body.
+	*/
+	function syncSystem(cmd) {
+		var xhr = new XMLHttpRequest();
+		xhr.open("POST", "x-txmt-filehandle://job/__tm_sync__", false);
+		// btoa() is latin1-only; round-trip through UTF-8 first so non-ASCII
+		// commands survive.
+		xhr.setRequestHeader("X-TextMate-Command", btoa(String.fromCharCode.apply(null, new TextEncoder().encode(String(cmd)))));
+		xhr.send(null);
+
+		var res;
+		try {
+			res = JSON.parse(xhr.responseText);
+		} catch(e) {
+			throw new Error("TextMate.system(): the synchronous bridge returned no result (" + (xhr.responseText || "empty response") + ")");
+		}
+		return res;
+	}
+
 	var TextMate = {
 		system: function(cmd, handler) {
-			if(typeof handler !== "function") {
-				// Synchronous TextMate.system() is still in use by several bundles
-				// (Git, Ruby, Subversion, Mercurial). It needs the sync-XHR bridge
-				// that lands in slice 3; fail loudly rather than return undefined
-				// and have the caller die on `.outputString`.
-				throw new Error("TextMate.system(): synchronous form is not available yet in this build — pass a handler to use the asynchronous form.");
-			}
+			if(typeof handler !== "function")
+				return syncSystem(cmd);
 
 			var token   = nextToken++;
 			var command = new TMCommand(token);

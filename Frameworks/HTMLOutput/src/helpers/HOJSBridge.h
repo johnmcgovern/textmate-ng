@@ -1,3 +1,5 @@
+#import "../HOFileHandleScheme.h"
+
 @protocol HOJSBridgeDelegate
 @property (nonatomic, getter = isBusy) BOOL busy;
 @property (nonatomic) double progress;
@@ -13,7 +15,7 @@
 
 	The message handler must be registered under the name "textmate".
 */
-@interface HOJSBridge : NSObject <WKScriptMessageHandler>
+@interface HOJSBridge : NSObject <WKScriptMessageHandler, HOSyncCommandRunner>
 @property (nonatomic, weak) id <HOJSBridgeDelegate> delegate;
 @property (nonatomic, weak) WKWebView* webView;
 

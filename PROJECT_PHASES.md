@@ -83,18 +83,32 @@ deleted:
       builds, and runs the AllTests suite green on macos-latest; the bundle
       script phase reached `api.textmate.org` from the runner too)
 - [ ] Signed + notarized artifact
-- [ ] rave/ninja retired: tag the last green rave build, then delete `bin/rave`,
-      the `.rave` specs, and ninja glue
+- [x] rave/ninja retired (2026-07-26, tag `rave-final`): `bin/rave`, `bin/gen_build`,
+      `bin/gen_test`, `bin/notarize_await`, `bin/expand_variables`,
+      `bin/extract_changes`, `bin/update_changes`, `configure`, `.travis.yml`, and
+      `local-orig.rave` deleted; the ninja CI job removed; `.gitignore`,
+      `.tm_properties` and `README.md` updated. **The `.rave` spec files
+      (`{Applications,Frameworks,PlugIns}/*/default.rave`, `default.rave`) are
+      kept** — they remain `ide/extract_specs.rb`'s live input for regenerating
+      `TextMate.xcodeproj`; deleting them is Stage B (below), a separate,
+      deliberate step. `bin/CxxTest` and `bin/gen_html` are kept too — both are
+      load-bearing for the Xcode build now (the 3 GUI test bundles; the About
+      pages).
 
-**rave retirement policy (decided 2026-07-25; both blockers cleared 2026-07-26):**
-the two things that kept rave alive were the test suites and the `DownloadBundles`
-provisioning step. Both now have Xcode-world answers (Streams 7 and 8), and rave
-turned out never to have built the tests at all — so it is no longer the only home
-of anything. **rave/ninja is now retirable:** tag the final rave-green commit (e.g.
-`rave-final`), then delete `bin/rave`, `bin/gen_test`, the `.rave` specs and the
-ninja glue. `bin/CxxTest` must stay — the 3 GUI suites still compile against it.
-Remaining cutover criteria above (signing, notarization, clean-machine CI) do not
-depend on rave.
+**rave retirement policy (decided 2026-07-25; executed 2026-07-26):** the two
+things that kept rave alive were the test suites and the `DownloadBundles`
+provisioning step. Both got Xcode-world answers (Streams 7 and 8), and rave turned
+out never to have built the tests at all — so it was no longer the only home of
+anything. Tag `rave-final` marks the last commit where `./configure && ninja
+TextMate` was verified green and launchable; the build tooling was deleted
+immediately after. Remaining cutover criteria above (signing, notarization,
+clean-machine CI) never depended on rave.
+
+**Stage B, not yet done:** the `.rave` spec files are still the Xcode project's
+source of truth (`ide/extract_specs.rb` parses them on every regeneration;
+`TextMate.xcodeproj` itself stays gitignored/regenerated). Deleting the specs
+means graduating to a committed, hand-maintained `.xcodeproj` first — a real
+one-way door, and a separate decision from anything above.
 
 ### Stream 7 — Test suites → XCTest (Done 2026-07-26)
 

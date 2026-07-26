@@ -10,6 +10,7 @@ First release of **TextMate-NG**, a fork of TextMate 2 focused on modernizing th
 * New app icon: TextMate’s heritage purple daisy on a modern squircle tile, with “Alpha” and “NG” badges to distinguish TextMate-NG from an installed upstream TextMate.
 * Minimum system version raised from macOS 10.12 to macOS 15 Sequoia, and all obsolete OS-version checks removed.
 * TextMate-NG is **Apple Silicon only**. The macOS 15 requirement already excludes every Intel Mac released before 2018, and Rosetta is being phased out; a native arm64 build is also around 40% smaller than a universal one. Intel users should continue with upstream TextMate 2.
+* The original `rave`/`ninja` build system has been retired (tag `rave-final`); TextMate-NG now builds exclusively with Xcode.
 * The app now builds natively with Xcode (`TextMate.xcodeproj`) — 50 static libraries, 11 command-line tools, 3 plug-in bundles and the app itself — in addition to the original `rave`/`ninja` build.
 * Build dependencies (Cap’n Proto, boost, sparsehash) now resolve from Homebrew by default instead of user-local paths; continuous integration builds the app with both build systems on a clean machine.
 

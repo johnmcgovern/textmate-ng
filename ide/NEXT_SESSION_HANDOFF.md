@@ -97,10 +97,23 @@ and `brew install capnp ragel ninja multimarkdown boost google-sparsehash`.
 `PROJECT_PHASES.md` under "Decided". Release now pins `ONLY_ACTIVE_ARCH=NO` so a
 shipped build is arm64 regardless of the build host.
 
-**Both rave blockers are cleared (2026-07-26)** — see Streams 7 and 8 in
-`PROJECT_PHASES.md`. rave/ninja is now retirable: tag a `rave-final` commit, then
-delete `bin/rave`, `bin/gen_test`, the `.rave` specs and the ninja glue. Keep
-`bin/CxxTest` — the 3 GUI suites still compile against it.
+**rave/ninja is retired (2026-07-26, tag `rave-final`)** — both blockers cleared
+(Streams 7 & 8), the parity audit found no functional gap, and the build tooling
+(`bin/rave`, `bin/gen_build`, `bin/gen_test`, `bin/notarize_await`,
+`bin/expand_variables`, `bin/extract_changes`, `bin/update_changes`, `configure`,
+`.travis.yml`, `local-orig.rave`, the ninja CI job) is deleted. **Not** deleted:
+the `.rave` spec files (`ide/extract_specs.rb`'s live input — see "Stage B" in
+`PROJECT_PHASES.md`), `bin/CxxTest` (the 3 GUI suites still compile against it),
+and `bin/gen_html` (the About-pages build phase needs it now).
+
+- **Editor support for this repo's own code:** `.tm_properties`' `TM_FRAMEWORK_INCLUDE`
+  now points at `ide/gen/include/<fw>/<fw>` (the Xcode seed's farm) instead of
+  rave's `_Include/<fw>/include`. Run the two `ruby` seed commands once to
+  populate it before relying on in-editor diagnostics for this project's own
+  C++/ObjC++ code.
+- **Not attempted:** rebuilding TextMate's own ⌘B-to-build integration against
+  Xcode. `.tm_properties`' dead `TM_NINJA_TARGET` bindings were removed rather than
+  replaced — that's new feature work, not cleanup, and nobody asked for it yet.
 
 Two follow-ups fell out of that work, neither blocking:
 - **13 skipped tests.** Listed with reasons in `SKIPPED_TESTS`
@@ -119,6 +132,6 @@ bridging header, and the first `.swift` file.
 
 - Edit the **generator** (`ide/*.rb`), not the generated `TextMate.xcodeproj`.
 - Gitignored, regenerated, never committed: `TextMate.xcodeproj/`, `build/`,
-  `ide/gen/`, `local.rave`.
+  `ide/gen/`.
 - `PlugIns/dialog` and the other submodules are out of scope for edits.
 - Commit messages carry a `Co-Authored-By:` trailer. Ask before pushing.

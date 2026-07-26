@@ -3,27 +3,14 @@ name: CI
 on: [push]
 
 jobs:
-  build:
-    runs-on: macos-latest
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - name: Setup
-      run: brew install boost capnp google-sparsehash multimarkdown ninja ragel
-    - name: Configure
-      # ./configure now auto-detects Homebrew's prefix (/opt/homebrew on the
-      # Apple-Silicon macos-latest runners, /usr/local on Intel).
-      run: ./configure
-    - name: Build
-      run: ninja TextMate
-
   # Stream 6: build the hand-authored TextMate.xcodeproj via xcodebuild. This also
   # exercises Stream 2's reproducible-deps path end-to-end: the seed's DEP_PREFIXES
   # defaults to `brew --prefix`, so no TM_DEP_PREFIX override is set here — the
   # Xcode build resolves capnp/kj/boost/sparsehash (and the capnp/ragel codegen
-  # tools) straight out of Homebrew, exactly like ./configure does for the ninja job.
+  # tools) straight out of Homebrew.
+  #
+  # The rave/ninja build this once ran alongside is gone (tag `rave-final`) — the
+  # rave parity audit in PROJECT_PHASES.md found no functional gap remaining.
   xcode:
     runs-on: macos-latest
 
@@ -39,7 +26,7 @@ jobs:
     - name: Setup
       run: |
         # multimarkdown: the About pages are compiled from Markdown at build time
-        # (bin/gen_html), same as the ninja job — gen_html aborts without it.
+        # (bin/gen_html).
         brew install boost capnp google-sparsehash ragel multimarkdown
         gem install --user-install xcodeproj
     - name: Generate TextMate.xcodeproj

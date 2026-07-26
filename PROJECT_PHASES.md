@@ -58,7 +58,7 @@ targets with declarative `.rave` specs.
 
 | Stream | Scope | Status | Depends on |
 |--------|-------|--------|------------|
-| 1 | **Xcode workspace scaffold** (48 frameworks + 11 apps) — critical path | ✅ Done 2026-07-25 (launchable ad-hoc-signed TextMate.app; builds on CI) | — |
+| 1 | **Xcode workspace scaffold** (48 frameworks + 11 apps) — critical path | ✅ Done 2026-07-26 (launch-verified; see bundle-resource correction below) | — |
 | 2 | Dependency integration (capnp/boost/Onigmo/kvdb) — make deps reproducible, not `~/nix-sdk` user-local paths | ✅ Done 2026-07-26 (Homebrew default validated on CI; optional dep-version pinning TBD) | 1 |
 | 3 | Code signing & notarization (real identity; ad-hoc already proven) | ⬜ Not started (needs certs → user) | 1 |
 | 4 | Raise deployment target (macOS 15) + remove dead guards | ✅ Done 2026-07-24 (unmerged) | — |
@@ -91,7 +91,38 @@ dual-build maintenance beyond those two migrations.
 - Follow-ups: **merge the branch**; 2 `@available` sites in the `PlugIns/dialog`
   submodule left untouched (submodule-pointer scope).
 
-### Stream 1 — In progress (branch `claude/xcode-stream1-seed`)
+### Stream 1 — Done (branch `claude/xcode-stream1-seed`)
+
+> **Correction (2026-07-26).** This section previously recorded a "launchable"
+> app. It was not: the first actual launch attempt died with `Unable to load nib
+> file: MainMenu, exiting`. `codesign --verify --deep --strict` passing had been
+> mistaken for launchability — the signature was valid, the bundle was just
+> missing its contents. Two seed gaps, both now fixed:
+>
+> 1. **No xib compilation.** `bin/rave` has a `CompileXib` rule (`.xib` → `.nib`
+>    via `xcrun ibtool`); the seed had no equivalent and copied raw `.xib` files
+>    into the bundle, so `NSApplicationMain` could not find `MainMenu.nib`.
+> 2. **No require-closure resources.** rave copies the assets of *every* target
+>    in a bundle's require closure into the wrapper (`bin/rave`, `signature` →
+>    `required_targets(…, include_self: true)`). The seed only handled the app's
+>    own `files`/`copy` entries, so every framework-owned resource was absent —
+>    BundleEditor's 7 property xibs, OakTextView's `TabSizeSetting.xib`,
+>    Preferences' nibs. Bundle Editor and Preferences would have failed to open
+>    even once the main nib loaded.
+>
+> Both live in Pass 3 of `ide/seed_xcodeproj.rb`. Localized resources go through
+> **PBXVariantGroups** in the Resources phase rather than Copy Files phases:
+> that is what invokes Xcode's built-in ibtool rule, and it avoids Xcode
+> re-appending the `.lproj` on top of an explicit `dst_path` (which nests them as
+> `Resources/English.lproj/English.lproj/`). App bundle went from ~66 to 204
+> files + 14 localized resources.
+>
+> **Verified 2026-07-26:** clean `rm -rf build` → seed → `xcodebuild` →
+> `** BUILD SUCCEEDED **`; 0 raw xibs and 0 nested `.lproj` in the wrapper;
+> `codesign --verify --deep --strict` passes; the app launches, stays alive as a
+> foreground GUI process, and `mate --name smoke <file>` opens a document into it
+> with no errors in the unified log.
+
 Generator decision (**confirmed by user**): **hand-authored `.xcodeproj`**, seeded
 programmatically via the `xcodeproj` Ruby gem (`ide/extract_specs.rb` +
 `ide/seed_xcodeproj.rb`), then maintained natively. No Swift; ObjC++/C++ kept.
@@ -104,9 +135,11 @@ Milestones:
       variant (commit `4780a653`)
 - [x] **`TextMate.app` compiles + links** (ad-hoc signed, Info.plist generated;
       commit `4780a653`)
-- [ ] App bundle layout: resources / plugins / tools copy phases (in progress —
-      uncommitted "Pass 3" in the seed)
-- [ ] **Launch-verify** `build/Release/TextMate.app`
+- [x] App bundle layout: resources / plugins / tools copy phases, xib compilation,
+      and require-closure resource propagation (Pass 3 in the seed)
+- [x] **Launch-verify** `build/Release/TextMate.app` — done 2026-07-26. Needed two
+      seed fixes first (xib compilation + require-closure resources); the earlier
+      "launchable" claim was never true. See the correction note below.
 - [ ] Update `ide/PHASE2_PROGRESS.md` (its "BLOCKED" section is stale — the
       blocker was resolved in `4780a653`)
 

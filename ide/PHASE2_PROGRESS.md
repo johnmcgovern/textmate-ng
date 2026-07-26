@@ -84,10 +84,45 @@ Individually, these all compile clean to `build/Release/*.a`:
   Ragel (`*.rl`→`.cc`) and Cap'n Proto (`*.capnp`→`.capnp.cpp`+`.h`, auto-compiled);
   quote-surviving `-DNULL_STR`/`-DREST_API`; per-arch nix-sdk include/lib paths.
 
-## ✅ STREAM 1 COMPLETE (2026-07-25, commit c8c34262)
+## ✅ STREAM 1 COMPLETE (launch-verified 2026-07-26)
+
+> **Correction.** The 2026-07-25 version of this section claimed the app
+> "launches without crashing". It did not — the first real launch attempt exited
+> immediately with `Unable to load nib file: MainMenu, exiting`. A passing
+> `codesign --verify --deep --strict` had been read as evidence of launchability;
+> it only ever proved the signature was internally consistent. **Do not treat
+> codesign or a green build as a launch check — run the binary.**
+>
+> Root causes, both in Pass 3 of `ide/seed_xcodeproj.rb`, both now fixed:
+> 1. **Xibs were never compiled.** rave's `CompileXib` (`.xib` → `.nib` via
+>    `xcrun ibtool`, `bin/rave:667`) had no seed equivalent, so the bundle shipped
+>    a raw `MainMenu.xib`.
+> 2. **Framework resources were never copied.** rave bundles the assets of every
+>    target in the require closure (`signature` → `required_targets(…,
+>    include_self: true)` → `assets` → CopyFile); the seed only walked the app's
+>    own `files`/`copy`. All 13 framework xibs plus their images/plists were
+>    missing.
+>
+> Implementation notes for whoever touches this next:
+> - `asset_closure(name)` mirrors rave's `required_targets(include_self: true)`.
+> - `.lproj` **directory** inputs are expanded one level (`files resources/*`
+>   globs the directory, not its contents).
+> - Anything living in a `.lproj` is added to the **Resources build phase inside a
+>   PBXVariantGroup**, not a Copy Files phase. This is load-bearing twice over: it
+>   is what triggers Xcode's built-in ibtool rule, and Copy Files phases get the
+>   `.lproj` re-appended by Xcode on top of `dst_path`, producing
+>   `Resources/English.lproj/English.lproj/`.
+> - Destinations are deduped on `(subfolder, path, basename)` — with ~40 targets
+>   contributing files, two build commands writing one path is a hard Xcode error.
+>
+> Result: app wrapper went from ~66 to **204 files + 14 localized resources**.
+> Verified from a clean `rm -rf build`: `** BUILD SUCCEEDED **`, 0 raw xibs, 0
+> nested `.lproj`, codesign passes, app launches and stays alive as a foreground
+> GUI process, and `mate --name smoke <file>` opens a document into the running
+> app with nothing logged to the unified log.
+
 `xcodebuild -target TextMate` produces a complete, ad-hoc-signed, **launchable**
-`TextMate.app` (50 libs + 11 tools + 3 bundles + app; `codesign --verify --deep
---strict` passes; launches without crashing). The blocker below was resolved with
+`TextMate.app` (50 libs + 11 tools + 3 bundles + app). The blocker below was resolved with
 **option 4**: a no-umbrella variant farm (`ide/gen/include-nou`) lets WebKit-pulling
 targets resolve `<Network/Network.h>` to Apple while keeping TM's `<network/…>`.
 Also: per-target `ln_flags` propagation (license weak-import), app Info.plist/

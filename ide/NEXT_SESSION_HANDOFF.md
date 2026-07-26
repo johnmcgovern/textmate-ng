@@ -8,7 +8,7 @@ git log or the docs below, trust those._
   `GH—johnmcgovern` (upstream set). HEAD moves as the loop commits; the branch is
   in sync with the remote.
 - **Phase 2 / Stream 1 (Xcode migration seed): COMPLETE.** `xcodebuild -target
-  TextMate` builds a launchable, ad-hoc-signed `TextMate.app` — 50 static libs, 11
+  TextMate` builds a launch-verified, ad-hoc-signed `TextMate.app` — 50 static libs, 11
   CLI tools, 3 loadable bundles (Dialog/Dialog2/TextMateQL), full bundle layout,
   Info.plist/entitlements. `codesign --verify --deep --strict` passes; it launches
   without crashing.

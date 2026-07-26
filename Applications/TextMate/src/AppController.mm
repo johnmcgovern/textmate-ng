@@ -493,14 +493,13 @@ BOOL HasDocumentWindow (NSArray* windows)
 	if(NSMenu* menu = [self mainMenu])
 		NSApp.mainMenu = menu;
 
-	NSOperatingSystemVersion osVersion = NSProcessInfo.processInfo.operatingSystemVersion;
-	NSString* parms = [NSString stringWithFormat:@"v=%@&os=%ld.%ld.%ld", [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet], osVersion.majorVersion, osVersion.minorVersion, osVersion.patchVersion];
-
-	SoftwareUpdate.sharedInstance.channels = @{
-		kSoftwareUpdateChannelRelease:    [NSURL URLWithString:[NSString stringWithFormat:@"" REST_API "/releases/release?%@", parms]],
-		kSoftwareUpdateChannelPrerelease: [NSURL URLWithString:[NSString stringWithFormat:@"" REST_API "/releases/beta?%@", parms]],
-		kSoftwareUpdateChannelCanary:     [NSURL URLWithString:[NSString stringWithFormat:@"" REST_API "/releases/nightly?%@", parms]],
-	};
+	// SoftwareUpdate.sharedInstance.channels is deliberately left unconfigured
+	// (Phase 2.5, 2026-07-26): these previously resolved against MacroMates'
+	// api.textmate.org/releases — this fork's own TextMate-NG. "Check for
+	// updates" now surfaces a clear "No channel named …" error instead of
+	// silently offering the wrong product's releases. Wire this back up once a
+	// J23-owned update feed exists; SoftwareUpdate.mm's checkForTestBuild: does
+	// the lookup by name against whatever channels dict is set here.
 
 	settings_t::set_default_settings_path([[[NSBundle mainBundle] pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);
 	settings_t::set_global_settings_path(path::join(path::home(), "Library/Application Support/TextMate/Global.tmProperties"));
@@ -616,7 +615,13 @@ BOOL HasDocumentWindow (NSArray* windows)
 	[AboutWindowController showChangesIfUpdated];
 
 	[CrashReporter.sharedInstance applicationDidFinishLaunching:aNotification];
-	[CrashReporter.sharedInstance postNewCrashReportsToURLString:[NSString stringWithFormat:@"%s/crashes", REST_API]];
+	// Uploading is deliberately disabled (Phase 2.5, 2026-07-26): `REST_API` here
+	// resolves to MacroMates' api.textmate.org, and this call defaulted to
+	// enabled — most users would never see the opt-out checkbox in Preferences
+	// before their first crash silently uploaded to a company this fork isn't
+	// affiliated with. Re-enable once a J23-owned collector exists, by restoring
+	// `[CrashReporter.sharedInstance postNewCrashReportsToURLString:...]` pointed
+	// at it. macOS's own system crash reporting is unaffected either way.
 
 	[OakCommitWindowServer sharedInstance]; // Setup server
 

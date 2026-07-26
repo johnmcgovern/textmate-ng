@@ -75,7 +75,11 @@
 	NSTextField* lastCheckTextField        = OakCreateLabel(@"Some time ago");
 	NSButton* checkNowButton               = [NSButton buttonWithTitle:@"Check Now" target:self.softwareUpdateController action:@selector(checkForUpdate:)];
 
-	NSButton* submitCrashReportsCheckBox   = OakCreateCheckBox(@"Submit to MacroMates");
+	// Was "Submit to MacroMates": as of Phase 2.5 (2026-07-26), AppController.mm
+	// no longer calls postNewCrashReportsToURLString: (that URL pointed at
+	// MacroMates' collector, which this fork isn't affiliated with), so this
+	// checkbox does not currently submit anywhere regardless of its state.
+	NSButton* submitCrashReportsCheckBox   = OakCreateCheckBox(@"Submit crash reports");
 
 	NSTextField* contactTextField          = [NSTextField textFieldWithString:@"Anonymous"];
 

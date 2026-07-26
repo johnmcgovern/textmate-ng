@@ -4,7 +4,6 @@
 #import <OakFoundation/OakFoundation.h>
 #import <OakFoundation/NSString Additions.h>
 #import <BundlesManager/BundlesManager.h>
-#import <license/LicenseManager.h>
 #import <ns/ns.h>
 
 static NSString* const kUserDefaultsReleaseNotesDigestKey = @"releaseNotesDigest";
@@ -62,7 +61,7 @@ static NSData* Digest (NSString* someString)
 	NSWindow* win = [[NSPanel alloc] initWithContentRect:rect styleMask:(NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskFullSizeContentView) backing:NSBackingStoreBuffered defer:NO];
 	if((self = [super initWithWindow:win]))
 	{
-		_segmentLabels    = @[ @"About", @"Changes", @"Bundles", @"Registration", @"Legal", @"Contributions" ];
+		_segmentLabels    = @[ @"About", @"Changes", @"Bundles", @"Legal", @"Contributions" ];
 		_segmentedControl = [NSSegmentedControl segmentedControlWithLabels:_segmentLabels trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(takeSelectedSegmentFrom:)];
 
 		self.toolbar = [[NSToolbar alloc] initWithIdentifier:@"About TextMate"];
@@ -92,7 +91,6 @@ static NSData* Digest (NSString* someString)
 				NSDictionary* variables = @{
 					@"version":   [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"],
 					@"copyright": [NSBundle.mainBundle objectForInfoDictionaryKey:@"NSHumanReadableCopyright"],
-					@"licensees": LicenseManager.sharedInstance.owner ?: [NSNull null],
 				};
 
 				[variables enumerateKeysAndObjectsUsingBlock:^(NSString* key, NSString* value, BOOL* stop){
@@ -161,7 +159,6 @@ static NSData* Digest (NSString* someString)
 		@"About":         @"About/About",
 		@"Changes":       @"About/Changes",
 		@"Bundles":       @"About/Bundles",
-		@"Registration":  @"About/Registration",
 		@"Legal":         @"About/Legal",
 		@"Contributions": @"About/Contributions"
 	};
@@ -325,10 +322,6 @@ static NSDictionary* RemoveOldCommits (NSDictionary* src)
 			static os_log_t log = os_log_create("com.macromates.JavaScript", "log");
 			os_log(log, "%{public}@: %{public}@", self.webView.title, payload[@"message"]);
 		}
-	}
-	else if([command isEqualToString:@"addLicense"])
-	{
-		[LicenseManager.sharedInstance showAddLicenseWindow:self];
 	}
 }
 @end

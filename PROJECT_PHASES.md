@@ -2,7 +2,8 @@
 
 _High-level progress tracker. Last updated: 2026-07-26 (Streams 7 & 8, rave parity
 audit, rave/ninja retirement, arm64-only decision, Phase 2.5 formalized and
-started: dead-code cleanup, dependency-cycle refactors done — 0 cyclic SCCs)._
+started: dead-code cleanup, dependency-cycle refactors done — 0 cyclic SCCs —
+and all 3 MacroMates-coupled-service decisions landed)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -27,7 +28,7 @@ duplicating it here goes stale within hours while the loop runs.
 |---|-------|--------|---------------|
 | 1 | **Build bring-up** (rave → ninja compiling) | ✅ Done / pre-existing | — |
 | 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress (signing left) | Large / Med |
-| 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | 🔄 Started 2026-07-26 | Med / Low |
+| 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | 🔄 Only `bin/CxxTest` left (blocked on Stream 7 follow-up) | Med / Low |
 | 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ⬜ Not started | Small–Med / Med |
 | 4 | **Swift-ify the AppKit/UI shell, leaf-first** | ⬜ Not started | Very large / Med |
 | 5 | **App shell & lifecycle in Swift** (= recommended end state) | ⬜ Not started | Med / Low–Med |
@@ -359,30 +360,36 @@ happen before Phase 3/4 touch the same lib graph and bundle identity again.
   Landed as 4 independent, individually-verified steps — full build green and
   all 275 tests green after each one, not just at the end.
 
-**MacroMates-coupled services** (verified live in the current tree, 2026-07-26 —
-none of this is hypothetical):
-- **`license`** — a full serial-number purchase/registration flow (`LicenseManager.mm`:
-  "Buy"/"Register" buttons, `visitOnlineStore:` hardcoded to
-  `https://shop.macromates.com`, `revoked_serials()` validation). The About window
-  currently reads *"This copy of TextMate is unregistered. Add license."* There is
-  no commercial licensing model for this fork; keeping this makes no sense as-is.
-  Remove the flow (and the UI it drives), or repurpose it if J23 Software ever
-  wants its own registration/licensing — a real decision, not a default.
-- **`CrashReporter`** — silently uploads crash reports to `https://api.textmate.org/crashes`
-  (`AppController.mm:619`, via `REST_API`) — MacroMates' server, for a fork
-  unaffiliated with them. Needs an explicit decision: point at a J23-controlled
-  endpoint, or disable crash reporting until one exists. Shipping this as-is is a
-  privacy problem, not a technical debt item.
-- **`SoftwareUpdate`** — its three channels (`release`/`beta`/`nightly`) all resolve
-  against `https://api.textmate.org/releases/...` (`AppController.mm:499-503`).
-  As shipped, TextMate-NG's "check for updates" checks *MacroMates' TextMate 2
-  release feed*, not TextMate-NG's own — a user could get pointed at an unrelated
-  upstream release. Needs its own update feed (e.g. GitHub Releases-backed) before
-  this can safely stay enabled, or should be disabled until one exists.
+**MacroMates-coupled services — decided and landed 2026-07-26:**
+- ~~**`license`**~~ **Removed.** `Frameworks/license` deleted whole (serial-number
+  purchase/registration flow, `visitOnlineStore:` hardcoded to
+  `shop.macromates.com`, `revoked_serials()` validation). Confirmed before
+  deleting that nothing else in the app gates on license validity — it only ever
+  drove the About window's Registration tab (now removed, 5 tabs instead of 6)
+  and the "Add license" link. Also removed the now-orphaned
+  `kUserDefaultsLicenseOwnerKey` default and the dead `addLicense`/
+  `addLicenseCallback` bridge code in `WKWebView.js` that only that tab used.
+  Verified: About window opens with no crash, exactly 5 tabs.
+- ~~**`CrashReporter`**~~ **Upload disabled.** `AppController.mm` no longer calls
+  `postNewCrashReportsToURLString:` (that URL resolved to MacroMates'
+  `api.textmate.org/crashes`). The framework and its Preferences → Software
+  Update checkbox stay, ready to re-enable once a J23-owned collector exists —
+  relabeled from the now-inaccurate "Submit to MacroMates" to "Submit crash
+  reports" so it doesn't claim to do something it can't. macOS's own system
+  crash reporting is unaffected.
+- ~~**`SoftwareUpdate`**~~ **Channels unconfigured.** `AppController.mm` no
+  longer sets `SoftwareUpdate.sharedInstance.channels` to the
+  `api.textmate.org/releases/...` URLs. Verified: Preferences → Software Update →
+  "Check Now" now surfaces a clear *"No channel named 'release'."* error instead
+  of silently checking MacroMates' TextMate 2 release feed — confirmed this is
+  `SoftwareUpdate.mm`'s existing graceful-failure path (`checkForTestBuild:`),
+  not a crash or a new code path. Re-wire once a J23-owned update feed exists.
 
-All three of the above are naturally decided alongside Stream 3's move off
+All three were naturally decided alongside Stream 3's eventual move off
 `com.macromates.*` (same underlying question — "what is this fork's own identity,
-distinct from MacroMates' infrastructure") but don't have to wait for it.
+distinct from MacroMates' infrastructure") but didn't need to wait for it: none of
+the three required a J23 identity to already exist, only to stop pointing at
+MacroMates' in the meantime.
 
 ---
 

@@ -38,7 +38,9 @@ jobs:
         submodules: recursive
     - name: Setup
       run: |
-        brew install boost capnp google-sparsehash ragel
+        # multimarkdown: the About pages are compiled from Markdown at build time
+        # (bin/gen_html), same as the ninja job — gen_html aborts without it.
+        brew install boost capnp google-sparsehash ragel multimarkdown
         gem install --user-install xcodeproj
     - name: Generate TextMate.xcodeproj
       # ide/gen/ is gitignored (regenerated). extract_specs -> specs.json, then

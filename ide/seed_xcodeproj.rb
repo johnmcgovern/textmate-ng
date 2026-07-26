@@ -511,6 +511,63 @@ def add_localized(project, target, rel)
   target.resources_build_phase.add_file_reference(group)
 end
 
+# rave's ExpandVariables also ran over InfoPlist.strings with -dYEAR=<year>, which
+# is how the copyright string gets its closing year. Xcode converts .strings to
+# UTF-16 natively but expands nothing, so the shipped app said "2004-${YEAR}"
+# verbatim (parity-audit find, 2026-07-26). Pre-substitute at seed time, same
+# tactic as generate_entitlements; keyed on the full source path so two different
+# English.lproj/InfoPlist.strings can never collide in the output dir.
+def expand_year_strings(rel)
+  content = File.read(File.join(ROOT, rel))
+  return rel unless content.include?("${YEAR}")
+  out_rel = "#{GEN_DIR}/expanded/#{rel}"
+  out_abs = File.join(ROOT, out_rel)
+  FileUtils.mkdir_p(File.dirname(out_abs))
+  File.write(out_abs, content.gsub("${YEAR}", Time.now.year.to_s))
+  out_rel
+end
+
+# rave compiled about/*.md to HTML (CompileMarkdown -> bin/gen_html -> multimarkdown
+# with the app's header/footer templates). The seed had no equivalent, so the About
+# window — which loads About/<Page>.html — rendered 5 of its 6 tabs blank
+# (parity-audit find, 2026-07-26; only Bundles.html, already HTML in the tree,
+# worked). Reproduced as a script phase; Pass 3 filters the raw .md files out of
+# the resource copy. Hard-fails like rave's rule did: gen_html aborts if
+# multimarkdown is missing, so it must be installed (CI installs it via brew).
+def add_about_pages_phase(project, target, t)
+  mds = (t["files"].to_a + t["copy"].to_a)
+        .select { |e| e["dest"] == "Resources/About" }
+        .flat_map { |e| e["inputs"].to_a }
+        .select { |i| i.end_with?(".md") }
+  return if mds.empty?
+
+  header = File.join(t["dir"], "templates/header.html")
+  footer = File.join(t["dir"], "templates/footer.html")
+  tpl    = [File.exist?(File.join(ROOT, header)) ? "-h \"$SRCROOT/#{header}\"" : nil,
+            File.exist?(File.join(ROOT, footer)) ? "-f \"$SRCROOT/#{footer}\"" : nil].compact.join(" ")
+
+  phase = target.new_shell_script_build_phase("Generate About pages")
+  phase.shell_path   = "/bin/sh"
+  phase.input_paths  = ["$(SRCROOT)/bin/gen_html", "$(SRCROOT)/#{header}", "$(SRCROOT)/#{footer}"] +
+                       mds.map { |m| "$(SRCROOT)/#{m}" }
+  phase.output_paths = mds.map { |m| "$(DERIVED_FILE_DIR)/About/#{File.basename(m, '.md')}.html" }
+  phase.shell_script = <<~SH
+    set -eu
+    export PATH="#{TOOL_BIN_DIRS.join(":")}:$PATH"   # multimarkdown (gen_html aborts without it)
+    mkdir -p "$DERIVED_FILE_DIR/About"
+    for f in #{mds.map { |m| "\"$SRCROOT/#{m}\"" }.join(" ")}; do
+      base=$(basename "$f" .md)
+      "$SRCROOT/bin/gen_html" #{tpl} "$f" > "$DERIVED_FILE_DIR/About/$base.html~"
+      mv "$DERIVED_FILE_DIR/About/$base.html~" "$DERIVED_FILE_DIR/About/$base.html"
+    done
+  SH
+
+  copy = target.new_copy_files_build_phase("Copy About pages")
+  copy.symbol_dst_subfolder_spec = :resources
+  copy.dst_path = "About"
+  phase.output_paths.each { |p| copy.add_file_reference(project.main_group.new_file(p)) }
+end
+
 # Default-bundles provisioning. rave builds the app's DefaultBundles.tbz at build
 # time (bin/rave's CreateBundlesArchive): run `bl install` against the bundle list
 # in DefaultBundles.tbz.bl, then tar the result. AppController.mm unpacks that
@@ -573,6 +630,8 @@ specs.each do |t|
           # DefaultBundles.tbz, and the wrapper only ever held DefaultBundles.tbz.bl.
           # The real archive comes from the run-script phase below.
           next if File.basename(rel) == BUNDLE_LIST_NAME
+          # Markdown is compiled to HTML by the About-pages phase, not copied raw.
+          next if rel.end_with?(".md") && entry["dest"] == "Resources/About"
           parent    = File.basename(File.dirname(rel))
           localized = parent.end_with?(".lproj") && spec == :resources
           key       = localized ? [:lproj, parent, File.basename(rel)] : [spec, sub, File.basename(rel)]
@@ -582,7 +641,7 @@ specs.each do |t|
           end
           taken[key] = rel
           if localized
-            loc << rel
+            loc << expand_year_strings(rel)
           else
             (buckets[[spec, sub]] ||= []) << rel
           end
@@ -613,7 +672,10 @@ specs.each do |t|
 
   loc.each { |rel| add_localized(project, target, rel) }
 
-  add_default_bundles_phase(project, target, t, targets) if k == :app
+  if k == :app
+    add_about_pages_phase(project, target, t)
+    add_default_bundles_phase(project, target, t, targets)
+  end
 
   puts "bundled #{t['name']} [#{k}] #{buckets.values.sum(&:size)} files, #{loc.size} localized#{ndup > 0 ? ", #{ndup} dup(s) skipped" : ''}"
 end

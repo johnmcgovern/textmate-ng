@@ -170,6 +170,50 @@ withheld by a collision guard meant only for WebKit-pulling targets; `bl` is pur
 C++ and reaches `<network/key_chain.h>` transitively through `updater.h`. The guard
 in `farm_dir` is now scoped to targets that actually pull WebKit.
 
+### rave parity audit (2026-07-26)
+
+Before deleting rave, every build rule it owns was walked and matched against the
+Xcode seed. `bin/rave` has 9 `Compiler` transforms plus the target-level steps;
+status of each:
+
+| rave rule | Xcode equivalent | Status |
+|---|---|---|
+| `CompileClang` (.c/.m/.cc/.mm → .o) | native | ✅ |
+| `CompileRagel` (.rl → .cc) | `PBXBuildRule` in the seed | ✅ |
+| `CompileCapnp` (.capnp → .c++) | `PBXBuildRule` in the seed | ✅ |
+| `CompileXib` (.xib → .nib) | variant groups → ibtool | ✅ (Stream 1) |
+| `ExpandVariables` (Info.plist) | `INFOPLIST_FILE` + build settings | ✅ (Stream 1) |
+| `CreateBundlesArchive` (.tbz.bl → .tbz) | script phase | ✅ (Stream 8) |
+| `ConvertToUTF16` (.strings) | Xcode converts natively… | ⚠️ **gap, fixed** |
+| `CompileMarkdown` (.md → .html) | none | ⚠️ **gap, fixed** |
+| `CompileAssetCatalog` (.xcassets → .car) | — | n/a, no `.xcassets` in tree |
+
+Two real gaps, both invisible to a green build and both now closed:
+
+1. **About pages were never generated.** rave compiled `about/*.md` → HTML via
+   `bin/gen_html` (multimarkdown + the app's header/footer ERB templates); the seed
+   copied the raw `.md`. `AboutWindowController.mm` loads `About/<Page>.html`, so
+   5 of the 6 About tabs rendered blank — only `Bundles.html`, already HTML in the
+   tree, worked. Now a script phase (`add_about_pages_phase`), with the `.md`
+   inputs filtered out of the resource copy. **Verified by clicking all six tabs.**
+2. **`${YEAR}` was never expanded.** rave ran `ExpandVariables` over
+   `InfoPlist.strings` with `-dYEAR=`; Xcode converts `.strings` to UTF-16 but
+   expands nothing, so the shipped copyright read `2004-${YEAR}` literally. Now
+   pre-substituted at seed time (`expand_year_strings`), mirroring how the
+   entitlements template is handled.
+
+Target-level steps (`objects`/`executable`/`lipo`/`assets`/`signature`/`runner`/
+`notarize`/`defines`/`expand`) map to native Xcode behaviour, except:
+- `lipo` — only matters for universal builds; see the arch decision above.
+- `notarize` — rave drives the **retired** `altool`. Stream 3 must be built on
+  `notarytool` regardless, so there is nothing here to port.
+- `runner`/`defines` — `ninja TextMate/run` and the `install`/`bump`/`deploy`
+  actions in `local.rave` are developer conveniences, replaced by Xcode's Run
+  action. Worth re-creating only if missed.
+
+**Conclusion: no functional gap remains between the two build systems.** rave is
+ready to delete once Stream 3 no longer wants it as a reference.
+
 ### Stream 4 — Done (branch `claude/upbeat-galileo-eae114`, **not merged**)
 - Deployment floor raised to **macOS 15.0 Sequoia** via `default.rave` `APP_MIN_OS`.
 - All dead version guards removed (−213 lines), verified by full build.

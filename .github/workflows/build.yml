@@ -18,3 +18,34 @@ jobs:
       run: ./configure
     - name: Build
       run: ninja TextMate
+
+  # Stream 6: build the hand-authored TextMate.xcodeproj via xcodebuild. This also
+  # exercises Stream 2's reproducible-deps path end-to-end: the seed's DEP_PREFIXES
+  # defaults to `brew --prefix`, so no TM_DEP_PREFIX override is set here — the
+  # Xcode build resolves capnp/kj/boost/sparsehash (and the capnp/ragel codegen
+  # tools) straight out of Homebrew, exactly like ./configure does for the ninja job.
+  xcode:
+    runs-on: macos-latest
+
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      RUBYOPT: "-EUTF-8"
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Setup
+      run: |
+        brew install boost capnp google-sparsehash ragel
+        gem install --user-install xcodeproj
+    - name: Generate TextMate.xcodeproj
+      # ide/gen/ is gitignored (regenerated). extract_specs -> specs.json, then
+      # seed_xcodeproj authors the .pbxproj + the <fw/header.h> include farm.
+      run: |
+        mkdir -p ide/gen
+        ruby ide/extract_specs.rb > ide/gen/specs.json
+        ruby ide/seed_xcodeproj.rb
+    - name: Build
+      run: xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release build

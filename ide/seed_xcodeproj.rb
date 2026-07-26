@@ -443,28 +443,105 @@ def copy_dest(dest)
   end
 end
 
+# rave copies the assets of every target in the bundle's require closure — not
+# just the bundle's own — into the wrapper at signing time (see `signature` in
+# bin/rave: required_targets(…, include_self: true) -> assets -> CopyFile). The
+# frameworks keep their UI in `files resources/*`, so without this an app builds
+# and signs fine but is missing every framework nib, image and plist.
+def asset_closure(name)
+  seen, queue = {}, [name]
+  until queue.empty?
+    dep = queue.shift
+    next if seen[dep]
+    seen[dep] = true
+    t = BY_NAME[dep] or next
+    queue.concat(t["require"] + t["require_headers"])
+  end
+  seen.keys.select { |d| BY_NAME[d] }
+end
+
+# `files resources/*` globs directories too, so a localized resource arrives as
+# the `English.lproj` directory rather than its contents. Copying it wholesale
+# would ship raw .xib files (rave compiles them to .nib), so expand one level and
+# let the caller route each child.
+def expand_input(rel)
+  abs = File.join(ROOT, rel)
+  return [rel] unless File.directory?(abs) && File.basename(rel).end_with?(".lproj")
+  Dir.glob(File.join(abs, "*")).sort.map { |p| p.sub("#{ROOT}/", "") }
+end
+
+# Everything that lives in a .lproj is added to the Resources phase inside a
+# variant group. Two reasons: it is what runs .xib through Xcode's built-in ibtool
+# rule (rave's CompileXib equivalent), and it is the only representation Xcode
+# localizes correctly — a localized file routed through a Copy Files phase gets
+# its .lproj appended by Xcode on top of whatever dst_path says, so naming the
+# .lproj there lands it at Resources/English.lproj/English.lproj/.
+def add_localized(project, target, rel)
+  region = File.basename(File.dirname(rel))[/\A(.+)\.lproj\z/, 1]
+  group  = project.main_group.new_variant_group(File.basename(rel))
+  file   = group.new_file(File.join(ROOT, rel))
+  file.name = region if region
+  target.resources_build_phase.add_file_reference(group)
+end
+
 specs.each do |t|
   k = kind(t)
   next unless [:app, :plugin, :qlgen].include?(k)
   target = targets[t["name"]]
-  (t["files"] + t["copy"]).each do |entry|
-    inputs = (entry["inputs"] || []).reject { |i| File.basename(i) == "Info.plist" }
-    refs   = entry["refs"] || []
-    next if inputs.empty? && refs.empty?
-    spec, sub = copy_dest(entry["dest"])
-    phase = target.new_copy_files_build_phase("Copy to #{entry['dest']}")
-    phase.symbol_dst_subfolder_spec = spec
-    phase.dst_path = sub
-    inputs.each do |rel|
-      phase.add_file_reference(project.main_group.new_file(File.join(ROOT, rel)))
-    end
-    refs.each do |r|
-      rt = targets[r.sub(/\A@/, "")] or next   # refs carry an `@` prefix in the spec
-      phase.add_file_reference(rt.product_reference)
-      target.add_dependency(rt)
+
+  # Group by destination so the closure's many `Resources` entries collapse into
+  # one phase, and so duplicate basenames can be caught (Xcode hard-errors on two
+  # build commands writing the same output path).
+  buckets, taken, loc, ndup = {}, {}, [], 0
+
+  asset_closure(t["name"]).each do |name|
+    dep = BY_NAME[name]
+    (dep["files"].to_a + dep["copy"].to_a).each do |entry|
+      spec, sub = copy_dest(entry["dest"])
+      (entry["inputs"] || []).each do |input|
+        expand_input(input).each do |rel|
+          next if File.basename(rel) == "Info.plist"
+          parent    = File.basename(File.dirname(rel))
+          localized = parent.end_with?(".lproj") && spec == :resources
+          key       = localized ? [:lproj, parent, File.basename(rel)] : [spec, sub, File.basename(rel)]
+          if taken[key]
+            ndup += 1 unless taken[key] == rel
+            next
+          end
+          taken[key] = rel
+          if localized
+            loc << rel
+          else
+            (buckets[[spec, sub]] ||= []) << rel
+          end
+        end
+      end
+      # @refs are built products, and only the bundle itself declares them.
+      next unless name == t["name"]
+      (entry["refs"] || []).each do |r|
+        rt = targets[r.sub(/\A@/, "")] or next   # refs carry an `@` prefix in the spec
+        (buckets[[spec, sub]] ||= []) << rt
+        target.add_dependency(rt)
+      end
     end
   end
-  puts "bundled #{t['name']} [#{k}]"
+
+  buckets.each do |(spec, dst), items|
+    phase = target.new_copy_files_build_phase("Copy to #{[spec, dst].reject { |e| e.to_s.empty? }.join('/')}")
+    phase.symbol_dst_subfolder_spec = spec
+    phase.dst_path = dst
+    items.each do |item|
+      if item.is_a?(String)
+        phase.add_file_reference(project.main_group.new_file(File.join(ROOT, item)))
+      else
+        phase.add_file_reference(item.product_reference)
+      end
+    end
+  end
+
+  loc.each { |rel| add_localized(project, target, rel) }
+
+  puts "bundled #{t['name']} [#{k}] #{buckets.values.sum(&:size)} files, #{loc.size} localized#{ndup > 0 ? ", #{ndup} dup(s) skipped" : ''}"
 end
 
 # Aggregate to compile-check every static library at once.

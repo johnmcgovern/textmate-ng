@@ -2,6 +2,16 @@ Title: Release Notes
 
 # Changes
 
+## 2026-07-26 (v2026.7-alpha.1)
+
+First release of **TextMate-NG**, a fork of TextMate 2 focused on modernizing the app for current macOS.
+
+* TextMate-NG adopts calendar versioning: `year.month` with an optional patch number (e.g. a second release this month would be `2026.7.1`), and a `-alpha` suffix while the fork is in its pre-release phase. Upstream TextMate remains on 2.0.x; version comparisons (software update, bundle compatibility requirements) order these correctly.
+* New app icon: TextMate’s heritage purple daisy on a modern squircle tile, with “Alpha” and “NG” badges to distinguish TextMate-NG from an installed upstream TextMate.
+* Minimum system version raised from macOS 10.12 to macOS 15 Sequoia, and all obsolete OS-version checks removed.
+* The app now builds natively with Xcode (`TextMate.xcodeproj`) — 50 static libraries, 11 command-line tools, 3 plug-in bundles and the app itself — in addition to the original `rave`/`ninja` build.
+* Build dependencies (Cap’n Proto, boost, sparsehash) now resolve from Homebrew by default instead of user-local paths; continuous integration builds the app with both build systems on a clean machine.
+
 ## 2021-04-16 (v2.0.22)
 
 * A few more tweaks to improve things on macOS 11 including dropping use of floating header rows in file browser (SCM Status) and search results, as these appear to cause problems on Big Sur.

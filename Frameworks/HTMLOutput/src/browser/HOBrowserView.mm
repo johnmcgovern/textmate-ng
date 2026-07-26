@@ -240,18 +240,31 @@ in the hierachy returns YES, the key (equivalent) event is then passed to the me
 
 - (void)webView:(WKWebView*)webView decidePolicyForNavigationAction:(WKNavigationAction*)navigationAction decisionHandler:(void(^)(WKNavigationActionPolicy))decisionHandler
 {
-	NSURL* url = navigationAction.request.URL;
+	NSURL* const requested = navigationAction.request.URL;
+	NSURL* url = requested;
 
-	// WKWebView cannot rewrite a navigation in flight, so a rewrite is a cancel
-	// plus a fresh load.
-	if(NSURL* rewritten = RewrittenURL(url))
+	// Undo the sub-resource rewrite for navigations: the stream turned file:// into
+	// the job scheme so stylesheets and images would load same-origin, but a
+	// *clicked* file:// link should still go through the normal resolution below
+	// (directory -> index.html, error_not_found, and so on).
+	if([url.scheme isEqualToString:kHOFileHandleURLScheme] && [url.path hasPrefix:kHOLocalFilePathPrefix])
 	{
-		if(![rewritten isEqual:url])
-		{
-			decisionHandler(WKNavigationActionPolicyCancel);
-			[webView loadRequest:[NSURLRequest requestWithURL:rewritten]];
-			return;
-		}
+		NSString* path = [url.path substringFromIndex:kHOLocalFilePathPrefix.length];
+		if(NSURL* fileURL = path.length ? [NSURL fileURLWithPath:path] : nil)
+			url = fileURL;
+	}
+
+	if(NSURL* rewritten = RewrittenURL(url))
+		url = rewritten;
+
+	// WKWebView cannot rewrite a navigation in flight, so any change to the URL —
+	// whether from the un-rewrite above or from RewrittenURL — is a cancel plus a
+	// fresh load. Compared against what was *requested*, not the working copy.
+	if(![url isEqual:requested])
+	{
+		decisionHandler(WKNavigationActionPolicyCancel);
+		[webView loadRequest:[NSURLRequest requestWithURL:url]];
+		return;
 	}
 
 	if(IsLoadableScheme(url))

@@ -88,11 +88,14 @@ and `brew install capnp ragel ninja multimarkdown boost google-sparsehash`.
 **Needs the user:**
 - **Stream 3 — signing & notarization.** Real certificates. Also requires moving
   `CFBundleIdentifier` off `com.macromates.*`, which will orphan existing
-  preferences and window state, so pick the moment deliberately.
-- **arm64-only vs universal2.** Everything proven so far is arm64 Release, which
-  is why the binary is ~42% smaller than upstream's universal build. macOS 15
-  still runs on 2019–2020 Intel Macs. Decide before Stream 3 signs a shipping
-  artifact.
+  preferences and window state, so pick the moment deliberately. Held
+  deliberately: the identity is being designed for J23 Technologies as a whole,
+  not just this repo. Note rave's notarize flow used the retired `altool` —
+  build Stream 3 on `notarytool` from scratch.
+
+**Decided 2026-07-26: arm64-only**, not universal2 — rationale in
+`PROJECT_PHASES.md` under "Decided". Release now pins `ONLY_ACTIVE_ARCH=NO` so a
+shipped build is arm64 regardless of the build host.
 
 **Both rave blockers are cleared (2026-07-26)** — see Streams 7 and 8 in
 `PROJECT_PHASES.md`. rave/ninja is now retirable: tag a `rave-final` commit, then

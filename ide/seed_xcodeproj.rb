@@ -282,8 +282,16 @@ def apply_common_settings(config, extra = {})
   bs = config.build_settings
   bs["SDKROOT"]                     = "macosx"
   bs["MACOSX_DEPLOYMENT_TARGET"]    = DEPLOY_TGT
+  # arm64-only, decided 2026-07-26 (see PROJECT_PHASES.md "Decided"). Not an
+  # incidental default: TextMate-NG ships Apple Silicon only. The macOS 15 floor
+  # already excludes every pre-2018 Intel Mac, Rosetta is winding down, and going
+  # universal would mean fat-building capnp/boost/sparsehash per-arch — exactly the
+  # two-prefix ~/nix-sdk complexity Stream 2 removed. Revisiting is one line here
+  # plus a universal dependency chain, which is the expensive half.
   bs["ARCHS"]                       = "arm64"
-  bs["ONLY_ACTIVE_ARCH"]            = "YES"
+  # Debug follows the host's active arch (faster rebuilds); Release pins it off so
+  # a shipped build is arm64 deterministically, not "whatever the builder ran on".
+  bs["ONLY_ACTIVE_ARCH"]            = config.name == "Release" ? "NO" : "YES"
   bs["CLANG_CXX_LANGUAGE_STANDARD"] = "c++2a"
   bs["GCC_C_LANGUAGE_STANDARD"]     = "c99"
   bs["CLANG_ENABLE_OBJC_ARC"]       = "YES"
@@ -554,6 +562,11 @@ def add_about_pages_phase(project, target, t)
   phase.shell_script = <<~SH
     set -eu
     export PATH="#{TOOL_BIN_DIRS.join(":")}:$PATH"   # multimarkdown (gen_html aborts without it)
+    # Script phases run with a sanitized environment (no LANG), so Ruby defaults to
+    # US-ASCII and gen_html dies gsub'ing the ⌘/⌥/⇥ glyphs in the Markdown. Set the
+    # encoding here rather than inheriting it: depending on the caller's locale
+    # means a plain `xcodebuild` from a clean shell fails while CI passes.
+    export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 RUBYOPT="-EUTF-8"
     mkdir -p "$DERIVED_FILE_DIR/About"
     for f in #{mds.map { |m| "\"$SRCROOT/#{m}\"" }.join(" ")}; do
       base=$(basename "$f" .md)

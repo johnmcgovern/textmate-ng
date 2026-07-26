@@ -288,21 +288,26 @@ Milestones:
 - **Branch integration order.** Stream 4 (`claude/upbeat-galileo-eae114`) and
   Stream 1 (`claude/xcode-stream1-seed`) are both unmerged, off master. Stream 1's
   seed already assumes the 15.0 floor, so merge Stream 4 first (or fold it in).
-- **Architecture decision: arm64-only vs universal.** Everything proven so far is
-  arm64 Release. macOS 15 still runs on 2019–2020 Intel Macs, so universal2 is a
-  real question — and the nix-sdk deps are per-arch. Decide before Stream 3
-  (signing/notarization of the shipped artifact).
 - **Debug configuration.** Seed work has been Release-only (incl. an NDEBUG
   define decision at link time). A working Debug config (asserts, `libOakDebug`)
   is needed before Phase 2 ends — day-to-day development depends on it.
 
 ## Open decisions (need user input eventually)
 
-- Universal binary vs arm64-only (above).
 - Signing identity / notarization account for Stream 3.
 
 ## Decided
 
+- **arm64-only, not universal2 (2026-07-26).** TextMate-NG ships Apple Silicon
+  only. The macOS 15 floor already excludes every pre-2018 Intel Mac; Rosetta is
+  winding down, so investing in x86_64 now means building for a platform Apple is
+  retiring. Decisively, universal2 would require fat-building capnp/boost/
+  sparsehash per architecture — reintroducing the two-prefix `~/nix-sdk` setup
+  Stream 2 just eliminated — in exchange for a shrinking slice of users who are
+  not a developer text editor's audience. The arm64 build is also ~42% smaller
+  than upstream's universal one. `ARCHS` is one line in
+  `ide/seed_xcodeproj.rb` if this is ever revisited; the expensive half is the
+  universal dependency chain, which is what's being deferred.
 - **rave build fate (2026-07-25):** keep it green in parallel until the test suites
   and default-bundles provisioning are migrated to the Xcode world, then tag and
   delete. See "rave retirement policy" under the Phase 2 cutover criteria.

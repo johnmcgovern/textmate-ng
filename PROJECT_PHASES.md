@@ -79,7 +79,9 @@ deleted:
 - [ ] All 11 CLI tools work (`mate`, `tm_query`, …)
 - [x] Default-bundles provisioning has an Xcode-world answer (Stream 8)
 - [x] Test suites migrated and green (Stream 7 — 25 bundles, 275 tests)
-- [ ] CI builds + tests on a clean machine (no user-local paths)
+- [x] CI builds + tests on a clean machine (run 30199308492: `xcode` job seeds,
+      builds, and runs the AllTests suite green on macos-latest; the bundle
+      script phase reached `api.textmate.org` from the runner too)
 - [ ] Signed + notarized artifact
 - [ ] rave/ninja retired: tag the last green rave build, then delete `bin/rave`,
       the `.rave` specs, and ninja glue

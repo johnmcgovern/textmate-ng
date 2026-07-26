@@ -4,15 +4,20 @@ _Written 2026-07-26, before any code changes. Branch: `claude/xcode-stream1-seed
 
 ## Status (updated 2026-07-26)
 
-**Slices 1–3 are done and verified in the running app.** Slices 4–5 remain.
+**STREAM 5 COMPLETE (2026-07-26).** All five slices done, each verified in the
+running app rather than inferred from a green build.
 
 | Slice | State |
 |-------|-------|
 | 1 — scaffold swap (WKWebView, scheme handler, no JS API) | ✅ done |
 | 2 — async `TextMate.system()` | ✅ done |
 | 3 — synchronous `TextMate.system()` | ✅ done |
-| 4 — peripherals (find/pboard/view-source, status text, console relay, `tm-file` handler) | ⬜ |
-| 5 — cleanup (delete dead code, try dropping WebKit from the PCH) | ⬜ |
+| 4 — peripherals (find/pboard/view-source, status text, `tm-file` handler) | ✅ done |
+| 5 — cleanup; PCH WebKit removal attempted and rejected | ✅ done |
+
+No legacy WebKit API remains in `Frameworks/` or `Applications/` — every
+surviving mention is a comment. The one exception is outside our tree:
+`PlugIns/dialog/.../TMDHTMLTips.mm` (the `dialog` submodule) still uses `WebView`.
 
 **The plan's two big open questions are both answered:**
 

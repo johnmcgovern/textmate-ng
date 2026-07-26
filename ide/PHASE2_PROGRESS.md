@@ -15,11 +15,19 @@ list, mirroring `./configure`:
   `TM_DEP_PREFIX="$HOME/nix-sdk/arm64:$HOME/nix-sdk/x86_64"` (boost header-only lives
   only under the x86_64 prefix). Each prefix contributes `<p>/include` + `<p>/lib`.
 
+The capnp/ragel **codegen tools** (invoked by name inside Xcode script build rules,
+which run with a sanitized PATH) now also resolve from `DEP_PREFIXES`: the rule PATH
+is `<prefix>/bin … : $HOME/.nix-profile/bin : $PATH`, so Homebrew's `capnp`/`ragel`
+are found on a runner while the nix dev box still uses `.nix-profile/bin`. (The
+earlier nix-override build didn't catch this — it kept using `.nix-profile/bin`.)
+
 Verified behavior-preserving: regenerate + `xcodebuild -target TextMate` with the
 nix override → **BUILD SUCCEEDED**, `codesign --verify --deep --strict` passes.
 
 Still TODO for Stream 2 to be "done": confirm the Homebrew default actually builds on
-a runner (couples with Stream 6 CI job), and decide whether to pin dep versions
+a runner — now wired as the **Stream 6 `xcode` CI job** (`.github/workflows/build.yml`),
+which regenerates the seed and `xcodebuild`s with the Homebrew default (no
+`TM_DEP_PREFIX`). Needs a push to validate. Then decide whether to pin dep versions
 (lockfile / `brew bundle` Brewfile) for true reproducibility vs. floating formulae.
 
 This doc is the entry point for a **looping/autonomous session** continuing the

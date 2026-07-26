@@ -223,8 +223,14 @@ def build_include_farm(specs)
   puts "built include farm for #{specs.count { |s| !s['headers'].empty? }} targets"
 end
 
+# The capnp/ragel codegen tools are invoked by name inside Xcode script build
+# rules, whose PATH is sanitized and excludes Homebrew's bin. Prepend every dep
+# prefix's bin (Homebrew: `<brew>/bin` has capnp + ragel) plus the nix-profile
+# bin (where they live on the nix dev box). Non-existent entries are harmless.
+TOOL_BIN_DIRS = (DEP_PREFIXES.map { |p| "#{p}/bin" } + ["$HOME/.nix-profile/bin"]).uniq
+
 def make_build_rules(project)
-  nix_path = %(export PATH="$HOME/.nix-profile/bin:$PATH")
+  nix_path = %(export PATH="#{TOOL_BIN_DIRS.join(":")}:$PATH")
 
   capnp = project.new(Xcodeproj::Project::Object::PBXBuildRule)
   capnp.compiler_spec = "com.apple.compilers.proxy.script"

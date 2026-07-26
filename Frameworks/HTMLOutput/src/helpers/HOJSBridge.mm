@@ -123,6 +123,10 @@
 	{
 		[self openFile:payload[@"path"] withOptions:payload[@"options"]];
 	}
+	else if([command isEqualToString:@"status"])
+	{
+		[_delegate setStatusText:payload[@"text"] ?: @""];
+	}
 	else if([command isEqualToString:@"busy"])
 	{
 		[_delegate setBusy:[payload[@"flag"] boolValue]];

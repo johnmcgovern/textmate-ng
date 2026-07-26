@@ -1,3 +1,4 @@
+#import <WebKit/WebKit.h>
 #import "AboutWindowController.h"
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakFoundation/OakFoundation.h>

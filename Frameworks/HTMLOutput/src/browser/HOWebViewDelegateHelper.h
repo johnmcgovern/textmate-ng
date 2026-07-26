@@ -1,3 +1,4 @@
+#import <WebKit/WebKit.h>
 @protocol HOWebViewDelegateHelperProtocol
 @property (nonatomic) NSString* statusText;
 @end

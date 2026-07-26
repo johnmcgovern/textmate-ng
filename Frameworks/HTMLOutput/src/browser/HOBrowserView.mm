@@ -119,7 +119,10 @@ static void ShowLoadErrorForURL (WKWebView* webView, NSURL* url, NSError* error)
 + (WKWebViewConfiguration*)defaultConfiguration
 {
 	WKWebViewConfiguration* config = [[WKWebViewConfiguration alloc] init];
-	[config setURLSchemeHandler:[HOFileHandleSchemeHandler new] forURLScheme:kHOFileHandleURLScheme];
+	// One handler, two schemes: the job stream plus tm-file sub-resources.
+	HOFileHandleSchemeHandler* handler = [HOFileHandleSchemeHandler new];
+	[config setURLSchemeHandler:handler forURLScheme:kHOFileHandleURLScheme];
+	[config setURLSchemeHandler:handler forURLScheme:kHOTMFileURLScheme];
 	return config;
 }
 

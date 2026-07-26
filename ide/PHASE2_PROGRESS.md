@@ -181,8 +181,27 @@ entitlements / version / linking are all wired and working. The blocker is a
 - Scoping the farm (done — `header_farm_dirs`) fixes every target that only *links*
   network, but not AppController.mm, which genuinely *includes* it.
 
-**Confirmed:** `AppController.mm` uses **both** WebKit *and* `<network/tbz.h>` in the
-one TU (verified), so the WebKit include can't simply be moved off it.
+~~**Confirmed:** `AppController.mm` uses **both** WebKit *and* `<network/tbz.h>` in the
+one TU (verified), so the WebKit include can't simply be moved off it.~~
+
+**That claim was wrong — corrected 2026-07-26.** `AppController.mm`'s only WebKit
+reference is the string literal `@"WebKitDeveloperExtras"`, an `NSUserDefaults`
+key that needs no header; it uses no WebKit API at all.
+
+The collision is real, but **per-target, not per-TU**: the `TextMate` target
+requires TextMate's own `network` framework, so a `network` directory sits on its
+farm include path, and *any* WebKit-using TU in that target
+(`AboutWindowController.mm`) resolves the umbrella's `<Network/Network.h>` to it
+on a case-insensitive filesystem. **Option 4 has to stay**, and moving WebKit out
+of the shared PCH does not help.
+
+Stream 5 tested that removal and it fails for a second, independent reason as
+well: `PlugIns/dialog/Commands/tooltip/TMDHTMLTips.mm` still uses the legacy
+`WebView` (`WebFrameLoadDelegate`, `WebPreferences`), and it lives in the
+`dialog` submodule, which this project treats as out of scope. Retiring the farm
+variant would need that submodule modernized *and* the app target's `network`
+requirement broken — neither is a Stream 5 job. Both reasons are recorded at the
+`#import <WebKit/WebKit.h>` line in `Shared/PCH/prelude.m`.
 
 **Decision needed — pick one (all are out of scope for a pure generator edit):**
 1. ~~Drop `<WebKit/WebKit.h>` from the shared PCH~~ — **insufficient**: AppController.mm

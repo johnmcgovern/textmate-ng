@@ -127,6 +127,37 @@
 
 	window.TextMate = TextMate;
 
+	/*
+		Status-bar hover text. The legacy WebView pushed this through the
+		WebUIDelegate (setStatusText: / mouseDidMoveOverElement:), neither of which
+		WKWebView has. Reproduced here by watching the pointer and reporting the
+		link under it.
+
+		Note this rides on the JavaScript API script, so a command that sets
+		disableJavaScriptAPI now gets no hover text. That is a small behaviour
+		change from the WebView build, where it was delegate-driven and always on.
+	*/
+	var lastStatus = null;
+	function reportStatus(text) {
+		text = text || "";
+		if(text === lastStatus)
+			return;
+		lastStatus = text;
+		post("status", { text: text });
+	}
+
+	document.addEventListener("mouseover", function(event) {
+		var el = event.target;
+		while(el && el.nodeType === 1 && !el.href)
+			el = el.parentElement;
+		reportStatus(el && el.href ? decodeURIComponent(el.href) : "");
+	}, true);
+
+	document.addEventListener("mouseout", function(event) {
+		if(!event.relatedTarget)
+			reportStatus("");
+	}, true);
+
 	// The legacy WebView reported page errors through the undocumented
 	// addMessageToConsole: delegate method. WKWebView has no equivalent, so relay
 	// them the same way the About window does.

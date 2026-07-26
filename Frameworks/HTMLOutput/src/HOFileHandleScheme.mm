@@ -6,6 +6,7 @@ NSString* const kHOFileHandleURLScheme = @"x-txmt-filehandle";
 NSString* const kHOLocalFilePathPrefix  = @"/__tm_local__";
 NSString* const kHOSyncCommandPathPrefix = @"/__tm_sync__";
 NSString* const kHOSyncCommandHeader     = @"X-TextMate-Command";
+NSString* const kHOTMFileURLScheme       = @"tm-file";
 
 // Same scheme *and* same host as the job URL (x-txmt-filehandle://job/…), so the
 // rewritten sub-resources are same-origin with the page rather than merely
@@ -254,6 +255,11 @@ static std::string RewriteLocalURLs (std::string const& chunk, std::string& carr
 {
 	NSURL* url = urlSchemeTask.request.URL;
 
+	// tm-file sub-resources: the navigation policy rewrites tm-file to file:// for
+	// page loads, but it never sees an <img>/<link>/<script>, so those arrive here.
+	if([url.scheme isEqualToString:kHOTMFileURLScheme])
+		return [self serveFileAtPath:url.path forTask:urlSchemeTask];
+
 	if([url.path hasPrefix:kHOSyncCommandPathPrefix])
 		return [self serveSyncCommandForTask:urlSchemeTask];
 
@@ -353,8 +359,13 @@ static std::string RewriteLocalURLs (std::string const& chunk, std::string& carr
 */
 - (void)serveLocalFileForTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
+	// -path is already percent-decoded
+	[self serveFileAtPath:[urlSchemeTask.request.URL.path substringFromIndex:kHOLocalFilePathPrefix.length] forTask:urlSchemeTask];
+}
+
+- (void)serveFileAtPath:(NSString*)path forTask:(id <WKURLSchemeTask>)urlSchemeTask
+{
 	NSURL* url = urlSchemeTask.request.URL;
-	NSString* path = [url.path substringFromIndex:kHOLocalFilePathPrefix.length]; // -path is already percent-decoded
 
 	NSError* error;
 	NSData* data = path.length ? [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:&error] : nil;

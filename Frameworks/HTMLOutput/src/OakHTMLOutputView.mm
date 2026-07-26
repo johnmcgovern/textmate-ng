@@ -99,6 +99,8 @@ static WKUserScript* AutoScrollUserScript ()
 // installed for the life of a load and torn down before the next one.
 - (void)teardownJavaScriptAPI
 {
+	[(HOFileHandleSchemeHandler*)[self.webView.configuration urlSchemeHandlerForURLScheme:kHOFileHandleURLScheme] setSyncRunner:nil];
+
 	[_jsBridge invalidate];
 	_jsBridge = nil;
 
@@ -124,6 +126,10 @@ static WKUserScript* AutoScrollUserScript ()
 
 	[contentController addScriptMessageHandler:_jsBridge name:kHOScriptMessageHandlerName];
 	[contentController addUserScript:script];
+
+	// The synchronous form is answered by the scheme handler rather than the
+	// message handler, so it needs its own route back to the bridge.
+	[(HOFileHandleSchemeHandler*)[self.webView.configuration urlSchemeHandlerForURLScheme:kHOFileHandleURLScheme] setSyncRunner:_jsBridge];
 }
 
 - (void)loadRequest:(NSURLRequest*)aRequest environment:(std::map<std::string, std::string> const&)anEnvironment autoScrolls:(BOOL)flag

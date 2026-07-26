@@ -2,6 +2,41 @@
 
 _Written 2026-07-26, before any code changes. Branch: `claude/xcode-stream1-seed`._
 
+## Status (updated 2026-07-26)
+
+**Slices 1–3 are done and verified in the running app.** Slices 4–5 remain.
+
+| Slice | State |
+|-------|-------|
+| 1 — scaffold swap (WKWebView, scheme handler, no JS API) | ✅ done |
+| 2 — async `TextMate.system()` | ✅ done |
+| 3 — synchronous `TextMate.system()` | ✅ done |
+| 4 — peripherals (find/pboard/view-source, status text, console relay, `tm-file` handler) | ⬜ |
+| 5 — cleanup (delete dead code, try dropping WebKit from the PCH) | ⬜ |
+
+**The plan's two big open questions are both answered:**
+
+1. **Sub-resource loading — was the real problem, and the plan under-rated it.**
+   The page is served from a custom scheme, which WKWebView gives an *opaque
+   origin*; bundle output references its CSS/JS/images as absolute `file://`
+   URLs, so every one was refused. The legacy WebView was exempt only because
+   `OakCommand` called `+[WebView registerURLSchemeAsLocal:]`, which has no
+   WKWebView equivalent. Fixed by rewriting `file://` to
+   `<scheme>://job/__tm_local__` **in the streamed HTML** and serving those paths
+   from the scheme handler — same scheme *and* host, so same-origin.
+2. **Synchronous XHR against a `WKURLSchemeHandler` works.** This was the
+   load-bearing assumption of the whole sync design and it holds. Note
+   `WKURLSchemeTask` does **not** receive a POST body, so the command travels
+   base64-encoded in a header.
+
+Verification lives in a scratch bundle outside the repo,
+`~/Library/Application Support/TextMate/Managed/Bundles/TextMate-NG Dev.tmbundle`:
+`⌃⌥⌘J` asserts the async round trip, `⌃⌥⌘K` the synchronous one. Both pages
+report their own PASS/FAIL. Delete the bundle when the stream is finished.
+
+**Still unexercised:** the 15-second watchdog path (needs a command that actually
+runs that long), and `write()`/`close()`/`cancel()` on the async form.
+
 Legacy `WebView` survives in exactly one framework: `Frameworks/HTMLOutput`
 (~1,066 lines across 5 impl files) plus its consumers (`OakCommand`,
 `HTMLOutputWindow`, `DocumentWindowController`, `OakCommandRefresh`).

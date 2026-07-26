@@ -1,6 +1,7 @@
 #import "HOJSBridge.h"
 #import "add_to_buffer.h"
 #import <OakFoundation/NSString Additions.h>
+#import <OakAppKit/NSAlert Additions.h>
 #import <oak/debug.h>
 #import <document/OakDocument.h>
 #import <document/OakDocumentController.h>
@@ -186,6 +187,98 @@
 {
 	if(aToken)
 		[_commands removeObjectForKey:aToken];
+}
+
+// =======================
+// = Synchronous variant =
+// =======================
+
+/*
+	Runs a command to completion and hands back its full output. The caller is a
+	synchronous XMLHttpRequest from the page, so the *web content process* is
+	blocked while this runs — but the main thread is not, which is what lets the
+	15-second warning appear at all.
+
+	The legacy implementation had to spin a nested cf::run_loop_t on the main
+	thread and put up the alert from inside it. Here the alert is an ordinary
+	sheet-less modal on an idle main thread, so "Stop Command" reliably interrupts.
+*/
+- (void)runSyncCommand:(NSString*)aCommand completionHandler:(void(^)(NSString*, NSString*, int))aCompletionHandler
+{
+	__block BOOL done = NO;
+	__block NSTimer* watchdog = nil;
+
+	io::process_t process = io::spawn(std::vector<std::string>{ "/bin/sh", "-c", to_s(aCommand) }, environment);
+	if(!process)
+		return aCompletionHandler(@"", @"", -1);
+
+	close(process.in); // no stdin for the synchronous form, matching the old behaviour
+
+	auto finish = ^(NSString* out, NSString* err, int status){
+		if(done)
+			return;
+		done = YES;
+		[watchdog invalidate];
+		watchdog = nil;
+		aCompletionHandler(out, err, status);
+	};
+
+	pid_t const pid = process.pid;
+	int const outFD = process.out, errFD = process.err;
+
+	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+		auto slurp = [](int fd){
+			std::string res;
+			char buf[1024];
+			while(ssize_t len = read(fd, buf, sizeof(buf)))
+			{
+				if(len < 0)
+					break;
+				res.insert(res.end(), buf, buf + len);
+			}
+			close(fd);
+			return res;
+		};
+
+		// stderr on its own queue so a command that fills one pipe while we drain
+		// the other cannot deadlock.
+		__block std::string errStr;
+		dispatch_semaphore_t errDone = dispatch_semaphore_create(0);
+		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+			errStr = slurp(errFD);
+			dispatch_semaphore_signal(errDone);
+		});
+
+		std::string outStr = slurp(outFD);
+		dispatch_semaphore_wait(errDone, DISPATCH_TIME_FOREVER);
+
+		int result = 0;
+		if(waitpid(pid, &result, 0) != pid)
+			perror("HOJSBridge: waitpid");
+		int const status = WIFEXITED(result) ? WEXITSTATUS(result) : -1;
+
+		dispatch_async(dispatch_get_main_queue(), ^{
+			finish([NSString stringWithCxxString:outStr], [NSString stringWithCxxString:errStr], status);
+		});
+	});
+
+	watchdog = [NSTimer scheduledTimerWithTimeInterval:15 repeats:NO block:^(NSTimer*){
+		if(done)
+			return;
+
+		NSAlert* alert        = [[NSAlert alloc] init];
+		alert.messageText     = @"JavaScript Warning";
+		alert.informativeText = [NSString stringWithFormat:@"The command ‘%@’ has been running for 15 seconds. Would you like to stop it?\n\nTo avoid this warning, the bundle command should use the asynchronous version of TextMate.system().", aCommand];
+		[alert addButtons:@"Stop Command", @"Cancel", nil];
+
+		if([alert runModal] == NSAlertFirstButtonReturn && !done)
+		{
+			kill(pid, SIGINT);
+			// Answer the page immediately: leaving the XHR outstanding would hang
+			// it forever even though the process is gone.
+			finish(@"", @"", -1);
+		}
+	}];
 }
 @end
 

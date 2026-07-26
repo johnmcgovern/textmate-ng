@@ -20,6 +20,23 @@ extern NSString* const kHOFileHandleURLScheme;
 extern NSString* const kHOLocalFilePathPrefix;
 
 /*
+	The synchronous half of TextMate.system(). WKWebView has no synchronous
+	JS↔native call in either direction, so the page issues a *synchronous
+	XMLHttpRequest* at this path instead: that blocks only the web content
+	process, while the scheme handler answers from the app process and can take as
+	long as the command does.
+
+	The command arrives base64-encoded in an HTTP header rather than a POST body —
+	WKURLSchemeTask does not deliver HTTPBody.
+*/
+extern NSString* const kHOSyncCommandPathPrefix;
+extern NSString* const kHOSyncCommandHeader;
+
+@protocol HOSyncCommandRunner <NSObject>
+- (void)runSyncCommand:(NSString*)aCommand completionHandler:(void(^)(NSString* output, NSString* error, int status))aCompletionHandler;
+@end
+
+/*
 	The legacy WebView read the streaming file handle straight off the request via
 	NSURLProtocol properties. WKWebView copies the request before the URL scheme
 	handler ever sees it, and those properties do not survive the copy, so the
@@ -45,4 +62,7 @@ extern NSString* const kHOLocalFilePathPrefix;
 @end
 
 @interface HOFileHandleSchemeHandler : NSObject <WKURLSchemeHandler>
+// Set while the JavaScript API is installed; nil when the command opted out via
+// disableJavaScriptAPI, which also disables the synchronous bridge.
+@property (nonatomic, weak) id <HOSyncCommandRunner> syncRunner;
 @end

@@ -62,7 +62,7 @@ targets with declarative `.rave` specs.
 | 2 | Dependency integration (capnp/boost/Onigmo/kvdb) — make deps reproducible, not `~/nix-sdk` user-local paths | ✅ Done 2026-07-26 (Homebrew default validated on CI; optional dep-version pinning TBD) | 1 |
 | 3 | Code signing & notarization (real identity; ad-hoc already proven) | ⬜ Not started (needs certs → user) | 1 |
 | 4 | Raise deployment target (macOS 15) + remove dead guards | ✅ Done 2026-07-24 (unmerged) | — |
-| 5 | API modernization (WebView→WKWebView, KVO) | ⬜ Not started | 1 |
+| 5 | API modernization (WebView→WKWebView, KVO) | 🔄 In progress — slices 1–3 done (view, async + sync JS bridge); 4–5 left. See [`ide/STREAM5_HOJSBRIDGE_PLAN.md`](ide/STREAM5_HOJSBRIDGE_PLAN.md) | 1 |
 | 6 | CI/CD (xcodebuild) | ✅ Done 2026-07-26 (`xcode` job green on macos-latest) | 1, 2 |
 
 ### Phase 2 definition of done (cutover criteria)

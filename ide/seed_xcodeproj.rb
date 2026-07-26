@@ -63,8 +63,9 @@ GLOBAL_DEFINE_FLAGS = [
 # generated .capnp.cpp/.cc) under a single GCC_PREFIX_HEADER.
 PREFIX_HEADER = "Shared/PCH/prelude.h"
 
-GEN_INCLUDE     = "ide/gen/include"       # generated <fw/header.h> symlink farm
-GEN_INCLUDE_NOU = "ide/gen/include-nou"   # variant farm w/o the <fw>.h umbrella, for
+GEN_DIR         = "ide/gen"               # generated artifacts (gitignored)
+GEN_INCLUDE     = "#{GEN_DIR}/include"     # generated <fw/header.h> symlink farm
+GEN_INCLUDE_NOU = "#{GEN_DIR}/include-nou" # variant farm w/o the <fw>.h umbrella, for
                                           # system-colliding frameworks on WebKit-pulling
                                           # targets (see header_farm_dirs / option 4)
 
@@ -100,7 +101,7 @@ LIB_LDFLAGS = {
 SKIP_TARGETS = %w[NewApplication].freeze  # bare Xcode template, not a real target
 
 # ---------------------------------------------------------------------------
-specs = JSON.parse(File.read(File.join(ROOT, GEN_INCLUDE, "..", "specs.json")))
+specs = JSON.parse(File.read(File.join(ROOT, GEN_DIR, "specs.json")))
                 .reject { |t| SKIP_TARGETS.include?(t["name"]) }
 BY_NAME = specs.each_with_object({}) { |t, h| h[t["name"]] = t }
 

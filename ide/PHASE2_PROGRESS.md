@@ -27,8 +27,15 @@ nix override → **BUILD SUCCEEDED**, `codesign --verify --deep --strict` passes
 Still TODO for Stream 2 to be "done": confirm the Homebrew default actually builds on
 a runner — now wired as the **Stream 6 `xcode` CI job** (`.github/workflows/build.yml`),
 which regenerates the seed and `xcodebuild`s with the Homebrew default (no
-`TM_DEP_PREFIX`). Needs a push to validate. Then decide whether to pin dep versions
-(lockfile / `brew bundle` Brewfile) for true reproducibility vs. floating formulae.
+`TM_DEP_PREFIX`). Then decide whether to pin dep versions (lockfile / `brew bundle`
+Brewfile) for true reproducibility vs. floating formulae.
+
+**CI triage log** (run 30181050582): the `xcode` job's *first* run exposed a
+generator fragility the local build masked — `seed_xcodeproj.rb` read specs.json via
+`ide/gen/include/../specs.json`, whose `..` needs `ide/gen/include/` to pre-exist. On
+a clean checkout that dir doesn't exist yet (the seed creates it), so the read hit
+ENOENT. Fixed: read `ide/gen/specs.json` directly via a new `GEN_DIR` constant. The
+ninja `build` job stayed green throughout.
 
 This doc is the entry point for a **looping/autonomous session** continuing the
 Xcode migration. Read it top to bottom, then work the "Next actions" list.

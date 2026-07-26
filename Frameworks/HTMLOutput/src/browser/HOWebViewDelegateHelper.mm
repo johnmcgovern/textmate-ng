@@ -5,87 +5,61 @@
 #import <io/path.h>
 #import <oak/debug.h>
 
-static NSString* const kUserDefaultsDefaultURLProtocolKey = @"defaultURLProtocol";
-
-static BOOL IsProtocolRelativeURL (NSURL* url)
-{
-	if([url.scheme hasPrefix:@"x-txmt"] && ![url.host isEqualToString:@"job"])
-		return YES;
-
-	if([url.scheme isEqualToString:@"file"] && url.host)
-	{
-		// If host has a dot and does not exist on disk then treat as protocol-relative URL
-		if([url.host containsString:@"."] && ![NSFileManager.defaultManager fileExistsAtPath:[@"/" stringByAppendingPathComponent:url.host]])
-			return YES;
-	}
-
-	return NO;
-}
-
 @implementation HOWebViewDelegateHelper
-+ (void)initialize
+// ================
+// = WKUIDelegate =
+// ================
+
+- (void)webView:(WKWebView*)webView runJavaScriptAlertPanelWithMessage:(NSString*)message initiatedByFrame:(WKFrameInfo*)frame completionHandler:(void(^)(void))completionHandler
 {
-	[NSUserDefaults.standardUserDefaults registerDefaults:@{
-		kUserDefaultsDefaultURLProtocolKey: @"https",
+	NSAlert* alert = [NSAlert tmAlertWithMessageText:NSLocalizedString(@"Script Message", @"JavaScript alert title") informativeText:message buttons:NSLocalizedString(@"OK", @"JavaScript alert confirmation"), nil];
+	[alert beginSheetModalForWindow:webView.window completionHandler:^(NSModalResponse){
+		completionHandler();
 	}];
 }
 
-// =====================
-// = WebViewUIDelegate =
-// =====================
-
-- (void)webView:(WebView*)sender setStatusText:(NSString*)text
-{
-	[_delegate setStatusText:(text ?: @"")];
-}
-
-- (NSString*)webViewStatusText:(WebView*)sender
-{
-	return [_delegate statusText];
-}
-
-- (void)webView:(WebView*)sender mouseDidMoveOverElement:(NSDictionary*)elementInformation modifierFlags:(NSUInteger)modifierFlags
-{
-	NSURL* url = [elementInformation objectForKey:@"WebElementLinkURL"];
-	[self webView:sender setStatusText:[[url absoluteString] stringByRemovingPercentEncoding]];
-}
-
-- (void)webView:(WebView*)sender runJavaScriptAlertPanelWithMessage:(NSString*)message initiatedByFrame:(WebFrame*)frame
-{
-	NSAlert* alert = [NSAlert tmAlertWithMessageText:NSLocalizedString(@"Script Message", @"JavaScript alert title") informativeText:message buttons:NSLocalizedString(@"OK", @"JavaScript alert confirmation"), nil];
-	[alert beginSheetModalForWindow:[sender window] completionHandler:nil];
-}
-
-- (BOOL)webView:(WebView*)sender runJavaScriptConfirmPanelWithMessage:(NSString*)message initiatedByFrame:(WebFrame*)frame
+- (void)webView:(WKWebView*)webView runJavaScriptConfirmPanelWithMessage:(NSString*)message initiatedByFrame:(WKFrameInfo*)frame completionHandler:(void(^)(BOOL result))completionHandler
 {
 	NSAlert* alert        = [[NSAlert alloc] init];
 	alert.messageText     = NSLocalizedString(@"Script Message", @"JavaScript alert title");
 	alert.informativeText = message;
 	[alert addButtons:NSLocalizedString(@"OK", @"JavaScript alert confirmation"), NSLocalizedString(@"Cancel", @"JavaScript alert cancel"), nil];
-	return [alert runModal] == NSAlertFirstButtonReturn;
+
+	// A sheet, where the legacy WebUIDelegate ran this one modally: WKWebView
+	// cannot block for the answer, so the completion handler carries it back.
+	[alert beginSheetModalForWindow:webView.window completionHandler:^(NSModalResponse returnCode){
+		completionHandler(returnCode == NSAlertFirstButtonReturn);
+	}];
 }
 
-- (void)webView:(WebView*)sender runOpenPanelForFileButtonWithResultListener:(id <WebOpenPanelResultListener>)resultListener
+- (void)webView:(WKWebView*)webView runOpenPanelWithParameters:(WKOpenPanelParameters*)parameters initiatedByFrame:(WKFrameInfo*)frame completionHandler:(void(^)(NSArray<NSURL*>* URLs))completionHandler
 {
 	NSOpenPanel* panel = [NSOpenPanel openPanel];
-	[panel setDirectoryURL:[NSURL fileURLWithPath:NSHomeDirectory()]];
-	if([panel runModal] == NSModalResponseOK)
-		[resultListener chooseFilename:[[[panel URLs] objectAtIndex:0] path]];
+	panel.directoryURL          = [NSURL fileURLWithPath:NSHomeDirectory()];
+	panel.allowsMultipleSelection = parameters.allowsMultipleSelection;
+	[panel beginSheetModalForWindow:webView.window completionHandler:^(NSModalResponse returnCode){
+		completionHandler(returnCode == NSModalResponseOK ? panel.URLs : nil);
+	}];
 }
 
-- (WebView*)webView:(WebView*)sender createWebViewWithRequest:(NSURLRequest*)request
+- (WKWebView*)webView:(WKWebView*)webView createWebViewWithConfiguration:(WKWebViewConfiguration*)configuration forNavigationAction:(WKNavigationAction*)navigationAction windowFeatures:(WKWindowFeatures*)windowFeatures
 {
-	NSPoint origin = [sender.window cascadeTopLeftFromPoint:NSMakePoint(NSMinX(sender.window.frame), NSMaxY(sender.window.frame))];
-	origin.y -= NSHeight(sender.window.frame);
+	NSPoint origin = [webView.window cascadeTopLeftFromPoint:NSMakePoint(NSMinX(webView.window.frame), NSMaxY(webView.window.frame))];
+	origin.y -= NSHeight(webView.window.frame);
 
-	HOBrowserView* view = [HOBrowserView new];
+	// WebKit requires the returned view to be built from the configuration it
+	// supplies here — creating our own would sever the script relationship with
+	// the opener and raise.
+	HOBrowserView* view = [[HOBrowserView alloc] initWithFrame:NSZeroRect configuration:configuration];
 	NSWindow* window = [[NSWindow alloc] initWithContentRect:(NSRect){origin, NSMakeSize(750, 800)}
-																  styleMask:(NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable|NSWindowStyleMaskMiniaturizable)
-																	 backing:NSBackingStoreBuffered
-																		defer:NO];
-	[window bind:NSTitleBinding toObject:view.webView withKeyPath:@"mainFrameTitle" options:nil];
+	                                               styleMask:(NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable|NSWindowStyleMaskMiniaturizable)
+	                                                 backing:NSBackingStoreBuffered
+	                                                   defer:NO];
+	[window bind:NSTitleBinding toObject:view.webView withKeyPath:@"title" options:nil];
 	[window setContentView:view];
-	[[view.webView mainFrame] loadRequest:request];
+
+	// WebKit loads navigationAction.request into the new view itself; loading it
+	// here as well would double-fetch (and re-run the command for a job URL).
 
 	__attribute__ ((unused)) CFTypeRef dummy = CFBridgingRetain(window);
 	[window setReleasedWhenClosed:YES];
@@ -93,76 +67,10 @@ static BOOL IsProtocolRelativeURL (NSURL* url)
 	return view.webView;
 }
 
-- (void)webViewShow:(WebView*)sender
+- (void)webViewDidClose:(WKWebView*)webView
 {
-	[[sender window] makeKeyAndOrderFront:self];
-}
-
-- (void)webViewClose:(WebView*)sender
-{
-	if(![sender tryToPerform:@selector(toggleHTMLOutput:) with:self])
-		[sender tryToPerform:@selector(performClose:) with:self];
-	// We cannot re-use WebView objects where window.close() has been executed because of https://bugs.webkit.org/show_bug.cgi?id=121232
-	self.needsNewWebView = YES;
-}
-
-// This is an undocumented WebView delegate method
-- (void)webView:(WebView*)webView addMessageToConsole:(NSDictionary*)dictionary;
-{
-	if([dictionary respondsToSelector:@selector(objectForKey:)])
-		os_log(OS_LOG_DEFAULT, "%{public}@: %{public}@ on line %d\n", webView.mainFrame.dataSource.request.URL.absoluteString, [dictionary objectForKey:@"message"], [[dictionary objectForKey:@"lineNumber"] intValue]);
-}
-
-// =====================================================
-// = WebResourceLoadDelegate: Redirect tm-file to file =
-// =====================================================
-
-- (NSURLRequest*)webView:(WebView*)sender resource:(id)identifier willSendRequest:(NSURLRequest*)request redirectResponse:(NSURLResponse*)redirectResponse fromDataSource:(WebDataSource*)dataSource
-{
-	if([[[request URL] scheme] isEqualToString:@"tm-file"])
-	{
-		NSString* fragment = [[request URL] fragment];
-		request = [NSURLRequest requestWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"file://localhost%@%s%@", [[[request URL] path] stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet], fragment ? "#" : "", fragment ?: @""]]];
-	}
-
-	if(IsProtocolRelativeURL([request URL]))
-	{
-		NSURLComponents* components = [NSURLComponents componentsWithURL:[request URL] resolvingAgainstBaseURL:YES];
-		components.scheme = [NSUserDefaults.standardUserDefaults stringForKey:kUserDefaultsDefaultURLProtocolKey];
-		request = [NSURLRequest requestWithURL:components.URL];
-	}
-
-	if([[request URL] isFileURL])
-	{
-		NSURL* redirectURL = [NSURL URLWithString:[NSString stringWithFormat:@"file://localhost%@?path=%@&error=1", [[[NSBundle bundleForClass:[self class]] pathForResource:@"error_not_found" ofType:@"html"] stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet], [[[request URL] path] stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet]]];
-		char const* path = [[request URL] fileSystemRepresentation];
-
-		struct stat buf;
-		if(path && stat(path, &buf) == 0)
-		{
-			if(S_ISREG(buf.st_mode) || S_ISLNK(buf.st_mode))
-			{
-				redirectURL = nil;
-			}
-			else if(S_ISDIR(buf.st_mode))
-			{
-				if(path::exists(path::join(path, "index.html")))
-				{
-					NSString* urlString = [[NSURL URLWithString:@"index.html" relativeToURL:[request URL]] absoluteString];
-					if(NSString* query = [[request URL] query])
-						urlString = [urlString stringByAppendingFormat:@"?%@", query];
-					if(NSString* fragment = [[request URL] fragment])
-						urlString = [urlString stringByAppendingFormat:@"#%@", fragment];
-					redirectURL = [NSURL URLWithString:urlString];
-				}
-			}
-		}
-
-		if(redirectURL)
-			request = [NSURLRequest requestWithURL:redirectURL];
-	}
-
-	return request;
+	if(![webView tryToPerform:@selector(toggleHTMLOutput:) with:self])
+		[webView tryToPerform:@selector(performClose:) with:self];
 }
 @end
 

@@ -23,7 +23,7 @@
 NSNotificationName const OakCommandDidTerminateNotification = @"OakCommandDidTerminateNotification";
 NSString* const OakCommandErrorDomain                       = @"com.macromates.TextMate.ErrorDomain";
 
-static NSString* const kOakFileHandleURLScheme = @"x-txmt-filehandle";
+// kHOFileHandleURLScheme is declared by HTMLOutput, which owns the scheme handler.
 
 @protocol OakCommandDelegate
 - (void)updateEnvironment:(std::map<std::string, std::string>&)res forCommand:(OakCommand*)aCommand;
@@ -228,7 +228,7 @@ static pid_t run_command (dispatch_group_t rootGroup, std::string const& cmd, in
 
 			static NSInteger UniqueKey = 0; // Make each URL unique to avoid caching
 
-			_urlRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"%@://job/%@/%ld", kOakFileHandleURLScheme, to_ns(encode::url_part(_bundleCommand.name)), ++UniqueKey]] cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:FLT_MAX];
+			_urlRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"%@://job/%@/%ld", kHOFileHandleURLScheme, to_ns(encode::url_part(_bundleCommand.name)), ++UniqueKey]] cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:FLT_MAX];
 			[NSURLProtocol setProperty:self.identifier forKey:@"commandIdentifier" inRequest:_urlRequest];
 			[NSURLProtocol setProperty:pipe.fileHandleForReading forKey:@"fileHandle" inRequest:_urlRequest];
 			[NSURLProtocol setProperty:@(_processIdentifier) forKey:@"processIdentifier" inRequest:_urlRequest];
@@ -637,7 +637,7 @@ static pid_t run_command (dispatch_group_t rootGroup, std::string const& cmd, in
 	if(id target = [self targetForAction:_cmd])
 		[target discardHTMLOutputView:htmlOutputView];
 	else if(id delegate = htmlOutputView.webView.UIDelegate)
-		[delegate performSelector:@selector(webViewClose:) withObject:htmlOutputView.webView];
+		[delegate performSelector:@selector(webViewDidClose:) withObject:htmlOutputView.webView];
 }
 
 - (void)showToolTip:(NSString*)aToolTip
@@ -662,80 +662,10 @@ static pid_t run_command (dispatch_group_t rootGroup, std::string const& cmd, in
 }
 @end
 
-// =====================
-// = Custom URL Scheme =
-// =====================
-
-@interface OakFileHandleURLProtocol : NSURLProtocol
-{
-	BOOL _stop;
-}
-@end
-
-@implementation OakFileHandleURLProtocol
-+ (void)load
-{
-	[self registerClass:self];
-	[WebView registerURLSchemeAsLocal:kOakFileHandleURLScheme];
-}
-
-+ (BOOL)canInitWithRequest:(NSURLRequest*)request                            { return [request.URL.scheme isEqualToString:kOakFileHandleURLScheme]; }
-+ (NSURLRequest*)canonicalRequestForRequest:(NSURLRequest*)request           { return request; }
-+ (BOOL)requestIsCacheEquivalent:(NSURLRequest*)a toRequest:(NSURLRequest*)b { return NO; }
-
-// =============================================
-// = These methods might be called in a thread =
-// =============================================
-
-- (void)startLoading
-{
-	NSFileHandle* fileHandle = [NSURLProtocol propertyForKey:@"fileHandle" inRequest:self.request];
-	if(!fileHandle)
-	{
-		NSURLResponse* response = [[NSHTTPURLResponse alloc] initWithURL:self.request.URL statusCode:404 HTTPVersion:@"HTTP/1.1" headerFields:nil];
-		[self.client URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed];
-		[self.client URLProtocolDidFinishLoading:self];
-		NSLog(@"No command output for ‘%@’", self.request.URL);
-		return;
-	}
-
-	NSURLResponse* response = [[NSURLResponse alloc] initWithURL:self.request.URL MIMEType:@"text/html" expectedContentLength:-1 textEncodingName:@"utf-8"];
-	[self.client URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed];
-
-	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-		int len;
-		char buf[8192];
-		__block BOOL keepRunning = YES;
-		@try {
-			while(keepRunning && (len = read(fileHandle.fileDescriptor, buf, sizeof(buf))) > 0)
-			{
-				NSData* data = [NSData dataWithBytes:buf length:len];
-				dispatch_sync(dispatch_get_main_queue(), ^{
-					if(keepRunning = !_stop)
-						[self.client URLProtocol:self didLoadData:data];
-				});
-			}
-		}
-		@catch(NSException* e) {
-			NSData* data = [[NSString stringWithFormat:@"<p>Exception thrown while reading data: %@.</p>", e.reason] dataUsingEncoding:NSUTF8StringEncoding];
-			dispatch_sync(dispatch_get_main_queue(), ^{
-				if(!_stop)
-					[self.client URLProtocol:self didLoadData:data];
-			});
-		}
-
-		if(len == -1)
-			perror("HTMLOutput: read");
-
-		[fileHandle closeFile];
-		[self.client URLProtocolDidFinishLoading:self];
-	});
-}
-
-- (void)stopLoading
-{
-	_stop = YES;
-	if(pid_t pid = [[NSURLProtocol propertyForKey:@"processIdentifier" inRequest:self.request] intValue])
-		oak::kill_process_group_in_background(pid);
-}
-@end
+// The x-txmt-filehandle scheme is served by a WKURLSchemeHandler on the output
+// view's WKWebViewConfiguration now (Frameworks/HTMLOutput/src/HOFileHandleScheme).
+// The NSURLProtocol subclass that used to live here could not survive the move:
+// WKWebView copies the request before a scheme handler sees it, so the file
+// handle and pid this class read via +[NSURLProtocol propertyForKey:inRequest:]
+// were gone by then. OakHTMLOutputView registers them with HOFileHandleRegistry
+// instead, keyed by the (already unique) job URL.

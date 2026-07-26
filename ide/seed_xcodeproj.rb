@@ -420,9 +420,16 @@ specs.each do |t|
   ld_extra = link_scope.flat_map { |n| BY_NAME[n] ? BY_NAME[n]["ln_flags"] : [] }
                        .uniq.reject { |f| f == "-bundle" }
 
+  # -ObjC is load-bearing, not hygiene. rave links the object files directly
+  # (bin/rave's Link rule takes `objects`, not archives), so every .o is included
+  # unconditionally. We link .a archives instead, and ld only pulls a member in to
+  # resolve an undefined symbol — an Objective-C category defines no such symbol,
+  # it just adds methods at runtime. Without -ObjC every category in the tree
+  # (15+ "* Additions.mm" files) is silently dropped: the app links, signs and
+  # launches, then throws doesNotRecognizeSelector the moment one is called.
   target.build_configurations.each do |config|
     bs = config.build_settings
-    bs["OTHER_LDFLAGS"] = ["$(inherited)"] + ld_libs + ld_fw + ld_extra
+    bs["OTHER_LDFLAGS"] = ["$(inherited)", "-ObjC"] + ld_libs + ld_fw + ld_extra
   end
   puts "linked #{t['name']} [#{k}]: #{closure.size} libs, #{ext_libs.size} ext-libs, #{fworks.size} frameworks"
 end

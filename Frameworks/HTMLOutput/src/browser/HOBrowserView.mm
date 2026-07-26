@@ -1,47 +1,151 @@
 #import "HOBrowserView.h"
 #import "HOWebViewDelegateHelper.h"
 #import "HOStatusBar.h"
+#import "../HOFileHandleScheme.h"
 #import <OakAppKit/OakUIConstructionFunctions.h>
+#import <io/path.h>
+
+static void* kHOBrowserViewProgressContext = &kHOBrowserViewProgressContext;
+
+static NSString* const kUserDefaultsDefaultURLProtocolKey = @"defaultURLProtocol";
+
+static BOOL IsProtocolRelativeURL (NSURL* url)
+{
+	if([url.scheme hasPrefix:@"x-txmt"] && ![url.host isEqualToString:@"job"])
+		return YES;
+
+	if([url.scheme isEqualToString:@"file"] && url.host)
+	{
+		// If host has a dot and does not exist on disk then treat as protocol-relative URL
+		if([url.host containsString:@"."] && ![NSFileManager.defaultManager fileExistsAtPath:[@"/" stringByAppendingPathComponent:url.host]])
+			return YES;
+	}
+
+	return NO;
+}
+
+/*
+	Ported from the WebResourceLoadDelegate’s willSendRequest:, which WKWebView has
+	no equivalent for. Returns a replacement URL, or nil to load as-is.
+
+	Caveat carried over from the port: the legacy delegate saw *every* resource
+	load, so these rewrites also applied to images and stylesheets. A navigation
+	policy only sees navigations, so sub-resources are no longer rewritten.
+*/
+static NSURL* RewrittenURL (NSURL* url)
+{
+	if([url.scheme isEqualToString:@"tm-file"])
+	{
+		NSString* fragment = url.fragment;
+		url = [NSURL URLWithString:[NSString stringWithFormat:@"file://localhost%@%s%@", [url.path stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet], fragment ? "#" : "", fragment ?: @""]];
+	}
+
+	if(IsProtocolRelativeURL(url))
+	{
+		NSURLComponents* components = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:YES];
+		components.scheme = [NSUserDefaults.standardUserDefaults stringForKey:kUserDefaultsDefaultURLProtocolKey];
+		url = components.URL;
+	}
+
+	if(url.isFileURL)
+	{
+		NSURL* redirectURL = [NSURL URLWithString:[NSString stringWithFormat:@"file://localhost%@?path=%@&error=1", [[[NSBundle bundleForClass:[HOBrowserView class]] pathForResource:@"error_not_found" ofType:@"html"] stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet], [url.path stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet]]];
+		char const* path = url.fileSystemRepresentation;
+
+		struct stat buf;
+		if(path && stat(path, &buf) == 0)
+		{
+			if(S_ISREG(buf.st_mode) || S_ISLNK(buf.st_mode))
+			{
+				redirectURL = nil;
+			}
+			else if(S_ISDIR(buf.st_mode))
+			{
+				if(path::exists(path::join(path, "index.html")))
+				{
+					NSString* urlString = [[NSURL URLWithString:@"index.html" relativeToURL:url] absoluteString];
+					if(NSString* query = url.query)
+						urlString = [urlString stringByAppendingFormat:@"?%@", query];
+					if(NSString* fragment = url.fragment)
+						urlString = [urlString stringByAppendingFormat:@"#%@", fragment];
+					redirectURL = [NSURL URLWithString:urlString];
+				}
+			}
+		}
+
+		if(redirectURL)
+			url = redirectURL;
+	}
+
+	return url;
+}
+
+// Schemes the web view can load itself. Spelled out rather than asking
+// +[NSURLConnection canHandleRequest:] as the legacy path did: the streaming job
+// scheme is served by a WKURLSchemeHandler now, not a registered NSURLProtocol,
+// so NSURLConnection no longer knows about it.
+static BOOL IsLoadableScheme (NSURL* url)
+{
+	static NSSet* const schemes = [NSSet setWithArray:@[ @"http", @"https", @"file", @"data", @"about", @"blob", kHOFileHandleURLScheme ]];
+	return [schemes containsObject:url.scheme.lowercaseString];
+}
 
 static NSString* EscapeHTML (NSString* str)
 {
 	return [[[str stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"] stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"] stringByReplacingOccurrencesOfString:@"\"" withString:@"&quot;"];
 }
 
-static void ShowLoadErrorForURL (WebFrame* frame, NSURL* url, NSError* error)
+/*
+	The load-error page used to offer the failing URL as a link that shelled out
+	through TextMate.system(). That API is not wired up under WKWebView yet (it
+	returns with the JavaScript bridge, Stream 5 slice 3), so the URL is shown as
+	plain text for now rather than as a link that would silently do nothing.
+*/
+static void ShowLoadErrorForURL (WKWebView* webView, NSURL* url, NSError* error)
 {
-	NSString* options  = [[url scheme] isEqualToString:@"file"] ? @" -R" : @"";
-	NSString* errorMsg = [NSString stringWithFormat:@"<title>Load Error</title><h1>Load Error</h1><p>WebKit reported <em>%@</em> while loading <tt><a href=\"#\" onClick=\"javascript:TextMate.system('/usr/bin/open%@ &quot;%@&quot;', null)\">%@</a></tt>.</p>", EscapeHTML([error localizedDescription]), options, EscapeHTML([url absoluteString]), EscapeHTML([url absoluteString])];
-	[frame loadHTMLString:errorMsg baseURL:[NSURL fileURLWithPath:NSTemporaryDirectory()]];
+	NSString* errorMsg = [NSString stringWithFormat:@"<title>Load Error</title><h1>Load Error</h1><p>WebKit reported <em>%@</em> while loading <tt>%@</tt>.</p>", EscapeHTML(error.localizedDescription), EscapeHTML(url.absoluteString)];
+	[webView loadHTMLString:errorMsg baseURL:[NSURL fileURLWithPath:NSTemporaryDirectory()]];
 }
 
-@interface HOBrowserView () <WebPolicyDelegate, WebUIDelegate, WebResourceLoadDelegate>
-@property (nonatomic, readwrite) WebView* webView;
+@interface HOBrowserView ()
+@property (nonatomic, readwrite) WKWebView* webView;
 @property (nonatomic, readwrite) HOStatusBar* statusBar;
+@property (nonatomic, readwrite) BOOL needsNewWebView;
 @property (nonatomic) HOWebViewDelegateHelper* webViewDelegateHelper;
+@property (nonatomic) BOOL observingProgress;
 @end
 
 @implementation HOBrowserView
-- (id)initWithFrame:(NSRect)frame
++ (WKWebViewConfiguration*)defaultConfiguration
+{
+	WKWebViewConfiguration* config = [[WKWebViewConfiguration alloc] init];
+	[config setURLSchemeHandler:[HOFileHandleSchemeHandler new] forURLScheme:kHOFileHandleURLScheme];
+	return config;
+}
+
+- (instancetype)initWithFrame:(NSRect)frame
+{
+	return [self initWithFrame:frame configuration:[HOBrowserView defaultConfiguration]];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame configuration:(WKWebViewConfiguration*)configuration
 {
 	if(self = [super initWithFrame:frame])
 	{
-		_webView = [[WebView alloc] initWithFrame:NSZeroRect];
+		_webView = [[WKWebView alloc] initWithFrame:NSZeroRect configuration:configuration];
 
-		NSString* const kHTMLOutputPreferencesIdentifier = @"HTML Output Preferences Identifier";
-		WebPreferences* webViewPrefs = [[WebPreferences alloc] initWithIdentifier:kHTMLOutputPreferencesIdentifier];
-		webViewPrefs.plugInsEnabled = NO;
-		self.webView.preferencesIdentifier = kHTMLOutputPreferencesIdentifier;
+		// WKWebView draws its own two-finger back/forward swipe, including the
+		// page-peek animation the old trackSwipeEventWithOptions: handler left as
+		// a TODO, so the manual scrollWheel: tracking is gone.
+		_webView.allowsBackForwardNavigationGestures = YES;
 
 		_statusBar = [[HOStatusBar alloc] initWithFrame:NSZeroRect];
-		_statusBar.delegate = _webView;
+		_statusBar.delegate = _webView; // WKWebView has goBack:/goForward: actions
 
 		_webViewDelegateHelper          = [HOWebViewDelegateHelper new];
 		_webViewDelegateHelper.delegate = _statusBar;
-		_webView.policyDelegate         = self;
-		_webView.resourceLoadDelegate   = _webViewDelegateHelper;
 		_webView.UIDelegate             = _webViewDelegateHelper;
-		_webView.frameLoadDelegate      = self;
+		_webView.navigationDelegate     = self;
 
 		NSDictionary* views = @{
 			@"webView":   _webView,
@@ -56,40 +160,33 @@ static void ShowLoadErrorForURL (WebFrame* frame, NSURL* url, NSError* error)
 	return self;
 }
 
-- (BOOL)needsNewWebView
-{
-	return _webViewDelegateHelper.needsNewWebView;
-}
-
-- (void)webViewProgressEstimateChanged:(NSNotification*)notification
-{
-	_statusBar.progress = _webView.estimatedProgress;
-}
-
 - (void)dealloc
 {
 	[self setUpdatesProgress:NO];
-	_webView.frameLoadDelegate      = nil;
-	_webView.UIDelegate             = nil;
-	_webView.resourceLoadDelegate   = nil;
-	_webView.policyDelegate         = nil;
-	[[_webView mainFrame] stopLoading];
+	_webView.navigationDelegate = nil;
+	_webView.UIDelegate         = nil;
+	[_webView stopLoading];
 }
 
+// WebViewProgress* notifications do not exist for WKWebView; estimatedProgress is
+// KVO-compliant instead. Keeping the same on/off entry point the callers already use.
 - (void)setUpdatesProgress:(BOOL)flag
 {
+	if(flag == _observingProgress)
+		return;
+
 	if(flag)
-	{
-		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(webViewProgressEstimateChanged:) name:WebViewProgressFinishedNotification object:_webView];
-		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(webViewProgressEstimateChanged:) name:WebViewProgressEstimateChangedNotification object:_webView];
-		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(webViewProgressEstimateChanged:) name:WebViewProgressStartedNotification object:_webView];
-	}
-	else
-	{
-		[NSNotificationCenter.defaultCenter removeObserver:self name:WebViewProgressStartedNotification object:_webView];
-		[NSNotificationCenter.defaultCenter removeObserver:self name:WebViewProgressEstimateChangedNotification object:_webView];
-		[NSNotificationCenter.defaultCenter removeObserver:self name:WebViewProgressFinishedNotification object:_webView];
-	}
+			[_webView addObserver:self forKeyPath:@"estimatedProgress" options:0 context:kHOBrowserViewProgressContext];
+	else	[_webView removeObserver:self forKeyPath:@"estimatedProgress" context:kHOBrowserViewProgressContext];
+
+	_observingProgress = flag;
+}
+
+- (void)observeValueForKeyPath:(NSString*)keyPath ofObject:(id)object change:(NSDictionary*)change context:(void*)context
+{
+	if(context == kHOBrowserViewProgressContext)
+			_statusBar.progress = _webView.estimatedProgress;
+	else	[super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
 }
 
 // ==============
@@ -131,70 +228,73 @@ in the hierachy returns YES, the key (equivalent) event is then passed to the me
 
 }
 
-// =========
-// = Swipe =
-// =========
+// ========================
+// = Navigation  Delegate =
+// ========================
 
-- (BOOL)wantsScrollEventsForSwipeTrackingOnAxis:(NSEventGestureAxis)axis
-{
-	return axis == NSEventGestureAxisHorizontal;
-}
-
-- (void)scrollWheel:(NSEvent*)anEvent
-{
-	if(![NSEvent isSwipeTrackingFromScrollEventsEnabled] || [anEvent phase] == NSEventPhaseNone || fabs([anEvent scrollingDeltaX]) <= fabs([anEvent scrollingDeltaY]))
-		return;
-
-	[anEvent trackSwipeEventWithOptions:0 dampenAmountThresholdMin:(_webView.canGoForward ? -1 : 0) max:(_webView.canGoBack ? +1 : 0) usingHandler:^(CGFloat gestureAmount, NSEventPhase phase, BOOL isComplete, BOOL* stop) {
-		if(phase == NSEventPhaseBegan)
-		{
-			// Setup animation overlay layers
-		}
-
-		// Update animation overlay to match gestureAmount
-
-		if(phase == NSEventPhaseEnded)
-		{
-			if(gestureAmount > 0 && _webView.canGoBack)
-				[_webView goBack:self];
-			else if(gestureAmount < 0 && _webView.canGoForward)
-				[_webView goForward:self];
-		}
-
-		if(isComplete)
-		{
-			// Tear down animation overlay here
-		}
-	}];
-}
-
-// =======================
-// = Frame Load Delegate =
-// =======================
-
-- (void)webView:(WebView*)sender didStartProvisionalLoadForFrame:(WebFrame*)frame
+- (void)webView:(WKWebView*)webView didStartProvisionalNavigation:(WKNavigation*)navigation
 {
 	_statusBar.busy = YES;
 	[self setUpdatesProgress:YES];
 }
 
-- (void)webView:(WebView*)sender didFailProvisionalLoadWithError:(NSError*)error forFrame:(WebFrame*)frame
+- (void)webView:(WKWebView*)webView decidePolicyForNavigationAction:(WKNavigationAction*)navigationAction decisionHandler:(void(^)(WKNavigationActionPolicy))decisionHandler
 {
-	ShowLoadErrorForURL(frame, [[[frame provisionalDataSource] request] URL], error);
-	[self webView:sender didFinishLoadForFrame:frame];
+	NSURL* url = navigationAction.request.URL;
+
+	// WKWebView cannot rewrite a navigation in flight, so a rewrite is a cancel
+	// plus a fresh load.
+	if(NSURL* rewritten = RewrittenURL(url))
+	{
+		if(![rewritten isEqual:url])
+		{
+			decisionHandler(WKNavigationActionPolicyCancel);
+			[webView loadRequest:[NSURLRequest requestWithURL:rewritten]];
+			return;
+		}
+	}
+
+	if(IsLoadableScheme(url))
+	{
+		decisionHandler(WKNavigationActionPolicyAllow);
+	}
+	else
+	{
+		decisionHandler(WKNavigationActionPolicyCancel);
+		[NSWorkspace.sharedWorkspace openURL:url];
+	}
 }
 
-- (void)webView:(WebView*)sender didFailLoadWithError:(NSError*)error forFrame:(WebFrame*)frame
+- (void)webView:(WKWebView*)webView didFailProvisionalNavigation:(WKNavigation*)navigation withError:(NSError*)error
 {
-	ShowLoadErrorForURL(frame, [[[frame provisionalDataSource] request] URL], error);
-	[self webView:sender didFinishLoadForFrame:frame];
+	ShowLoadErrorForURL(webView, webView.URL, error);
+	[self webView:webView didFinishNavigation:navigation];
 }
 
-- (void)webView:(WebView*)sender didFinishLoadForFrame:(WebFrame*)frame
+- (void)webView:(WKWebView*)webView didFailNavigation:(WKNavigation*)navigation withError:(NSError*)error
+{
+	ShowLoadErrorForURL(webView, webView.URL, error);
+	[self webView:webView didFinishNavigation:navigation];
+}
+
+- (void)webView:(WKWebView*)webView didFinishNavigation:(WKNavigation*)navigation
 {
 	_statusBar.canGoBack    = _webView.canGoBack;
 	_statusBar.canGoForward = _webView.canGoForward;
 	_statusBar.busy         = NO;
 	_statusBar.progress     = 0;
+}
+
+/*
+	Replaces the WebKit-bug-121232 workaround the legacy path carried (a WebView
+	could not be reused after window.close()). WKWebView has no such bug, but it
+	does have a failure mode the old one did not: the web content process can die
+	on its own, leaving a blank view. Either way the view must not be handed back
+	out for reuse.
+*/
+- (void)webViewWebContentProcessDidTerminate:(WKWebView*)webView
+{
+	os_log_error(OS_LOG_DEFAULT, "HTMLOutput: web content process terminated for ‘%{public}@’", webView.URL);
+	self.needsNewWebView = YES;
 }
 @end

@@ -373,6 +373,13 @@ specs.each do |t|
     if k == :app
       ip = infoplist_for(t)
       bs["INFOPLIST_FILE"] = "$(SRCROOT)/#{ip}" if ip
+      # Mirror the Info.plist's CFBundleIdentifier (com.macromates.${TARGET_NAME})
+      # so Xcode stops warning that the plist id differs from an empty
+      # PRODUCT_BUNDLE_IDENTIFIER. NOTE (Stream 3): `com.macromates.*` is MacroMates'
+      # identifier — TextMate-NG must switch to its own id under our Apple Developer
+      # account before notarization. When that happens, change BOTH this setting and
+      # Applications/TextMate/Info.plist's CFBundleIdentifier together.
+      bs["PRODUCT_BUNDLE_IDENTIFIER"] = "com.macromates.$(TARGET_NAME)"
       bs["APP_VERSION"] = APP_VERSION                 # ${APP_VERSION} in Info.plist
       if t["entitlements"] && !t["entitlements"].empty?
         bs["CODE_SIGN_ENTITLEMENTS"] = "$(SRCROOT)/#{generate_entitlements(t['name'], t['entitlements'])}"

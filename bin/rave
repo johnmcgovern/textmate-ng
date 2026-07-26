@@ -739,7 +739,7 @@ class CreateBundlesArchive < Compiler
       name:        "DownloadBundles",
       in:          file,
       out:         File.join(builddir, "_#{self.class}", File.dirname(file), 'Managed'),
-      command:     "$bl -C $out install $(<$in) && touch $out",
+      command:     "$bl -C $out install $(<$in); touch $out",
       description: 'Download bundles…',
       pool:        'console',
       bl:          "#{builddir}/Applications/bl/bl",
@@ -829,7 +829,7 @@ module Target
             name:        'ExportHeader',
             in:          header,
             out:         File.join(include_dir, target[:name], File.basename(header)),
-            command:     '/bin/cp -Xp $in $out && touch $out',
+            command:     'ditto $in $out && touch $out',
             description: 'Export ‘${in}’…',
           }
           rules.last[:out]
@@ -1104,7 +1104,7 @@ module Target
                 name:         'CopyFile',
                 in:           src,
                 out:          File.join(target[:builddir], target[:dir], target[:prefix], dst),
-                command:      '/bin/cp -Xp $in $out && touch $out',
+                command:      'ditto $in $out && touch $out',
                 description:  'Copy ‘${in}’…',
                 dependencies: deps,
               }

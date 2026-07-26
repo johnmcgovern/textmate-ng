@@ -58,12 +58,12 @@ targets with declarative `.rave` specs.
 
 | Stream | Scope | Status | Depends on |
 |--------|-------|--------|------------|
-| 1 | **Xcode workspace scaffold** (48 frameworks + 11 apps) — critical path | 🔄 In progress (app links; launch pending) | — |
-| 2 | Dependency integration (capnp/boost/Onigmo/kvdb) — make deps reproducible, not `~/nix-sdk` user-local paths | 🔄 In progress (prefix resolver landed; formalize/lockfile TBD) | 1 |
-| 3 | Code signing & notarization (real identity; ad-hoc already proven) | ⬜ Not started | 1 |
+| 1 | **Xcode workspace scaffold** (48 frameworks + 11 apps) — critical path | ✅ Done 2026-07-25 (launchable ad-hoc-signed TextMate.app; builds on CI) | — |
+| 2 | Dependency integration (capnp/boost/Onigmo/kvdb) — make deps reproducible, not `~/nix-sdk` user-local paths | ✅ Done 2026-07-26 (Homebrew default validated on CI; optional dep-version pinning TBD) | 1 |
+| 3 | Code signing & notarization (real identity; ad-hoc already proven) | ⬜ Not started (needs certs → user) | 1 |
 | 4 | Raise deployment target (macOS 15) + remove dead guards | ✅ Done 2026-07-24 (unmerged) | — |
 | 5 | API modernization (WebView→WKWebView, KVO) | ⬜ Not started | 1 |
-| 6 | CI/CD (xcodebuild) | ⬜ Not started | 1, 2 |
+| 6 | CI/CD (xcodebuild) | ✅ Done 2026-07-26 (`xcode` job green on macos-latest) | 1, 2 |
 
 ### Phase 2 definition of done (cutover criteria)
 Phase 2 is done when the Xcode build is at **feature parity** and rave/ninja can be

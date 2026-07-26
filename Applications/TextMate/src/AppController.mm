@@ -94,10 +94,16 @@ BOOL HasDocumentWindow (NSArray* windows)
 @implementation AppController
 - (NSMenu*)mainMenu
 {
+	// Read the display name from CFBundleName rather than spelling it out here, so
+	// the fork’s name lives in exactly one place. Note this is deliberately not
+	// ${TARGET_NAME}: the target (and therefore CFBundleExecutable) stays
+	// “TextMate”, only the user-visible name is TextMate-NG.
+	NSString* const appName = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"] ?: @"TextMate";
+
 	MBMenu const items = {
-		{ @"TextMate",
+		{ appName,
 			.submenu = {
-				{ @"About TextMate",        @selector(orderFrontAboutPanel:)               },
+				{ [NSString stringWithFormat:@"About %@", appName], @selector(orderFrontAboutPanel:) },
 				{ /* -------- */ },
 				{ @"Preferences…",          @selector(showPreferences:),            @","   },
 				{ @"Check for Update",      @selector(performSoftwareUpdateCheck:)         },
@@ -105,11 +111,11 @@ BOOL HasDocumentWindow (NSArray* windows)
 				{ /* -------- */ },
 				{ @"Services",              .systemMenu = MBMenuTypeServices               },
 				{ /* -------- */ },
-				{ @"Hide TextMate",         @selector(hide:),                       @"h"   },
+				{ [NSString stringWithFormat:@"Hide %@", appName], @selector(hide:), @"h" },
 				{ @"Hide Others",           @selector(hideOtherApplications:),      @"h", .modifierFlags = NSEventModifierFlagCommand|NSEventModifierFlagOption },
 				{ @"Show All",              @selector(unhideAllApplications:),             },
 				{ /* -------- */ },
-				{ @"Quit TextMate",         @selector(terminate:),                  @"q"   },
+				{ [NSString stringWithFormat:@"Quit %@", appName], @selector(terminate:), @"q" },
 			}
 		},
 		{ @"File",

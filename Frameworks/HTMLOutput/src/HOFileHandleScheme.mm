@@ -3,6 +3,68 @@
 #import <oak/debug.h>
 
 NSString* const kHOFileHandleURLScheme = @"x-txmt-filehandle";
+NSString* const kHOLocalFilePathPrefix = @"/__tm_local__";
+
+// Same scheme *and* same host as the job URL (x-txmt-filehandle://job/…), so the
+// rewritten sub-resources are same-origin with the page rather than merely
+// same-scheme.
+static char const* const kFileURLPrefix  = "file://";
+static char const* const kLocalURLPrefix = "x-txmt-filehandle://job/__tm_local__";
+
+static NSString* MimeTypeForPath (NSString* path)
+{
+	static NSDictionary* const types = @{
+		@"css": @"text/css",         @"js":   @"text/javascript", @"json": @"application/json",
+		@"png": @"image/png",        @"jpg":  @"image/jpeg",      @"jpeg": @"image/jpeg",
+		@"gif": @"image/gif",        @"svg":  @"image/svg+xml",   @"webp": @"image/webp",
+		@"html": @"text/html",       @"htm":  @"text/html",       @"txt":  @"text/plain",
+		@"woff": @"font/woff",       @"woff2": @"font/woff2",     @"ttf":  @"font/ttf",
+	};
+	return types[path.pathExtension.lowercaseString] ?: @"application/octet-stream";
+}
+
+/*
+	Replaces every complete `file://` in `chunk` and returns whatever trailing bytes
+	could still turn out to be the start of one. Those are held back and prepended
+	to the next chunk — without that, a `file://` straddling a read boundary would
+	slip through unrewritten.
+*/
+static std::string RewriteLocalURLs (std::string const& chunk, std::string& carry)
+{
+	std::string const data = carry + chunk;
+	size_t const fileLen   = strlen(kFileURLPrefix);
+	carry.clear();
+
+	std::string out;
+	out.reserve(data.size());
+
+	size_t pos = 0;
+	while(true)
+	{
+		size_t hit = data.find(kFileURLPrefix, pos);
+		if(hit == std::string::npos)
+			break;
+		out.append(data, pos, hit - pos);
+		out.append(kLocalURLPrefix);
+		pos = hit + fileLen;
+	}
+
+	// Longest suffix of the remainder that is a proper prefix of "file://".
+	std::string const rest = data.substr(pos);
+	size_t keep = 0;
+	for(size_t k = std::min(fileLen - 1, rest.size()); k > 0; --k)
+	{
+		if(rest.compare(rest.size() - k, k, kFileURLPrefix, k) == 0)
+		{
+			keep = k;
+			break;
+		}
+	}
+
+	out.append(rest, 0, rest.size() - keep);
+	carry = rest.substr(rest.size() - keep);
+	return out;
+}
 
 // ==================
 // = The job record =
@@ -105,11 +167,16 @@ NSString* const kHOFileHandleURLScheme = @"x-txmt-filehandle";
 	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 		ssize_t len = 0;
 		char buf[8192];
+		std::string carry;
 		__block BOOL keepRunning = YES;
 
 		while(keepRunning && (len = read(fd, buf, sizeof(buf))) > 0)
 		{
-			NSData* data = [NSData dataWithBytes:buf length:len];
+			std::string rewritten = RewriteLocalURLs(std::string(buf, len), carry);
+			if(rewritten.empty()) // whole chunk held back as a partial match
+				continue;
+
+			NSData* data = [NSData dataWithBytes:rewritten.data() length:rewritten.size()];
 			dispatch_sync(dispatch_get_main_queue(), ^{
 				if(keepRunning = !self->_stopped)
 					[self->_task didReceiveData:data];
@@ -118,6 +185,16 @@ NSString* const kHOFileHandleURLScheme = @"x-txmt-filehandle";
 
 		if(len == -1)
 			perror("HTMLOutput: read");
+
+		// A partial `file://` at EOF was never a real one — emit it verbatim.
+		if(keepRunning && !carry.empty())
+		{
+			NSData* tail = [NSData dataWithBytes:carry.data() length:carry.size()];
+			dispatch_sync(dispatch_get_main_queue(), ^{
+				if(!self->_stopped)
+					[self->_task didReceiveData:tail];
+			});
+		}
 
 		[self->_job.fileHandle closeFile];
 
@@ -170,6 +247,10 @@ NSString* const kHOFileHandleURLScheme = @"x-txmt-filehandle";
 - (void)webView:(WKWebView*)webView startURLSchemeTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
 	NSURL* url = urlSchemeTask.request.URL;
+
+	if([url.path hasPrefix:kHOLocalFilePathPrefix])
+		return [self serveLocalFileForTask:urlSchemeTask];
+
 	HOFileHandleJob* job = [HOFileHandleRegistry.sharedInstance claimJobForURL:url];
 	if(!job)
 	{
@@ -201,5 +282,34 @@ NSString* const kHOFileHandleURLScheme = @"x-txmt-filehandle";
 - (void)forgetTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
 	[_tasks removeObjectForKey:urlSchemeTask];
+}
+
+/*
+	Serves a stylesheet/script/image that the page referenced as file:// before the
+	stream rewrite. Read synchronously: these are small local assets, and the whole
+	point is to answer before the page finishes parsing.
+
+	This does let command output read any file the user can read — which is exactly
+	the privilege +[WebView registerURLSchemeAsLocal:] granted the job scheme
+	before, so it is not a widening. The content is the user’s own bundle output.
+*/
+- (void)serveLocalFileForTask:(id <WKURLSchemeTask>)urlSchemeTask
+{
+	NSURL* url = urlSchemeTask.request.URL;
+	NSString* path = [url.path substringFromIndex:kHOLocalFilePathPrefix.length]; // -path is already percent-decoded
+
+	NSError* error;
+	NSData* data = path.length ? [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:&error] : nil;
+	if(!data)
+	{
+		os_log_error(OS_LOG_DEFAULT, "HTMLOutput: no local resource at ‘%{public}@’", path);
+		[urlSchemeTask didReceiveResponse:[[NSHTTPURLResponse alloc] initWithURL:url statusCode:404 HTTPVersion:@"HTTP/1.1" headerFields:nil]];
+		[urlSchemeTask didFinish];
+		return;
+	}
+
+	[urlSchemeTask didReceiveResponse:[[NSURLResponse alloc] initWithURL:url MIMEType:MimeTypeForPath(path) expectedContentLength:data.length textEncodingName:nil]];
+	[urlSchemeTask didReceiveData:data];
+	[urlSchemeTask didFinish];
 }
 @end

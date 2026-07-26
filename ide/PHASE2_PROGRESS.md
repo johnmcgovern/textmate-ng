@@ -86,6 +86,38 @@ Individually, these all compile clean to `build/Release/*.a`:
 
 ## ✅ STREAM 1 COMPLETE (launch-verified 2026-07-26)
 
+> **Second correction (2026-07-26): `-ObjC` was missing, and every Objective-C
+> category in the tree was being silently dropped.** Symptom: the app launched
+> and drew its menus, but File → New and File → Open did nothing, and any call
+> into a category threw `doesNotRecognizeSelector` (first seen as
+> `+[NSString stringWithCxxString:]` in a crash log).
+>
+> Cause: rave's Link rule passes the **object files** directly
+> (`in: objects.sort.uniq`, `bin/rave:936`), so every `.o` is included whether or
+> not anything references it. The seed links **`.a` archives**, and ld only pulls
+> an archive member in to resolve an undefined symbol. A category defines no such
+> symbol — it only adds methods at runtime — so all 15+ `* Additions.mm` objects
+> were dropped: `NSString`, `NSAlert`, `NSMenuItem`, `NSColor`, `NSImage`,
+> `NSEvent`, `NSSavePanel` and friends. Fixed by putting `-ObjC` in
+> `OTHER_LDFLAGS` for every linked product.
+>
+> **How to check this specific class of breakage** (a green build and a valid
+> signature cannot see it):
+> ```sh
+> otool -l build/Release/TextMate.app/Contents/MacOS/TextMate | grep -c objc_catlist
+> # 0 = every category was stripped; 1 = categories are linked
+> ```
+> Verified after the fix: `__objc_catlist` present, and the app opens real
+> document windows (957x962 with editor + status bar) both at launch and via
+> `open -a <app> <file>` — where before it had none.
+>
+> Diagnostic note for the next session: `nm`/`otool` finding a selector *name*
+> proves nothing. Selector names live in the method-name table because *callers*
+> reference them; only the category list shows whether an implementation linked.
+> Also, `mate` addresses the app by bundle id, so with an upstream TextMate.app
+> installed it may drive that one instead — use `open -a <path>` to be sure which
+> binary is being tested.
+
 > **Correction.** The 2026-07-25 version of this section claimed the app
 > "launches without crashing". It did not — the first real launch attempt exited
 > immediately with `Unable to load nib file: MainMenu, exiting`. A passing

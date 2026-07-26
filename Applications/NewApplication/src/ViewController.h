@@ -1,2 +1,0 @@
-@interface ViewController : NSViewController
-@end

@@ -1,7 +1,8 @@
 # TextMate → Swift-native macOS: Project Phases & Progress
 
 _High-level progress tracker. Last updated: 2026-07-26 (Streams 7 & 8, rave parity
-audit, rave/ninja retirement, arm64-only decision, Phase 2.5 formalized)._
+audit, rave/ninja retirement, arm64-only decision, Phase 2.5 formalized and
+started: dead-code cleanup)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -26,7 +27,7 @@ duplicating it here goes stale within hours while the loop runs.
 |---|-------|--------|---------------|
 | 1 | **Build bring-up** (rave → ninja compiling) | ✅ Done / pre-existing | — |
 | 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress (signing left) | Large / Med |
-| 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | ⬜ Not started | Med / Low |
+| 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | 🔄 Started 2026-07-26 | Med / Low |
 | 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ⬜ Not started | Small–Med / Med |
 | 4 | **Swift-ify the AppKit/UI shell, leaf-first** | ⬜ Not started | Very large / Med |
 | 5 | **App shell & lifecycle in Swift** (= recommended end state) | ⬜ Not started | Med / Low–Med |
@@ -302,12 +303,16 @@ Milestones:
 
 ## Phase 2.5 detail — Cleanup & de-MacroMates
 
-Not started. Candidate list below; each item needs its own remove-or-replace
+🔄 Started 2026-07-26. Candidate list below; each item needs its own remove-or-replace
 decision, so this phase is a set of independent, low-risk cleanups rather than a
 single change. None of it blocks Phase 3 — it's listed here because it *should*
 happen before Phase 3/4 touch the same lib graph and bundle identity again.
 
 **Dead code:**
+- ~~`Applications/NewApplication`~~ **Deleted 2026-07-26** — the unused
+  Xcode-template scaffold app; `SKIP_TARGETS` in the seed (its only reason to
+  exist) went with it.
+- ~~`bin/show_log`~~ **Deleted 2026-07-26** — confirmed zero references anywhere.
 - **`bin/CxxTest`** — a large vendored tree serving exactly 3 files
   (`OakAppKit`/`ns`/`layout`'s `gui_*.mm`), and those 3 don't even run under
   `xcodebuild test` (see Stream 7: they subclass `CxxTest::TestSuite`, not
@@ -317,9 +322,19 @@ happen before Phase 3/4 touch the same lib graph and bundle identity again.
 - **`Applications/NewApplication`** — an unused Xcode-template scaffold app;
   `ide/seed_xcodeproj.rb`'s `SKIP_TARGETS` already excludes it from the generated
   project. No blocker; just delete the directory.
-- **`bin/gen_credits.rb`, `bin/show_log`** — found during the rave parity audit
-  (2026-07-26) to have zero references anywhere in the tree or its history. Already
-  orphaned before rave was deleted; no blocker.
+- **`bin/show_log`** — zero references anywhere in the tree or its history; already
+  orphaned before rave was deleted. No blocker.
+  ~~`bin/gen_credits.rb`~~ **correction (2026-07-26): not dead.** The original rave
+  parity audit only grepped source/build files and missed that `bin/gen_html`
+  pipes a Markdown page's *rendered HTML* back through `ERB.new(...).result(binding)`
+  (`bin/gen_html`'s last line) — so the `<% require 'bin/gen_credits'; ... %>` block
+  embedded in `Applications/TextMate/about/Contributions.md` genuinely executes at
+  every build, shelling out to `git log` to render the live commit list the About
+  window's Contributions tab shows. Keep it. (Minor, unrelated aside for whenever
+  the MacroMates-coupled-services item below is tackled: `generate_credits` caches
+  GitHub username lookups to `~/Library/Caches/com.macromates.TextMate/githubcredits`
+  and queries `api.github.com/legacy/...`, a long-deprecated endpoint — likely
+  degrading silently to no GitHub links today, not a build break.)
 - **Dependency-cycle refactors.** 3 cyclic SCCs in the lib graph, all breakable
   with ~4 small refactors (cut `command→OakAppKit`, `io→ns`, `document→FileBrowser`,
   `OakCommand→BundleEditor`). The seed sidesteps them (no lib↔lib target edges;

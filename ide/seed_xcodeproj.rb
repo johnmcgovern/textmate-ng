@@ -100,11 +100,8 @@ LIB_LDFLAGS = {
   "sqlite3" => ["-lsqlite3"], "z" => ["-lz"],
 }
 
-SKIP_TARGETS = %w[NewApplication].freeze  # bare Xcode template, not a real target
-
 # ---------------------------------------------------------------------------
 specs = JSON.parse(File.read(File.join(ROOT, GEN_DIR, "specs.json")))
-                .reject { |t| SKIP_TARGETS.include?(t["name"]) }
 BY_NAME = specs.each_with_object({}) { |t, h| h[t["name"]] = t }
 
 def kind(t)

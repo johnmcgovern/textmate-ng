@@ -1,3 +1,4 @@
+#import <WebKit/WebKit.h>
 #import <oak/misc.h>
 
 @class HOStatusBar;

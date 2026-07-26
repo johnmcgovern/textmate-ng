@@ -1,3 +1,4 @@
+#import <WebKit/WebKit.h>
 #import "../HOFileHandleScheme.h"
 
 @protocol HOJSBridgeDelegate

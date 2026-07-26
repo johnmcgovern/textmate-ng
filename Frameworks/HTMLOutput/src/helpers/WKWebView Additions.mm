@@ -1,3 +1,4 @@
+#import <WebKit/WebKit.h>
 #import <OakAppKit/OakPasteboard.h>
 #import <OakFoundation/OakFoundation.h>
 #import <OakFoundation/OakFindProtocol.h>

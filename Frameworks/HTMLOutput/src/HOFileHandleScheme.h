@@ -1,3 +1,4 @@
+#import <WebKit/WebKit.h>
 #import <oak/misc.h>
 
 // Custom URL scheme used to stream a bundle command’s HTML output into the web view.

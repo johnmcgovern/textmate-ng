@@ -2,7 +2,15 @@
 
 _Last updated: 2026-07-25 (Stream 2 dep-prefix resolver). Branch: `claude/xcode-stream1-seed` (off `master`)._
 
-## 🔄 STREAM 2 IN PROGRESS — reproducible deps (dep-prefix resolver landed)
+## ✅ STREAMS 2 & 6 — reproducible deps + xcodebuild CI (validated on runner)
+`xcodebuild -target TextMate` now builds `TextMate.app` on a clean `macos-latest`
+runner via the new `xcode` CI job, linking capnp/kj from `/opt/homebrew/lib` (the
+`brew --prefix` default; **no `TM_DEP_PREFIX`, no `~/nix-sdk`**) → `** BUILD
+SUCCEEDED **` + codesign. Both CI jobs (`build`=ninja, `xcode`=xcodebuild) are green
+(run 30181678660). Optional remaining hardening: pin dep versions (Brewfile) instead
+of floating Homebrew formulae. Detail below.
+
+
 The Xcode seed no longer hardcodes `~/nix-sdk/{arm64,x86_64}`. `ide/seed_xcodeproj.rb`
 now resolves external deps (capnp/kj/boost/sparsehash) through a **`DEP_PREFIXES`**
 list, mirroring `./configure`:

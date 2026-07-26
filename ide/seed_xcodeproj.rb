@@ -23,10 +23,25 @@ require "set"
 ROOT      = File.expand_path("..", __dir__)
 PROJ_PATH = File.join(ROOT, "TextMate.xcodeproj")
 
-# --- environment-derived include/lib paths (see textmate-build-setup memory) ---
+# --- dependency prefixes (Stream 2: reproducible deps, not user-local) --------
+# The external deps (capnp, kj, boost, sparsehash) resolve from one or more
+# "prefix" dirs, each contributing <prefix>/include and <prefix>/lib. Resolution
+# mirrors ./configure so the Xcode build matches the rave/CI build on a clean
+# machine:
+#   * default  -> Homebrew's prefix (`brew --prefix`): /opt/homebrew on Apple
+#                 Silicon, /usr/local on Intel; /usr/local if brew is absent.
+#   * override -> TM_DEP_PREFIX, a colon-separated list, for non-Homebrew setups.
+#                 e.g. the local nix-sdk sandbox (see textmate-build-setup memory):
+#                 TM_DEP_PREFIX="$HOME/nix-sdk/arm64:$HOME/nix-sdk/x86_64"
+#                 (boost is header-only and lives only under the x86_64 prefix).
 HOME       = ENV["HOME"]
-NIX_ARM    = "#{HOME}/nix-sdk/arm64"
-NIX_X86    = "#{HOME}/nix-sdk/x86_64"    # boost (header-only) lives only here
+DEP_PREFIXES =
+  if (env = ENV["TM_DEP_PREFIX"].to_s.strip) != ""
+    env.split(":").map(&:strip).reject(&:empty?)
+  else
+    brew = `brew --prefix 2>/dev/null`.strip
+    [brew.empty? ? "/usr/local" : brew]
+  end
 DEPLOY_TGT = "15.0"                       # migration floor (Stream 4); also > SDK min 10.13
 
 # App version, captured the way rave does (grep the latest Changes.md heading). Fed
@@ -71,12 +86,11 @@ SYSTEM_FRAMEWORKS = Dir.glob(File.join(`xcrun --sdk macosx --show-sdk-path`.stri
 COMMON_HEADER_PATHS = [
   "$(SRCROOT)/Shared/include",
   "$(DERIVED_FILE_DIR)",                   # generated capnp/ragel headers
-  "#{NIX_ARM}/include",                    # capnp, kj, sparsehash, google
-  "#{NIX_X86}/include",                    # boost (header-only; arch-independent)
+  *DEP_PREFIXES.map { |p| "#{p}/include" }, # capnp, kj, sparsehash, google, boost
 ]
 
-# External `libraries X` -> linker flags. capnp/kj come from nix-sdk; the rest
-# from the macOS SDK.
+# External `libraries X` -> linker flags. capnp/kj come from the dep prefix(es)
+# (see DEP_PREFIXES); the rest from the macOS SDK.
 LIB_LDFLAGS = {
   "capnp" => ["-lcapnp"], "kj" => ["-lkj"],
   "curl" => ["-lcurl"], "iconv" => ["-liconv"],
@@ -256,7 +270,7 @@ def apply_common_settings(config, extra = {})
   bs["CODE_SIGN_IDENTITY"]          = "-"    # ad-hoc (rave CS_IDENTITY); enough for a local launchable build
   bs["APP_MIN_OS"]                  = DEPLOY_TGT  # for ${APP_MIN_OS} expansion in Info.plist templates
   bs["HEADER_SEARCH_PATHS"]         = ["$(inherited)"] + COMMON_HEADER_PATHS
-  bs["LIBRARY_SEARCH_PATHS"]        = ["$(inherited)", "#{NIX_ARM}/lib"]
+  bs["LIBRARY_SEARCH_PATHS"]        = ["$(inherited)", *DEP_PREFIXES.map { |p| "#{p}/lib" }]
   bs["OTHER_CFLAGS"]                = [
     "$(inherited)", *GLOBAL_DEFINE_FLAGS,
     "-Wno-parentheses", "-Wno-sign-compare", "-Wno-switch", "-Wno-c99-designator",

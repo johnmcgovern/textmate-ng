@@ -4,14 +4,22 @@ _Snapshot at end of session 2026-07-25. Point-in-time; when it disagrees with th
 git log or the docs below, trust those._
 
 ## Where things stand
-- **Branch:** `claude/xcode-stream1-seed` (off `master`). **HEAD = `7de0a620`.**
+- **Branch:** `claude/xcode-stream1-seed` (off `master`), **pushed** to
+  `GH—johnmcgovern` (upstream set). HEAD moves as the loop commits; the branch is
+  in sync with the remote.
 - **Phase 2 / Stream 1 (Xcode migration seed): COMPLETE.** `xcodebuild -target
   TextMate` builds a launchable, ad-hoc-signed `TextMate.app` — 50 static libs, 11
   CLI tools, 3 loadable bundles (Dialog/Dialog2/TextMateQL), full bundle layout,
   Info.plist/entitlements. `codesign --verify --deep --strict` passes; it launches
   without crashing.
-- **CI fix: committed (`7de0a620`), NOT pushed.** Fixes the Apple-Silicon runner
-  failure (`./configure` hardcoded `/usr/local`; now auto-detects `brew --prefix`).
+- **CI: GREEN.** The Apple-Silicon runner fix (`brew --prefix` auto-detect) plus a
+  follow-up configure lib-check fix (`bd32681b`) are pushed; the `CI` workflow
+  (`configure` + `ninja TextMate`) completes green — the full 853-step rave build
+  links + signs `TextMate.app` on `macos-latest`. The feared `bl DefaultBundles.tbz`
+  download does not run in this path.
+- **Phase 2 / Stream 2 (reproducible deps): IN PROGRESS.** The Xcode seed's
+  `~/nix-sdk` hardcode is replaced by a `brew --prefix`-default `DEP_PREFIXES`
+  resolver (override via `TM_DEP_PREFIX`). See `ide/PHASE2_PROGRESS.md`.
 
 ## Documentation map (read in this order)
 1. `PROJECT_PHASES.md` — top-level 6-phase roadmap (milestones). End state = Swift
@@ -22,17 +30,18 @@ git log or the docs below, trust those._
 3. Auto-memory `textmate-xcode-migration-phase2.md` + `textmate-build-setup.md`.
 
 ## Immediate next steps (pick up here)
-1. **Push the branch** to `GH—johnmcgovern` (it has no upstream yet) so CI runs:
-   `git push -u GH—johnmcgovern claude/xcode-stream1-seed`. (User pushes; agent
-   should ask before any push.)
-2. **Watch the CI run** after push. The `configure` step should now pass; the
-   `ninja TextMate` step runs the *old* rave build and may surface further
-   arm64-runner issues — most likely the `bl … DefaultBundles.tbz` download (known
-   flaky offline; see `textmate-build-setup`). Triage whatever it hits.
-3. **Then resume Phase 2**, remaining streams (order is flexible; 5 is independent
-   of 2/3):
-   - **Stream 2** — dependency integration (capnp/boost/Onigmo/kvdb) into the Xcode
-     build. Largely already working via nix-sdk paths in the seed; formalize.
+1. ~~**Push the branch** + **watch CI.**~~ **DONE** — branch pushed, upstream set,
+   CI green (full rave `ninja TextMate` build links + signs the app on the
+   arm64 runner; no `bl` download in that path).
+2. **Finish Stream 2** — the dep-prefix resolver is in the seed (Homebrew default,
+   `TM_DEP_PREFIX` override). Remaining: prove the Homebrew default builds on a
+   runner (do it as part of Stream 6's xcodebuild CI job), and decide dep-version
+   pinning (Brewfile/lockfile) vs. floating formulae.
+3. **Then the rest of Phase 2**, remaining streams (order is flexible; 5 is
+   independent of 2/3):
+   - **Stream 6** — CI via `xcodebuild` (add a job that regenerates the seed and
+     `xcodebuild -target TextMate` on a Homebrew runner). This is what actually
+     exercises Stream 2's Homebrew default end-to-end.
    - **Stream 5** — API modernization (WebView→WKWebView, KVO). Note: the global
      `<WebKit/WebKit.h>` in `Shared/PCH/prelude.m` is what forced the option-4 farm
      workaround; Stream 5 may let that be simplified.

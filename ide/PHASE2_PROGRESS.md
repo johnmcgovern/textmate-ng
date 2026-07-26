@@ -1,6 +1,26 @@
 # TextMate Phase 2 — Stream 1 (Xcode migration) progress & handoff
 
-_Last updated: 2026-07-25. Branch: `claude/xcode-stream1-seed` (off `master`)._
+_Last updated: 2026-07-25 (Stream 2 dep-prefix resolver). Branch: `claude/xcode-stream1-seed` (off `master`)._
+
+## 🔄 STREAM 2 IN PROGRESS — reproducible deps (dep-prefix resolver landed)
+The Xcode seed no longer hardcodes `~/nix-sdk/{arm64,x86_64}`. `ide/seed_xcodeproj.rb`
+now resolves external deps (capnp/kj/boost/sparsehash) through a **`DEP_PREFIXES`**
+list, mirroring `./configure`:
+- **Default:** `brew --prefix` (→ `/opt/homebrew` on Apple Silicon, `/usr/local` on
+  Intel; `/usr/local` if brew is absent). This makes the Xcode build reproducible on
+  a clean CI runner after `brew install boost capnp google-sparsehash …` — the same
+  formulae the ninja CI already installs — which is the precondition for Stream 6.
+- **Override:** `TM_DEP_PREFIX` (colon-separated list) for non-Homebrew setups. The
+  local dev box still builds with
+  `TM_DEP_PREFIX="$HOME/nix-sdk/arm64:$HOME/nix-sdk/x86_64"` (boost header-only lives
+  only under the x86_64 prefix). Each prefix contributes `<p>/include` + `<p>/lib`.
+
+Verified behavior-preserving: regenerate + `xcodebuild -target TextMate` with the
+nix override → **BUILD SUCCEEDED**, `codesign --verify --deep --strict` passes.
+
+Still TODO for Stream 2 to be "done": confirm the Homebrew default actually builds on
+a runner (couples with Stream 6 CI job), and decide whether to pin dep versions
+(lockfile / `brew bundle` Brewfile) for true reproducibility vs. floating formulae.
 
 This doc is the entry point for a **looping/autonomous session** continuing the
 Xcode migration. Read it top to bottom, then work the "Next actions" list.

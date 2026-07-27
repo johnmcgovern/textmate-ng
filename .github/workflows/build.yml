@@ -2,6 +2,14 @@ name: CI
 
 on: [push]
 
+# Supersede an in-flight run when a newer commit lands on the same ref, so the
+# signal you wait on is always for the newest commit rather than a queued backlog
+# of stale ones. Keyed per-ref, so pushes to different branches don't cancel each
+# other. A full run is ~6.5 min, most of it Build + Test.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Stream 6: build the hand-authored TextMate.xcodeproj via xcodebuild. This also
   # exercises Stream 2's reproducible-deps path end-to-end: the seed's DEP_PREFIXES
@@ -13,6 +21,11 @@ jobs:
   # rave parity audit in PROJECT_PHASES.md found no functional gap remaining.
   xcode:
     runs-on: macos-latest
+    # Without this a stuck job runs to GitHub's 6-hour default. The exposure is the
+    # Test step (~205s of the ~390s run): the AllTests scheme includes the GUI
+    # harnesses, which can block rather than fail. 30 min is ~4.5x the current
+    # runtime, so it won't fire on ordinary growth.
+    timeout-minutes: 30
 
     env:
       LANG: en_US.UTF-8
@@ -32,7 +45,11 @@ jobs:
         # multimarkdown: the About pages are compiled from Markdown at build time
         # (bin/gen_html).
         brew install boost capnp google-sparsehash ragel multimarkdown
-        gem install --user-install xcodeproj
+        # Pinned: this gem authors the entire .pbxproj, so an unpinned major/minor
+        # can break CI with no commit touching the repo — the one unpinned input in
+        # an otherwise reproducible dep chain (the brew deps are bottle-pinned).
+        # 1.28.1 is what this project is developed against locally.
+        gem install --user-install xcodeproj -v 1.28.1
     - name: Generate TextMate.xcodeproj
       # ide/gen/ is gitignored (regenerated). extract_specs -> specs.json, then
       # seed_xcodeproj authors the .pbxproj + the <fw/header.h> include farm.

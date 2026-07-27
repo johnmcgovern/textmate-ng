@@ -41,7 +41,15 @@ jobs:
         ruby ide/extract_specs.rb > ide/gen/specs.json
         ruby ide/seed_xcodeproj.rb
     - name: Build
-      run: xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release build
+      # -parallelizeTargets: without it xcodebuild walks targets in the order the
+      # seed added them and warns that manual order is deprecated. It has to be a
+      # command-line flag — the project-level "Parallelize build for command-line
+      # builds" attribute (BuildIndependentTargetsInParallel) is ignored on a
+      # -target build, with either 1 or YES. Safe because every edge is declared
+      # via add_dependency in ide/seed_xcodeproj.rb, so independent targets really
+      # are independent. The Test step below builds via -scheme, which already
+      # parallelizes and never warned.
+      run: xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release -parallelizeTargets build
     # Stream 7: the ~25 per-framework XCTest bundles. These suites had no build rule
     # under rave and had not been built since Feb 2021, so a set of long-dormant
     # failures is skipped by name in the generated AllTests scheme (see SKIPPED_TESTS

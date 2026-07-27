@@ -295,7 +295,19 @@ def apply_common_settings(config, extra = {})
   bs["GCC_CHAR_IS_UNSIGNED_CHAR"]   = "YES"
   bs["CLANG_ENABLE_MODULES"]        = "NO"
   bs["ALWAYS_SEARCH_USER_PATHS"]    = "NO"   # keep USER_HEADER_SEARCH_PATHS quote-only (-iquote)
-  bs["CODE_SIGN_IDENTITY"]          = "-"    # ad-hoc (rave CS_IDENTITY); enough for a local launchable build
+  # Ad-hoc by default (rave CS_IDENTITY) — enough for a local launchable build.
+  # Override from the environment for a real Developer ID build; nothing else in
+  # the seed needs to change when certs land:
+  #   TM_CODE_SIGN_IDENTITY="Developer ID Application: … (TEAMID)" TM_DEVELOPMENT_TEAM=TEAMID
+  bs["CODE_SIGN_IDENTITY"]          = ENV.fetch("TM_CODE_SIGN_IDENTITY", "-")
+  bs["DEVELOPMENT_TEAM"]            = ENV["TM_DEVELOPMENT_TEAM"] if ENV["TM_DEVELOPMENT_TEAM"]
+  # Hardened Runtime is a hard prerequisite for notarization. Release-only: Debug
+  # keeps the unrestricted runtime so lldb/Instruments behave normally. Verified
+  # 2026-07-26 that the app launches and loads both .tmplugin bundles under it —
+  # see NOTARIZATION_HANDOFF.md §2a finding ①. This works *because* the app keeps
+  # `com.apple.security.cs.disable-library-validation`: TMPlugInController loads
+  # third-party plug-ins from ~/Library/Application Support (finding ③).
+  bs["ENABLE_HARDENED_RUNTIME"]     = config.name == "Release" ? "YES" : "NO"
   bs["APP_MIN_OS"]                  = DEPLOY_TGT  # for ${APP_MIN_OS} expansion in Info.plist templates
   bs["HEADER_SEARCH_PATHS"]         = ["$(inherited)"] + COMMON_HEADER_PATHS
   bs["LIBRARY_SEARCH_PATHS"]        = ["$(inherited)", *DEP_PREFIXES.map { |p| "#{p}/lib" }]
@@ -331,6 +343,35 @@ def generate_entitlements(name, src_rel)
   out_abs = File.join(ROOT, out_rel)
   FileUtils.mkdir_p(File.dirname(out_abs))
   File.write(out_abs, File.read(File.join(ROOT, src_rel)).gsub("${CS_GET_TASK_ALLOW}", "false"))
+  out_rel
+end
+
+# Entitlements for the *nested* executables (mate, tm_query, PrivilegedTool, the
+# plug-in helpers). Under Hardened Runtime library validation is on by default, and
+# it rejects a dylib whose Team ID differs from the loading process's. The embedded
+# libcapnp/libkj therefore cannot be loaded by these tools unless either (a) they
+# share a real signing Team ID, or (b) validation is relaxed — and (a) is impossible
+# to satisfy with an ad-hoc signature, which carries no Team ID at all.
+#
+# So this is what keeps a plain unsigned `xcodebuild` build usable. With a real
+# Developer ID the Team IDs match and it becomes redundant; it is kept regardless
+# because the app itself needs the same entitlement permanently for third-party
+# plug-ins (NOTARIZATION_HANDOFF.md §2a finding ③), so nested tools sharing it
+# widens nothing that is not already true of the process loading them.
+def generate_nested_entitlements
+  out_rel = "#{GEN_INCLUDE.sub('include', 'entitlements')}/NestedTool.plist"
+  out_abs = File.join(ROOT, out_rel)
+  FileUtils.mkdir_p(File.dirname(out_abs))
+  File.write(out_abs, <<~PLIST)
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+    \t<key>com.apple.security.cs.disable-library-validation</key>
+    \t<true/>
+    </dict>
+    </plist>
+  PLIST
   out_rel
 end
 
@@ -394,13 +435,18 @@ specs.each do |t|
     if k == :app
       ip = infoplist_for(t)
       bs["INFOPLIST_FILE"] = "$(SRCROOT)/#{ip}" if ip
-      # Mirror the Info.plist's CFBundleIdentifier (com.macromates.${TARGET_NAME})
+      # Mirror the Info.plist's CFBundleIdentifier (com.j23software.${TARGET_NAME})
       # so Xcode stops warning that the plist id differs from an empty
-      # PRODUCT_BUNDLE_IDENTIFIER. NOTE (Stream 3): `com.macromates.*` is MacroMates'
-      # identifier — TextMate-NG must switch to its own id under our Apple Developer
-      # account before notarization. When that happens, change BOTH this setting and
-      # Applications/TextMate/Info.plist's CFBundleIdentifier together.
-      bs["PRODUCT_BUNDLE_IDENTIFIER"] = "com.macromates.$(TARGET_NAME)"
+      # PRODUCT_BUNDLE_IDENTIFIER. Moved off MacroMates' `com.macromates.*`
+      # 2026-07-26 — deliberately *before* the first public build, because the move
+      # orphans existing prefs and saved window state, and doing it later (e.g. at
+      # the eventual individual→J23 Software Team ID migration) would break users a
+      # second time for no reason. Keep this and the app Info.plist in step.
+      #
+      # Note the *file-format* UTIs (com.macromates.textmate.bundle/.theme/.snippet…)
+      # were deliberately NOT renamed: they name the tmbundle ecosystem's on-disk
+      # formats, not this app. See NOTARIZATION_HANDOFF.md.
+      bs["PRODUCT_BUNDLE_IDENTIFIER"] = "com.j23software.$(TARGET_NAME)"
       bs["APP_VERSION"] = APP_VERSION                 # ${APP_VERSION} in Info.plist
       # Pinned, not left to the default: the default-bundles script phase runs `bl`,
       # which downloads from api.textmate.org, and a sandboxed script phase cannot
@@ -597,6 +643,115 @@ def add_about_pages_phase(project, target, t)
   phase.output_paths.each { |p| copy.add_file_reference(project.main_group.new_file(p)) }
 end
 
+# Embed the dependency dylibs the app links out of DEP_PREFIXES (today: capnp's
+# libcapnp/libkj) into Contents/Frameworks, so a shipped .app does not depend on the
+# *builder's* Homebrew prefix existing on the user's machine.
+#
+# Why this is required (verified 2026-07-26, NOTARIZATION_HANDOFF.md §2a finding ②):
+# four binaries — TextMate, mate, tm_query and the QuickLook generator — carried
+# absolute `/opt/homebrew/opt/capnp/lib/*.dylib` load commands. On any Mac without
+# capnp installed at that exact path the app dies at launch with `dyld: Library not
+# loaded`. Notarization does not check this, so the bug ships silently: a perfectly
+# notarized, perfectly unusable build.
+#
+# Deliberately discovers dylibs by scanning the built bundle rather than hard-coding
+# capnp/kj: if a future dependency starts arriving as a dylib, this keeps working
+# instead of failing on a user's machine months later. Runs last (after every copy
+# phase) and re-signs what it rewrites — install_name_tool invalidates signatures,
+# and Xcode's own CodeSign step only covers the outer .app, not nested binaries.
+def add_embed_dylibs_phase(project, target, t)
+  patterns = DEP_PREFIXES.map { |p| "#{p}/*" }.join("|")
+  nested_ent = generate_nested_entitlements
+
+  phase = target.new_shell_script_build_phase("Embed dependency dylibs")
+  phase.shell_path = "/bin/sh"
+  # No declarable outputs (what it produces depends on what the scan finds), so opt
+  # out of dependency analysis rather than let Xcode warn on every build.
+  phase.always_out_of_date = "1"
+  phase.shell_script = <<~SH
+    set -eu
+
+    CONTENTS="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH"
+    FW="$CONTENTS/Frameworks"
+
+    # The outer .app keeps Xcode's own entitlements and its own CodeSign step; only
+    # the nested binaries this phase rewrites are re-signed here.
+    SIGN_ID="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+    NESTED_ENT="$SRCROOT/#{nested_ent}"
+    RUNTIME=""
+    [ "${ENABLE_HARDENED_RUNTIME:-NO}" = "YES" ] && RUNTIME="--options runtime"
+
+    is_external() { case "$1" in #{patterns}) return 0 ;; *) return 1 ;; esac; }
+
+    # Transitively vendor $1's external dylib deps into Frameworks, rewriting each
+    # copy's own id to @rpath so anything linking it resolves inside the bundle.
+    vendor() {
+      for dep in $(otool -L "$1" | tail -n +2 | awk '{print $1}'); do
+        is_external "$dep" || continue
+        base=$(basename "$dep")
+        [ -f "$FW/$base" ] && continue
+        mkdir -p "$FW"
+        cp "$dep" "$FW/$base"
+        chmod u+w "$FW/$base"
+        install_name_tool -id "@rpath/$base" "$FW/$base" 2>/dev/null
+        # libcapnp reaches libkj via @rpath; let it look beside itself.
+        install_name_tool -add_rpath "@loader_path" "$FW/$base" 2>/dev/null || true
+        vendor "$FW/$base"
+      done
+    }
+
+    # Repoint $1's external references at the vendored copies and give it an rpath
+    # to Frameworks, computed from how deep it sits inside Contents/.
+    relink() {
+      bin="$1"; changed=0
+      for dep in $(otool -L "$bin" | tail -n +2 | awk '{print $1}'); do
+        is_external "$dep" || continue
+        install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$bin" 2>/dev/null
+        changed=1
+      done
+      [ "$changed" = "1" ] || return 0
+      # sed rather than sh's prefix-strip expansion: this is a Ruby heredoc, and
+      # Ruby interpolates a hash followed by a dollar-sigil global (not just the
+      # brace form), so writing that expansion literally gets eaten before sh
+      # ever sees it. Learned the hard way — it failed as "bad substitution".
+      rel=$(printf '%s' "$bin" | sed "s|^$CONTENTS/||")
+      up=$(dirname "$rel" | awk -F/ '{ s=""; for (i = 1; i <= NF; i++) s = s "../"; print s }')
+      install_name_tool -add_rpath "@loader_path/$up""Frameworks" "$bin" 2>/dev/null || true
+      sign_nested "$bin"
+      echo "  relinked $rel"
+    }
+
+    # Entitlements are meaningless on a dylib, and required on the executables that
+    # load them (see NestedTool.plist). Contents/MacOS/TextMate is signed here too
+    # but Xcode's own CodeSign step runs after this phase and supersedes it with the
+    # app's real entitlements — that is why the app keeps its full set, not this one.
+    sign_nested() {
+      case "$1" in
+        *.dylib) codesign --force --sign "$SIGN_ID" $RUNTIME --timestamp=none "$1" 2>/dev/null ;;
+        *)       codesign --force --sign "$SIGN_ID" $RUNTIME --timestamp=none \\
+                   --entitlements "$NESTED_ENT" "$1" 2>/dev/null ;;
+      esac
+    }
+
+    machos=$(find "$CONTENTS" -type f -perm -111 \\
+             -exec sh -c 'file -b "$1" | grep -q "Mach-O" && echo "$1"' _ {} \\;)
+
+    for b in $machos; do vendor "$b"; done
+    [ -d "$FW" ] || { echo "note: no external dylibs to embed"; exit 0; }
+    for b in $machos; do relink "$b"; done
+    # The vendored dylibs themselves may reference each other by absolute path.
+    for d in "$FW"/*.dylib; do
+      relink "$d"
+      sign_nested "$d"
+    done
+
+    left=$(find "$CONTENTS" -type f -perm -111 \\
+           -exec sh -c 'otool -L "$1" 2>/dev/null | tail -n +2 | grep -q "#{DEP_PREFIXES.first}" && echo "$1"' _ {} \\; | wc -l)
+    [ "$left" -eq 0 ] || { echo "error: $left binary(ies) still reference #{DEP_PREFIXES.first}"; exit 1; }
+    echo "embedded $(ls "$FW" | wc -l | tr -d ' ') dylib(s); 0 external references remain"
+  SH
+end
+
 # Default-bundles provisioning. rave builds the app's DefaultBundles.tbz at build
 # time (bin/rave's CreateBundlesArchive): run `bl install` against the bundle list
 # in DefaultBundles.tbz.bl, then tar the result. AppController.mm unpacks that
@@ -704,6 +859,8 @@ specs.each do |t|
   if k == :app
     add_about_pages_phase(project, target, t)
     add_default_bundles_phase(project, target, t, targets)
+    # Last: it rewrites and re-signs binaries every other phase has finished copying in.
+    add_embed_dylibs_phase(project, target, t)
   end
 
   puts "bundled #{t['name']} [#{k}] #{buckets.values.sum(&:size)} files, #{loc.size} localized#{ndup > 0 ? ", #{ndup} dup(s) skipped" : ''}"

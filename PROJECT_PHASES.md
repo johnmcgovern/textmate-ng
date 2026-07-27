@@ -1,9 +1,10 @@
 # TextMate → Swift-native macOS: Project Phases & Progress
 
 _High-level progress tracker. Last updated: 2026-07-26 (Streams 7 & 8, rave parity
-audit, rave/ninja retirement, arm64-only decision, Phase 2.5 formalized and
-started: dead-code cleanup, dependency-cycle refactors done — 0 cyclic SCCs —
-and all 3 MacroMates-coupled-service decisions landed)._
+audit, rave/ninja retirement, arm64-only decision, **Phase 2.5 complete**: dead-code
+cleanup, dependency-cycle refactors — 0 cyclic SCCs — all 3 MacroMates-coupled-service
+decisions landed, and the 4 interactive GUI harnesses rewritten as real tests with
+`bin/CxxTest` deleted. 311 tests green)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -28,7 +29,7 @@ duplicating it here goes stale within hours while the loop runs.
 |---|-------|--------|---------------|
 | 1 | **Build bring-up** (rave → ninja compiling) | ✅ Done / pre-existing | — |
 | 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress (signing left) | Large / Med |
-| 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | 🔄 Only `bin/CxxTest` left (blocked on Stream 7 follow-up) | Med / Low |
+| 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | ✅ Done 2026-07-26 | Med / Low |
 | 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ⬜ Not started | Small–Med / Med |
 | 4 | **Swift-ify the AppKit/UI shell, leaf-first** | ⬜ Not started | Very large / Med |
 | 5 | **App shell & lifecycle in Swift** (= recommended end state) | ⬜ Not started | Med / Low–Med |
@@ -51,12 +52,14 @@ layers. Prove toolchain; no behavior change.
 is smallest: Preferences, SoftwareUpdate, CommitWindow, Find, FileBrowser,
 BundleEditor → then DocumentWindow/OakAppKit. Keep `OakTextView` (the NSView text
 surface) as ObjC++ — tightest engine coupling. **Precondition met 2026-07-26
-(Stream 7):** 25 XCTest bundles, 275 tests green under `xcodebuild test`. Read the
-caveat though — that net covers the C++ *core* (text, buffer, regexp, parse,
-selection…). The ObjC++ UI frameworks Phase 4 actually refactors have almost no
-automated coverage: the only UI-layer tests are the 3 interactive `cxx_tests`
-harnesses, which do not assert. Leaf-first ordering and manual launch-verification
-still carry most of the risk here.
+(Stream 7):** 25 XCTest bundles, **311 tests** green under `xcodebuild test`. The
+earlier caveat here — that the net covered only the C++ core and the UI layer had
+nothing but 3 non-asserting interactive harnesses — is **partly addressed**: Phase
+2.5 turned those harnesses into 36 real tests, which is the first automated coverage
+`layout` (geometry/hit-testing/folding) and `OakAppKit` have ever had. It is still
+only two of the frameworks Phase 4 touches; Preferences, Find, FileBrowser,
+CommitWindow, BundleEditor and DocumentWindow remain uncovered, so leaf-first
+ordering and manual launch-verification still carry most of the risk.
 
 **Phase 5** — AppDelegate, NSDocument architecture, MenuBuilder, entry point;
 optionally SwiftUI for auxiliary surfaces (prefs/dialogs/about). Main editing
@@ -103,9 +106,9 @@ deleted:
       (`{Applications,Frameworks,PlugIns}/*/default.rave`, `default.rave`) are
       kept** — they remain `ide/extract_specs.rb`'s live input for regenerating
       `TextMate.xcodeproj`; deleting them is Stage B (below), a separate,
-      deliberate step. `bin/CxxTest` and `bin/gen_html` are kept too — both are
-      load-bearing for the Xcode build now (the 3 GUI test bundles; the About
-      pages).
+      deliberate step. `bin/gen_html` is kept too — still load-bearing for the
+      Xcode build (the About pages). `bin/CxxTest` was also kept at the time; it
+      has since been deleted in Phase 2.5.
 
 **rave retirement policy (decided 2026-07-25; executed 2026-07-26):** the two
 things that kept rave alive were the test suites and the `DownloadBundles`
@@ -147,19 +150,21 @@ Also a naming correction: only **3** frameworks (`OakAppKit`, `ns`, `layout`) us
 CxxTest, via `cxx_tests`. The other 22 are plain `void test_x ()` functions using
 `OAK_ASSERT*`, written for the unused runner in `bin/gen_test`.
 
-- `ide/extract_specs.rb` now captures `cxx_tests` (it silently dropped them).
+- `ide/extract_specs.rb` captured `cxx_tests` (it had silently dropped them). That
+  handling has since been removed again — see Phase 2.5, where the suites became
+  ordinary `tests` and CxxTest went away.
 - `ide/gen_xctest.rb` (new) wraps the OAK-style tests in `XCTestCase` subclasses,
   reusing the assertion macros verbatim from `ide/xctest_preamble.h` (ported from
   `bin/gen_test`, which goes away with rave). Test bodies are unchanged; only
   failure reporting differs — a thrown `oak_exception` becomes an `XCTFail`.
 - `ide/seed_xcodeproj.rb` Pass 4 emits **25 `.xctest` bundles**, one per framework,
-  plus a shared `AllTests` scheme. `xcodebuild test` runs **275 tests green**.
-- The `cxx_tests` GUI suites are compiled (so they stop rotting) but never run:
-  they subclass `CxxTest::TestSuite`, not `XCTestCase`, so XCTest cannot invoke
-  them. That is deliberate — they gate on a `GUI_TESTS` env var and then block in
-  `[NSApp run]` awaiting manual interaction, so they would hang CI. **They are
-  interactive harnesses, not a regression net.** Rewriting them into real
-  assertions is separate, unscheduled work.
+  plus a shared `AllTests` scheme. `xcodebuild test` ran **275 tests green** (311
+  after Phase 2.5).
+- The `cxx_tests` GUI suites were compiled (so they stopped rotting) but never ran:
+  they subclass `CxxTest::TestSuite`, not `XCTestCase`, so XCTest could not invoke
+  them — and they gate on a `GUI_TESTS` env var and then block in `[NSApp run]`
+  awaiting manual interaction, so running them would have hung CI. **They were
+  interactive harnesses, not a regression net.** Rewritten in Phase 2.5.
 - **13 tests are skipped by name** in the generated scheme, each with its reason
   recorded in `SKIPPED_TESTS` (`ide/seed_xcodeproj.rb`). All are long-dormant
   failures, not regressions — but leaving them red would make the CI signal
@@ -304,10 +309,10 @@ Milestones:
 
 ## Phase 2.5 detail — Cleanup & de-MacroMates
 
-🔄 Started 2026-07-26. Candidate list below; each item needs its own remove-or-replace
-decision, so this phase is a set of independent, low-risk cleanups rather than a
-single change. None of it blocks Phase 3 — it's listed here because it *should*
-happen before Phase 3/4 touch the same lib graph and bundle identity again.
+✅ **Done 2026-07-26.** Each item needed its own remove-or-replace decision, so this
+phase was a set of independent, low-risk cleanups rather than a single change. None
+of it blocked Phase 3 — it's here because it *should* happen before Phase 3/4 touch
+the same lib graph and bundle identity again.
 
 **Dead code:**
 - ~~`Applications/NewApplication`~~ **Deleted 2026-07-26** — the unused
@@ -326,12 +331,15 @@ happen before Phase 3/4 touch the same lib graph and bundle identity again.
   GitHub username lookups to `~/Library/Caches/com.macromates.TextMate/githubcredits`
   and queries `api.github.com/legacy/...`, a long-deprecated endpoint — likely
   degrading silently to no GitHub links today, not a build break.)
-- **`bin/CxxTest`** — a large vendored tree serving exactly 3 files
-  (`OakAppKit`/`ns`/`layout`'s `gui_*.mm`), and those 3 don't even run under
-  `xcodebuild test` (see Stream 7: they subclass `CxxTest::TestSuite`, not
-  `XCTestCase`, and would block in `[NSApp run]` if invoked). Blocked on rewriting
-  those 3 suites into real, asserting `XCTestCase`s (tracked as a Stream 7
-  follow-up) — once that's done, `bin/CxxTest` and its `.gitmodules` entry can go.
+- ~~**`bin/CxxTest`**~~ **Deleted 2026-07-26**, along with its `.gitmodules` entry —
+  a 3.8 MB vendored submodule that existed for 4 files. See "GUI harnesses → real
+  tests" below for the rewrite that unblocked it. Also removed with it:
+  `Shared/include/test/cocoa.h` (the `GUI_TESTS`/`[NSApp run]` helper, now referenced
+  by nothing), the `cxx_tests` keyword from `ide/extract_specs.rb` and all three
+  `default.rave` files, and Pass 4's CxxTest scaffolding in `ide/seed_xcodeproj.rb`
+  (the per-file `<cxxtest/TestSuite.h>` wrappers, the `Root.cpp` shim needed to make
+  them link, and the `bin/CxxTest` header-farm entry). The extractor now deliberately
+  ignores `cxx_tests` rather than handling it, so a reappearance is noticed.
 - ~~**Dependency-cycle refactors.**~~ **Done 2026-07-26.** Recomputed the actual
   graph (Tarjan's SCC over `ide/gen/specs.json`'s real `require`/`require_headers`
   edges) rather than trust the old note — found 3 cyclic SCCs of sizes 3, 3, and
@@ -359,6 +367,66 @@ happen before Phase 3/4 touch the same lib graph and bundle identity again.
   simulation before editing and by recomputing from the real spec file after).
   Landed as 4 independent, individually-verified steps — full build green and
   all 275 tests green after each one, not just at the end.
+
+**GUI harnesses → real tests (2026-07-26).** The 4 `gui_*.mm` files were rewritten as
+ordinary OAK-style test files, taking the tree from **275 to 311 tests**. They are
+*not* hand-written `XCTestCase` subclasses: making them plain `void test_x ()`
+functions means the existing `ide/gen_xctest.rb` wraps them like the other 22
+frameworks' tests, so no new seed machinery was needed and all the CxxTest handling
+could simply be deleted. Only `layout`'s and `OakAppKit`'s `tests` globs had to widen
+(`t_*.cc` → `t_*.{cc,mm}`; `OakAppKit` had no `tests` line at all).
+
+| was | now | tests |
+|---|---|---|
+| `layout/tests/gui_layout.mm` | `t_layout.mm` | 15 |
+| `ns/tests/gui_key_events.mm` | `t_key_events.mm` | 7 |
+| `OakAppKit/tests/gui_pop_out.mm` | `t_pop_out.mm` | 5 |
+| `OakAppKit/tests/gui_dictionary.mm` | `t_key_equivalent_view.mm` | 9 |
+
+- **`t_layout.mm`** — the big one, and all of it headless: `ng::layout_t` owns its
+  metrics and only wants a `CGContext` when actually asked to draw. Covers
+  hit-testing ↔ `rect_at_index` round-trips, soft wrap and explicit wrap columns,
+  folding (including the persisted `folded_as_string()` round trip), layout-aware
+  caret movement, gutter line records, selection rects, `draw` into a
+  `CGBitmapContext` asserting pixels actually landed, and multi-byte text never being
+  split mid-character. The old harness' *one* real assertion —
+  `structural_integrity()` in a refresh cycle's destructor, under randomized inserts
+  — is kept as `test_randomized_inserts`, but with a **fixed seed**: the original used
+  `arc4random` and so could not replay a failure.
+- **`t_key_events.mm`** — covers `to_s(NSEvent*)`, which every key binding in the app
+  goes through and which nothing tested. Events are synthesized with
+  `CGEventCreateKeyboardEvent` (what `to_s` reads back internally anyway), so no
+  window or run loop is needed. Because `to_s` resolves key codes through the *active
+  keyboard layout*, the layout-dependent expectations are gated on a US-ANSI probe
+  rather than assumed — this repo has already been bitten once by a locale bug.
+- **`t_pop_out.mm`** — the pop-out's child-window bookkeeping *and* its timing: the
+  animation genuinely runs headlessly, so the tests drive the run loop and assert the
+  window closes itself (with a timeout, so a regression fails instead of hanging).
+- **`gui_dictionary.mm` was dropped, not ported.** It tested no TextMate code — an
+  `NSTextInput`-conforming view built inside the test file, existing so a human could
+  press ⌃⌘D and watch the *system* dictionary service. `OakKeyEquivalentView` is
+  covered instead: real OakAppKit logic (event string ↔ glyph display, recording
+  state, clear keys), read back through the accessibility value, which is both the
+  same string the view draws and a shipped interface.
+
+Two things this turned up worth recording:
+- `folded_as_string()` returns `NULL_STR`, not `""`, when nothing is folded, and
+  `is_line_fold_start_marker()` reports the *grammar's* `foldingStartMarker` pattern —
+  it is not a consequence of a manual `fold()` and needs installed bundles. Both were
+  wrong guesses in the first draft of the tests, caught by running them.
+- `layout->width()`/`height()` return `max(content, viewport)`, so a test with a
+  viewport larger than its content measures the viewport and cannot see content
+  changes at all. The tests pin a deliberately tiny viewport for this reason.
+
+**Launch-verified**, not just green: `⌘G` in a real document flashes the yellow
+pop-out over the match, replaces the previous flash rather than stacking, and the
+window closes itself ~0.7s later — the three behaviours `t_pop_out.mm` asserts,
+confirmed in the running app. The Bundle Editor's Key Equivalent field was exercised
+too; that surfaced one *pre-existing* bug unrelated to this work (a clear button
+offered on a field with no key equivalent — `OakKeyEquivalentView`'s `showClearButton`
+requires a non-empty `eventString`, so the bound value is arriving non-nil, likely an
+`NSObjectController` marker or the `NULL_STR` sentinel crossing into ObjC). Left as a
+follow-up rather than fixed here.
 
 **MacroMates-coupled services — decided and landed 2026-07-26:**
 - ~~**`license`**~~ **Removed.** `Frameworks/license` deleted whole (serial-number

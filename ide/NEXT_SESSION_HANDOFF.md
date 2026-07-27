@@ -103,8 +103,9 @@ shipped build is arm64 regardless of the build host.
 `bin/expand_variables`, `bin/extract_changes`, `bin/update_changes`, `configure`,
 `.travis.yml`, `local-orig.rave`, the ninja CI job) is deleted. **Not** deleted:
 the `.rave` spec files (`ide/extract_specs.rb`'s live input — see "Stage B" in
-`PROJECT_PHASES.md`), `bin/CxxTest` (the 3 GUI suites still compile against it),
-and `bin/gen_html` (the About-pages build phase needs it now).
+`PROJECT_PHASES.md`) and `bin/gen_html` (the About-pages build phase needs it now).
+`bin/CxxTest` was kept at the time but has since been deleted in Phase 2.5, once the
+4 GUI suites that needed it became real tests.
 
 - **Editor support for this repo's own code:** `.tm_properties`' `TM_FRAMEWORK_INCLUDE`
   now points at `ide/gen/include/<fw>/<fw>` (the Xcode seed's farm) instead of

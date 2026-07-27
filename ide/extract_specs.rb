@@ -10,6 +10,10 @@
 #   blocks: target "name" { ... }  config "x" { ... }  arch a b { ... }
 #   ${dirname}=basename(dir)  ${dir}=spec dir  ${target}=target name
 #   sources/headers/tests globs are expanded relative to the spec dir.
+#
+# rave's `cxx_tests` keyword is deliberately not handled: the four files that used
+# it were rewritten as ordinary `tests` (Phase 2.5) and CxxTest is gone, so a
+# reappearance of the keyword should be noticed rather than silently honoured.
 
 require "json"
 require "shellwords"
@@ -25,7 +29,7 @@ def new_target(name, dir)
   {
     "name" => name, "dir" => dir,
     "require" => [], "require_headers" => [],
-    "headers" => [], "sources" => [], "tests" => [], "cxx_tests" => [],
+    "headers" => [], "sources" => [], "tests" => [],
     "libraries" => [], "frameworks" => [],
     "executable" => nil, "prefix" => nil,
     "ln_flags" => [], "files" => [], "copy" => [],
@@ -108,7 +112,6 @@ SPEC_FILES.each do |path|
     when "headers"          then tgt["headers"]  += ev.flat_map { |g| glob_rel(g, dir) }
     when "sources"          then tgt["sources"] += ev.flat_map { |g| glob_rel(g, dir) }
     when "tests"            then tgt["tests"]     += ev.flat_map { |g| glob_rel(g, dir) }
-    when "cxx_tests"        then tgt["cxx_tests"] += ev.flat_map { |g| glob_rel(g, dir) }
     when "executable"       then tgt["executable"] = ev.first
     when "prefix"           then tgt["prefix"]     = ev.first
     when "files", "copy"

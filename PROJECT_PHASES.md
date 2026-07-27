@@ -1,11 +1,13 @@
 # TextMate → Swift-native macOS: Project Phases & Progress
 
-_High-level progress tracker. Last updated: 2026-07-27 (**Phase 3 complete**: Swift
-interop foundation — toolchain baseline Xcode 26.6 / Swift 6.3.3, Swift-facing Clang
-module farm, bridging header, and the first `.swift` file calling both the C++ core
-and the ObjC layer, verified in the running app. Phase 2's one remaining item is
-still signing/notarization (Stream 3), in progress on the side — Phase 3 never
-depended on it)._
+_High-level progress tracker. Last updated: 2026-07-27 (**Phase 3 complete** — Swift
+interop foundation: toolchain baseline Xcode 26.6 / Swift 6.3.3, Swift-facing Clang
+module farm, bridging header, first `.swift` calling both layers. **Phase 4 started**:
+the CommitWindow pilot is ported and verified end to end, and it uncovered two
+pre-existing bugs — `CommitWindowTool` had never been copied into the app bundle, so
+SCM commit was broken in every Xcode-built app since Stream 1. 325 tests green.
+Phase 2's one remaining item is still signing/notarization (Stream 3), in progress on
+the side — neither phase depended on it)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -32,7 +34,7 @@ duplicating it here goes stale within hours while the loop runs.
 | 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress (signing left) | Large / Med |
 | 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | ✅ Done 2026-07-26 | Med / Low |
 | 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ✅ Done 2026-07-27 | Small–Med / Med |
-| 4 | **Swift-ify the AppKit/UI shell, leaf-first** | ⬜ Not started | Very large / Med |
+| 4 | **Swift-ify the AppKit/UI shell, leaf-first** | 🔄 In progress — CommitWindow pilot done 2026-07-27 | Very large / Med |
 | 5 | **App shell & lifecycle in Swift** (= recommended end state) | ⬜ Not started | Med / Low–Med |
 | 6 | **(Optional) core engine → Swift** | ⬜ Likely skip | Huge / High ⚠️ |
 
@@ -78,18 +80,90 @@ Decisions that shaped it, recorded because Phase 4 will lean on all of them:
   the app only) and the importer's `-Xcc` include paths are explicit
   (`swift_xcc_flags`) rather than trusting Xcode to forward `HEADER_SEARCH_PATHS`.
 
-**Phase 4** — migrate ObjC++ UI frameworks Swift-ward starting where engine contact
-is smallest: Preferences, SoftwareUpdate, CommitWindow, Find, FileBrowser,
-BundleEditor → then DocumentWindow/OakAppKit. Keep `OakTextView` (the NSView text
-surface) as ObjC++ — tightest engine coupling. **Precondition met 2026-07-26
-(Stream 7):** 25 XCTest bundles, **311 tests** green under `xcodebuild test`. The
-earlier caveat here — that the net covered only the C++ core and the UI layer had
-nothing but 3 non-asserting interactive harnesses — is **partly addressed**: Phase
-2.5 turned those harnesses into 36 real tests, which is the first automated coverage
-`layout` (geometry/hit-testing/folding) and `OakAppKit` have ever had. It is still
-only two of the frameworks Phase 4 touches; Preferences, Find, FileBrowser,
-CommitWindow, BundleEditor and DocumentWindow remain uncovered, so leaf-first
-ordering and manual launch-verification still carry most of the risk.
+**Phase 4** — 🔄 **In progress.** Migrate ObjC++ UI frameworks Swift-ward starting
+where engine contact is smallest, keeping `OakTextView` (the NSView text surface)
+as ObjC++ — tightest engine coupling. **Precondition met 2026-07-26 (Stream 7):**
+25 XCTest bundles, **311 tests** green under `xcodebuild test`. Phase 2.5 turned
+the old interactive harnesses into 36 real tests, the first automated coverage
+`layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
+uncovered, so each port should land its own tests (the pilot added 14).
+
+Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
+(37k total minus OakTextView's 6.9k, which stays). Suggested order — CommitWindow
+(1.1k, ✅ done), Preferences (1.9k), BundleEditor (1.3k), then Find (3.1k) and the
+mid-size leaves, then FileBrowser (5.0k), DocumentWindow (3.6k) and OakAppKit
+(4.8k) last. **`SoftwareUpdate` (1.2k) is deliberately deferred**: the open Sparkle
+question (`NOTARIZATION_HANDOFF.md` §7) may replace that framework wholesale, so
+porting it now risks porting code that gets deleted.
+
+### Phase 4 pilot — CommitWindow (Done 2026-07-27)
+
+CommitWindow is the SCM commit sheet: `CommitWindowTool` (a CLI shipped in the app
+bundle, which bundle commit scripts invoke) hands the changed files and their
+statuses to the running app over Distributed Objects; `OakCommitWindowServer`
+presents the sheet; on commit the window serializes ` -m '<message>' <paths…>` back
+over the port for the script to splice onto `git commit`.
+
+~85% of it is now Swift (`CommitWindow.swift`, `CWItem.swift`,
+`CWTableCellView.swift`, `CWStatusStringTransformer.swift`, plus a headless-testable
+`CommitWindowLogic.swift`). **What stayed ObjC++ is the interesting part** — it is
+the boundary shape every later port will hit, and it lives behind
+[`CWSupport.h`](Frameworks/CommitWindow/src/CWSupport.h):
+
+- **Distributed Objects is unavailable in Swift** — not merely deprecated, never
+  exposed. The server and the client reply channel (`CWClientChannel`) stay ObjC++.
+- **Two C++-typed `@objc` selectors cannot be implemented by a Swift class**:
+  `variables` (returns `std::map`, called by OakTextView on its delegate) and
+  `performBundleItem:` (takes `bundles::item_ptr`, dispatched to the key window's
+  delegate by `AppController Commands.mm`). `CWInteropAdapter` conforms on the Swift
+  controller's behalf and forwards. **This is the reusable pattern**: a small ObjC++
+  adapter as delegate stand-in, not a rewrite of the caller.
+- **Engine calls got ObjC-clean wrappers** (`path::escape`, `path::display_name`,
+  `format_string::expand`, `io::exec`, `bundles::query`) — the roadmap's "expose a
+  clean interface at the boundary" recipe, and the place to convert the `NULL_STR`
+  sentinel to `nil` exactly once so it never reaches Swift.
+
+Verified end to end, not just built: `CommitWindowTool` driven against the running
+app produced the sheet; the table rendered all 3 files with correct status badges
+and the `?`-status file correctly unchecked; **Commit** returned
+` -m 'pilot commit message'  src/file1.txt src/file2.txt` to the tool (exit 0) and
+**Cancel** returned empty output (exit 1). 325 tests green (311 + 14 new).
+
+**Two pre-existing bugs this pilot uncovered**, both unrelated to Swift:
+
+1. **`CommitWindowTool` was never copied into the app bundle** — so SCM commit was
+   broken in *every* Xcode-built app from Stream 1 until now. `Frameworks/CommitWindow`
+   (a lib) declares `files @CommitWindowTool "MacOS"`, but Pass 3 processed `@refs`
+   only for the bundle target itself, on the stated assumption that "only the bundle
+   declares them." It was the exact same class of gap as the Stream 1 resource
+   correction, and is fixed the same way — closure-wide. It is also why the pilot
+   could not be verified until it was fixed.
+2. **No main window ⇒ the commit command hangs forever.** If the app is not frontmost
+   (or has no open window), `NSApp.mainWindow` is nil, `[nil beginSheet:…]` is a
+   silent no-op, and the tool blocks on a reply that never arrives. Identical in the
+   ObjC++ original, so the port preserves it rather than changing behavior
+   mid-migration; an `os_log_error` now makes it diagnosable. Real fix — fall back to
+   a standalone window, or reply with a failure so the tool exits — is a separate
+   change.
+
+Recipe notes for the next port:
+- Framework Swift needs a per-framework **bridging header** (`<dir>/src/<Target>-Bridging-Header.h`);
+  the seed picks it up by convention. Cross-framework Swift *imports* will need
+  module maps (`SWIFT_MODULES`), which the pilot did not require.
+- The importer's `-Xcc` path is now **all** farm dirs, not a curated list. That is
+  safe only because nothing Swift parses may include `prelude.m`/`.mm` — bridging
+  headers use `prelude.cc` + Cocoa — so the WebKit/`<Network/Network.h>` collision
+  that forces per-target scoping for ObjC++ cannot arise here.
+- A non-Swift target linking a Swift-containing static lib (`CommitWindowTool` →
+  `libCommitWindow.a`) needs `-L$(SDKROOT)/usr/lib/swift`; clang, not swiftc, drives
+  that link and won't find the runtime's `.tbd`s otherwise.
+- **Swift 6 concurrency vs AppKit**, as predicted: `deinit` on a `@MainActor` class
+  cannot touch its own state (teardown moved to an explicit call), and
+  non-`Sendable` `NSEvent` in a local event monitor needs the isolated region to
+  compute before the event passes through.
+- `.swift` files listed in a framework's `tests` glob compile straight into the test
+  bundle (no OAK-assert shim). Shared logic files listed there must stay free of
+  ObjC metadata, or `-ObjC` force-loads the archive's copy and it collides.
 
 **Phase 5** — AppDelegate, NSDocument architecture, MenuBuilder, entry point;
 optionally SwiftUI for auxiliary surfaces (prefs/dialogs/about). Main editing

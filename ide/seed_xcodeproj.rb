@@ -272,22 +272,48 @@ def build_swift_module_farm
   puts "built swift module farm (#{SWIFT_MODULES.size} modules)"
 end
 
-# Farm dirs the bridging header includes from (in addition to what SWIFT_MODULES
-# needs). Kept explicit and small: every entry here is a framework whose headers
-# the Swift importer must parse.
-SWIFT_BRIDGE_FARMS = ["OakFoundation"].freeze
-
-# -Xcc search paths for the Swift Clang importer: everything the shim headers and
-# the bridging header need to compile standalone — the oak headers, the farm dirs
-# of the frameworks SWIFT_MODULES/SWIFT_BRIDGE_FARMS expose, and the dep prefixes
-# (boost/sparsehash via the prelude). Explicit rather than trusting Xcode to
+# -Xcc flags for the Swift Clang importer: everything module shims and bridging
+# headers need to compile standalone — the oak headers, EVERY framework's farm
+# dir, the dep prefixes (boost/sparsehash via the prelude), and the global -D
+# defines (<text/types.h> uses NULL_STR). Explicit rather than trusting Xcode to
 # forward HEADER_SEARCH_PATHS to swiftc, so the importer's view is deterministic.
-def swift_xcc_flags
-  farms = (SWIFT_MODULES.values.flatten.map { |h| h.split("/").first } + SWIFT_BRIDGE_FARMS).uniq
-  dirs = ["$(SRCROOT)/Shared/include"] +
-         farms.map { |fw| "$(SRCROOT)/#{GEN_INCLUDE}/#{fw}" } +
-         DEP_PREFIXES.map { |p| "#{p}/include" }
-  dirs.flat_map { |d| ["-Xcc", "-I#{d}"] }
+#
+# Blanket farm dirs are safe HERE and unsafe for the ObjC++ targets, and the
+# difference is WebKit: the per-target scoping exists because the WebKit PCH's
+# <Network/Network.h> resolves into TM's `network` farm dir on case-insensitive
+# APFS. Nothing the Swift importer parses may include prelude.m/.mm (bridging
+# headers use prelude.cc + Cocoa — see CommitWindow-Bridging-Header.h), so
+# WebKit never enters this context; system-colliding frameworks still get their
+# no-umbrella variant as second-layer insurance.
+def swift_xcc_flags(specs)
+  farms = specs.reject { |s| s["headers"].empty? }.map do |s|
+    base = SYSTEM_FRAMEWORKS.include?(s["name"].downcase) ? GEN_INCLUDE_NOU : GEN_INCLUDE
+    "$(SRCROOT)/#{base}/#{s['name']}"
+  end
+  dirs = ["$(SRCROOT)/Shared/include"] + farms + DEP_PREFIXES.map { |p| "#{p}/include" }
+  dirs.flat_map { |d| ["-Xcc", "-I#{d}"] } + GLOBAL_DEFINE_FLAGS.flat_map { |f| ["-Xcc", f] }
+end
+
+# Swift build settings for any target (lib, app, or test bundle) that compiles
+# .swift sources. The bridging header is committed source, found by convention
+# at <dir>/src/<Target>-Bridging-Header.h. See the Pass 1 comment for why
+# these are per-target and the global CLANG_ENABLE_MODULES=NO stays untouched.
+def apply_swift_settings(bs, config, dir, name, xcc)
+  bs["SWIFT_VERSION"]            = "6.0"
+  bs["SWIFT_OBJC_INTEROP_MODE"]  = "objcxx"
+  bs["SWIFT_OPTIMIZATION_LEVEL"] = config.name == "Release" ? "-O" : "-Onone"
+  bs["SWIFT_INCLUDE_PATHS"]      = ["$(inherited)", "$(SRCROOT)/#{GEN_SWIFT}"]
+  bs["OTHER_SWIFT_FLAGS"]        = ["$(inherited)"] + xcc
+  bh = File.join(dir, "src", "#{name}-Bridging-Header.h")
+  bs["SWIFT_OBJC_BRIDGING_HEADER"] = "$(SRCROOT)/#{bh}" if File.exist?(File.join(ROOT, bh))
+end
+
+# A target with no Swift of its own linking a static lib that contains Swift
+# (e.g. CommitWindowTool → libCommitWindow.a): ld must resolve the archive's
+# autolink references (-lswiftCore …) against the SDK's Swift .tbds, which are
+# not on the default search path when clang, not swiftc, drives the link.
+def swift_runtime_ldflags
+  ["-L$(SDKROOT)/usr/lib/swift"]
 end
 
 # The capnp/ragel codegen tools are invoked by name inside Xcode script build
@@ -510,21 +536,13 @@ specs.each do |t|
         bs["CODE_SIGN_ENTITLEMENTS"] = "$(SRCROOT)/#{generate_entitlements(t['name'], t['entitlements'])}"
       end
     end
-    # Phase 3: Swift interop, scoped to targets that have .swift sources (today:
-    # only the app). SWIFT_OBJC_INTEROP_MODE=objcxx enables C++ interop and makes
-    # the bridging header parse as ObjC++ — the language the UI layer is already
-    # written in. GCC_PREFIX_HEADER does not apply to Swift, and the bridging
-    # header/module shims are compiled standalone, hence the prelude includes in
-    # both (see build_swift_module_farm). The bridging header is committed
-    # source, found by convention at <dir>/src/<Target>-Bridging-Header.h.
+    # Phase 3/4: Swift interop, scoped to targets that have .swift sources.
+    # SWIFT_OBJC_INTEROP_MODE=objcxx enables C++ interop and makes bridging
+    # headers parse as ObjC++ — the language the UI layer is already written in.
+    # GCC_PREFIX_HEADER does not apply to Swift, and bridging headers/module
+    # shims are compiled standalone, hence their explicit prelude includes.
     if t["sources"].any? { |s| s.end_with?(".swift") }
-      bs["SWIFT_VERSION"]            = "6.0"
-      bs["SWIFT_OBJC_INTEROP_MODE"]  = "objcxx"
-      bs["SWIFT_OPTIMIZATION_LEVEL"] = config.name == "Release" ? "-O" : "-Onone"
-      bs["SWIFT_INCLUDE_PATHS"]      = ["$(inherited)", "$(SRCROOT)/#{GEN_SWIFT}"]
-      bs["OTHER_SWIFT_FLAGS"]        = ["$(inherited)"] + swift_xcc_flags
-      bh = File.join(t["dir"], "src", "#{t['name']}-Bridging-Header.h")
-      bs["SWIFT_OBJC_BRIDGING_HEADER"] = "$(SRCROOT)/#{bh}" if File.exist?(File.join(ROOT, bh))
+      apply_swift_settings(bs, config, t["dir"], t["name"], swift_xcc_flags(specs))
     end
   end
   puts "target #{t['name']} [#{k}] (#{t['sources'].size} src)"
@@ -586,12 +604,19 @@ specs.each do |t|
   # it just adds methods at runtime. Without -ObjC every category in the tree
   # (15+ "* Additions.mm" files) is silently dropped: the app links, signs and
   # launches, then throws doesNotRecognizeSelector the moment one is called.
+  # Swift-containing static libs in the closure need the Swift runtime resolved;
+  # when the target has no .swift of its own, clang drives the link and the SDK's
+  # Swift .tbd dir must be added explicitly (see swift_runtime_ldflags).
+  closure_has_swift = closure.any? { |n| BY_NAME[n] && BY_NAME[n]["sources"].any? { |s| s.end_with?(".swift") } }
+  own_swift         = t["sources"].any? { |s| s.end_with?(".swift") }
+  swift_ld          = closure_has_swift && !own_swift ? swift_runtime_ldflags : []
+
   target.build_configurations.each do |config|
     bs = config.build_settings
-    bs["OTHER_LDFLAGS"] = ["$(inherited)", "-ObjC"] + ld_libs + ld_fw + ld_extra +
+    bs["OTHER_LDFLAGS"] = ["$(inherited)", "-ObjC"] + ld_libs + ld_fw + ld_extra + swift_ld +
                           (config.name == "Debug" ? debug_ld : [])
   end
-  puts "linked #{t['name']} [#{k}]: #{closure.size} libs, #{ext_libs.size} ext-libs, #{fworks.size} frameworks"
+  puts "linked #{t['name']} [#{k}]: #{closure.size} libs, #{ext_libs.size} ext-libs, #{fworks.size} frameworks#{swift_ld.empty? ? '' : ', +swift-runtime'}"
 end
 
 # Pass 3: bundle layout for app/plugin/qlgen targets. Each `files`/`copy` entry
@@ -901,8 +926,16 @@ specs.each do |t|
           end
         end
       end
-      # @refs are built products, and only the bundle itself declares them.
-      next unless name == t["name"]
+      # @refs are built products. These come from the whole require closure, not
+      # just the bundle itself — the previous "only the bundle declares them"
+      # assumption was wrong and silently dropped one: `Frameworks/CommitWindow`
+      # (a lib) declares `files @CommitWindowTool "MacOS"`, so from Stream 1
+      # until 2026-07-27 no Xcode-built TextMate.app shipped CommitWindowTool
+      # and every bundle SCM commit command was broken in the built app. rave
+      # copies the assets of every target in the closure (bin/rave, `signature`
+      # → required_targets(include_self: true)) and that is what this mirrors —
+      # the same gap, and the same fix, as the Stream 1 correction for
+      # framework-owned resources. Found by the Phase 4 CommitWindow pilot.
       (entry["refs"] || []).each do |r|
         rt = targets[r.sub(/\A@/, "")] or next   # refs carry an `@` prefix in the spec
         (buckets[[spec, sub]] ||= []) << rt
@@ -964,10 +997,18 @@ specs.reject { |t| t["tests"].empty? }.each do |t|
   name       = t["name"]
   test_name  = "#{name}Tests"
 
-  cmd = ["ruby", File.join(ROOT, "ide/gen_xctest.rb"), name, GEN_TESTS, *t["tests"]].shelljoin
-  generated = `cd #{ROOT.shellescape} && #{cmd}`
-  abort "*** ide/gen_xctest.rb failed for #{name}" unless $?.success?
-  sources = generated.split("\n")
+  # .swift test files are XCTestCase subclasses already — they compile into the
+  # bundle as-is, no OAK-assertion shim. (A framework may also list shared pure
+  # Swift sources in `tests` so logic under test compiles into the bundle; such
+  # files must stay free of ObjC metadata — see CommitWindowLogic.swift.)
+  swift_tests, oak_tests = t["tests"].partition { |f| f.end_with?(".swift") }
+  sources = swift_tests
+  unless oak_tests.empty?
+    cmd = ["ruby", File.join(ROOT, "ide/gen_xctest.rb"), name, GEN_TESTS, *oak_tests].shelljoin
+    generated = `cd #{ROOT.shellescape} && #{cmd}`
+    abort "*** ide/gen_xctest.rb failed for #{name}" unless $?.success?
+    sources += generated.split("\n")
+  end
 
   target = project.new_target(:unit_test_bundle, test_name, :osx, DEPLOY_TGT)
   make_build_rules(project).each { |rule| target.build_rules << rule }
@@ -1024,9 +1065,11 @@ specs.reject { |t| t["tests"].empty? }.each do |t|
     bs["LD_RUNPATH_SEARCH_PATHS"]     = ["$(inherited)", "@loader_path/../Frameworks",
                                          "$(PLATFORM_DIR)/Developer/Library/Frameworks"]
     bs["OTHER_LDFLAGS"] = ["$(inherited)", "-ObjC", "-framework", "XCTest"] + ld_libs +
-                          fworks.flat_map { |f| ["-framework", f] } + ld_extra
+                          fworks.flat_map { |f| ["-framework", f] } + ld_extra +
+                          (swift_tests.empty? && link_libs.any? { |n| BY_NAME[n]["sources"].any? { |s| s.end_with?(".swift") } } ? swift_runtime_ldflags : [])
+    apply_swift_settings(bs, config, t["dir"], test_name, swift_xcc_flags(specs)) unless swift_tests.empty?
   end
-  puts "test bundle #{test_name}: #{t['tests'].size} test file(s), #{link_libs.size} libs"
+  puts "test bundle #{test_name}: #{t['tests'].size} test file(s), #{link_libs.size} libs#{swift_tests.empty? ? '' : ", #{swift_tests.size} swift"}"
 end
 
 # Aggregate to compile-check every static library at once.

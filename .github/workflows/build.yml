@@ -20,11 +20,15 @@ jobs:
       RUBYOPT: "-EUTF-8"
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         submodules: recursive
     - name: Setup
       run: |
+        # The runner image ships aws/tap pre-tapped. We don't install anything from
+        # it, and an untrusted tap makes every later `brew` call print a tap-trust
+        # warning, so drop it rather than blanket-trusting it.
+        brew untap aws/tap || true
         # multimarkdown: the About pages are compiled from Markdown at build time
         # (bin/gen_html).
         brew install boost capnp google-sparsehash ragel multimarkdown

@@ -166,6 +166,69 @@ uninstall note (and the helper is separately due an `SMAppService` rewrite).
 - **`Changes.md`** — historical changelog; the `defaults write com.macromates.TextMate …`
   lines are a record of past releases, not live instructions.
 
+## 2c. Deploy target vs. Homebrew bottle SDK — investigated, NOT a blocker (2026-07-27)
+
+Surfaced by CI: the build emits **46** linker warnings of the form
+
+```
+ld: warning: building for macOS-15.0, but linking with dylib
+'/opt/homebrew/opt/capnp/lib/libcapnp.1.5.0.dylib' which was built for newer version 26.0
+```
+
+`DEPLOY_TGT` is 15.0; Homebrew's capnp bottle is built for macOS 26 (`minos 26.0`,
+`sdk 26.4`). 23 targets × the 2 dylibs — 5 shipped (`TextMate`, `mate`, `tm_query`,
+`TextMateQL`, `bl`) and 18 test bundles. The two vendored copies in
+`Contents/Frameworks/` carry `minos 26.0`; all 9 TextMate-built Mach-Os carry 15.0, and
+`LSMinimumSystemVersion` is 15.0.
+
+This looks like §2a finding ② — an app that notarizes cleanly and dies on a user's Mac.
+**It is not.** Two independent tests, both negative:
+
+**① `dyld` does not enforce `minos`.** A dylib was forged to `minos 99.0` with
+`vtool -set-build-version macos 99.0 99.0`, re-signed ad-hoc, and loaded on macOS 26.5.2
+— the same "dylib newer than the OS" relationship a `minos 26.0` dylib has on macOS 15.
+It produced the *identical* linker warning and then **loaded and ran**. Tested on both
+paths: `dlopen`, and launch-time `LC_LOAD_DYLIB` resolution via a linked executable.
+There is no dyld refusal here. (The prior assumption — that `minos` is a hard gate — is
+wrong; that is why this was tested rather than reasoned about.)
+
+**② The dylibs need nothing macOS 15 lacks.** `libcapnp`/`libkj` link only
+`libSystem.B.dylib` and `libc++.1.dylib`. Of 215 imported symbols, 1,179 are provided by
+the capnp/kj pair itself, leaving **126 that must come from the system — all 126 present
+in `MacOSX15.sdk`. Zero missing.**
+
+```sh
+FW=build/Release/TextMate.app/Contents/Frameworks
+SDK15=/Library/Developer/CommandLineTools/SDKs/MacOSX15.sdk
+nm -u $FW/libcapnp.1.5.0.dylib $FW/libkj.1.5.0.dylib | sed 's/^ *//' \
+  | grep '^_' | sort -u > needed.txt
+nm -g --defined-only $FW/libcapnp.1.5.0.dylib $FW/libkj.1.5.0.dylib \
+  | awk '{print $NF}' | grep '^_' | sort -u > selfprovided.txt
+find $SDK15/usr/lib -name '*.tbd' | xargs cat \
+  | grep -oE "'[^']+'|\"[^\"]+\"|_[A-Za-z0-9_$.]+" | tr -d "'\"" \
+  | grep '^_' | sort -u > sdk15.txt
+comm -23 needed.txt selfprovided.txt | comm -23 - sdk15.txt   # -> empty
+```
+
+The `.tbd` harvest is a deliberately crude grep, so it was validated against a false
+negative: harvesting `MacOSX26.5.sdk` the same way yields 191,340 symbols vs 156,243 for
+15, and the 41,498-symbol difference correctly reports as absent from the 15 set. The
+method discriminates; the zero is real.
+
+**Conclusion: the 46 warnings are advisory noise, not a shipped-breakage signal.** No
+action needed for notarization. Silencing them would mean building capnp from source
+against the 15.0 SDK — not worth it.
+
+**⚠️ Re-check trigger.** This result is specific to the **capnp 1.5.0 bottle as it exists
+today**, and `brew install capnp` in `.github/workflows/build.yml` is *not* version-pinned
+— it takes whatever is current (only the `xcodeproj` gem is pinned, at 1.28.1). A future
+bottle could import a symbol that macOS 15 lacks and this analysis would silently go
+stale. Re-run the snippet above after any capnp major/minor bump, or pin the formula.
+
+**Not proven:** symbol availability is not behavioural equivalence, and none of this is a
+substitute for launching on a real macOS 15 machine. For a hard guarantee rather than
+strong evidence, that is a VM run — everything short of it points the same way.
+
 ## 3. Notarization process (Xcode project — the normal path)
 
 1. **Developer ID Application** certificate (and Developer ID Installer if a `.pkg` is ever wanted).

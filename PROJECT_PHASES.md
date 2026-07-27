@@ -5,7 +5,8 @@ audit, rave/ninja retirement, arm64-only decision, **Phase 2.5 complete**: dead-
 cleanup, dependency-cycle refactors — 0 cyclic SCCs — all 3 MacroMates-coupled-service
 decisions landed, and the 4 interactive GUI harnesses rewritten as real tests with
 `bin/CxxTest` deleted. 311 tests green. Debug config now builds and launches, which
-immediately caught a pre-existing accessibility crash)._
+immediately caught a pre-existing accessibility crash. All functional Phase 2
+cutover criteria verified — only signing/notarization (Stream 3) remains)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -90,9 +91,31 @@ targets with declarative `.rave` specs.
 ### Phase 2 definition of done (cutover criteria)
 Phase 2 is done when the Xcode build is at **feature parity** and rave/ninja can be
 deleted:
-- [ ] `TextMate.app` builds, launches, opens/edits/saves documents
-- [ ] Bundles + plugins load (Dialog, Dialog2), QuickLook generator works
-- [ ] All 11 CLI tools work (`mate`, `tm_query`, …)
+- [x] `TextMate.app` builds, launches, opens/edits/saves documents — verified
+      2026-07-26 on disk, not by eye: an edit + ⌘S changed the file's SHA, and a
+      new document saved through the custom `OakSavePanel` (encoding/line-ending
+      accessory rendering) landed with the exact typed content.
+- [x] Bundles + plugins load (Dialog, Dialog2), QuickLook generator works —
+      verified 2026-07-26: 35 bundles installed, the Bundles menu fully populated,
+      and a real command ran end-to-end (Text → Statistics for Selection returned
+      the correct counts); both `.tmplugin`s confirmed loaded into the live process
+      via `vmmap`, not just present on disk. **QuickLook caveat:** the generator is
+      correctly built and functional — factory exported, `dlopen` clean, and
+      `CFPlugInInstanceCreate` succeeds from a plain host — but Apple's QL host
+      processes are library-validated and refuse ad-hoc-signed plugins (reproduced
+      exactly: the same probe fails when signed with library validation). Loading
+      inside Finder/qlmanage is therefore **gated on Stream 3's real signing
+      identity**, not on any build gap.
+- [x] All 11 CLI tools work (`mate`, `tm_query`, …) — verified 2026-07-26: all 11
+      build in Release, all gave correct functional output, and every executable
+      the app actually ships (`mate`, `tm_query`, `PrivilegedTool`, `tm_dialog`,
+      `tm_dialog2`) runs **in place** in the bundle — the embed-dylibs phase's
+      vendored capnp/kj + nested `disable-library-validation` entitlement work as
+      designed. Known local-dev quirk, not a shipping defect: the *standalone*
+      copies in `build/Release/` reference Homebrew's ad-hoc-signed dylibs directly
+      and carry no entitlement, so under Release's hardened runtime they fail at
+      `dyld` load (Debug copies work; bundled copies work). Static-linking capnp or
+      signing tools with the nested entitlement would fix it if it ever matters.
 - [x] Default-bundles provisioning has an Xcode-world answer (Stream 8)
 - [x] Test suites migrated and green (Stream 7 — 25 bundles, 275 tests)
 - [x] CI builds + tests on a clean machine (run 30199308492: `xcode` job seeds,
@@ -499,6 +522,19 @@ MacroMates' in the meantime.
 
 ## Tracked but not yet scheduled
 
+- **`SyntaxMate` is mispackaged and orphaned** (found 2026-07-26 during cutover
+  verification). Its spec says `prefix "${target}.xpc/Contents"` — it is an **XPC
+  service**, not a CLI tool — but the seed's `kind()` doesn't recognize `.xpc`, so
+  it falls through to `:tool` and builds as a bare executable that nothing wraps.
+  Nothing in the tree references it (no `NSXPCConnection`, no spec `require`, not
+  copied into the app), so nothing is broken today; it was upstream's syntax-
+  highlighting extension host. Decide: package it properly as `.xpc` in the seed,
+  or delete it like the other orphans.
+- **Standalone Release tools vs hardened runtime** — see the CLI-tools cutover
+  criterion above. The copies in `build/Release/` can't load Homebrew's dylibs
+  under library validation; the shipped, bundled copies are fine. Fix only if
+  standalone use of the build products ever matters (static-link capnp/kj, or
+  sign tools with the nested entitlement).
 - ~~**Test-suite migration.**~~ **Done 2026-07-26** — see Stream 7 below.
 - ~~**Default-bundles provisioning.**~~ **Done 2026-07-26** — see Stream 8 below.
 - ~~**Branch integration order.**~~ **Stale, struck 2026-07-26.** This said Stream 4

@@ -150,24 +150,33 @@ NSString* const kUserDefaultsScrollPastEndKey      = @"scrollPastEnd";
 	} else if([attribute isEqualToString:NSAccessibilityURLAttribute]) {
 		value = self.URL;
 	} else {
-		@throw [NSException exceptionWithName:NSAccessibilityException reason:[NSString stringWithFormat:@"Getting accessibility attribute not supported: %@", attribute] userInfo:nil];
+		// Return nil, don't throw, and don't call super. AppKit's legacy accessibility
+		// path probes attributes beyond the ones advertised in
+		// -accessibilityAttributeNames, so throwing raised on ordinary queries — which a
+		// Debug build turns into an abort(), since OakDebug installs an
+		// NSExceptionHandler whose delegate calls abort() on every exception. That made
+		// the Debug app die on opening any document containing a markup.underline.link
+		// scope. nil is the legacy API's "no value for this attribute".
+		//
+		// super is not an option here the way it is in OakKeyEquivalentView: that is an
+		// NSView, and NSView implements these. This is a plain NSObject, and NSObject
+		// implements none of the legacy accessibility methods on a current SDK — calling
+		// super just trades the exception for doesNotRecognizeSelector.
+		value = nil;
 	}
 
 	return value;
 }
 
+// Nothing this object exposes is settable, so both of these can answer without
+// consulting a superclass that has no accessibility implementation (see above).
 - (BOOL)accessibilityIsAttributeSettable:(NSString*)attribute
 {
-	if([[self myAccessibilityAttributeNames] containsObject:attribute])
-		return NO;
-	return [super accessibilityIsAttributeSettable:attribute];
+	return NO;
 }
 
 - (void)accessibilitySetValue:(id)value forAttribute:(NSString*)attribute
 {
-	if([[self myAccessibilityAttributeNames] containsObject:attribute])
-		@throw [NSException exceptionWithName:NSAccessibilityException reason:[NSString stringWithFormat:@"Setting accessibility attribute not supported: %@", attribute] userInfo:nil];
-	[super accessibilitySetValue:value forAttribute:attribute];
 }
 
 - (NSArray*)accessibilityParameterizedAttributeNames

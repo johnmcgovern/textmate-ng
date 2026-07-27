@@ -445,6 +445,24 @@ specs.each do |t|
   ld_extra = link_scope.flat_map { |n| BY_NAME[n] ? BY_NAME[n]["ln_flags"] : [] }
                        .uniq.reject { |f| f == "-bundle" }
 
+  # OakDebug supplies the out-of-line half of the oak/debug asserts — OakBadAssertion,
+  # OakPrintBadAssertion, oak::to_s — which Release compiles out via NDEBUG but Debug
+  # leaves live, so without it every executable fails to link in Debug. rave pulls it
+  # in with default.rave's root-level `config debug { require OakDebug }`; that block
+  # sits outside any target, so extract_specs.rb drops it and nothing here replaces it.
+  #
+  # It must stay Debug-ONLY, which is why this is a raw linker input rather than a
+  # frameworks-phase entry (those, and target dependencies, are per-target and cannot
+  # be scoped to one configuration). OakAssert.mm has a `+load` that installs an
+  # NSExceptionHandler whose delegate calls abort() on every exception, and `+load`
+  # does not care about NDEBUG — combined with the -ObjC below, which deliberately
+  # forces in archive members nothing references, linking this in Release would make
+  # the shipping app abort on any ObjC exception.
+  oak_debug = targets["OakDebug"]
+  target.add_dependency(oak_debug) if oak_debug        # built in both configs, linked in one
+  debug_ld = oak_debug ? ["$(BUILT_PRODUCTS_DIR)/libOakDebug.a"] +
+                         (BY_NAME["OakDebug"]["frameworks"] - fworks).flat_map { |f| ["-framework", f] } : []
+
   # -ObjC is load-bearing, not hygiene. rave links the object files directly
   # (bin/rave's Link rule takes `objects`, not archives), so every .o is included
   # unconditionally. We link .a archives instead, and ld only pulls a member in to
@@ -454,7 +472,8 @@ specs.each do |t|
   # launches, then throws doesNotRecognizeSelector the moment one is called.
   target.build_configurations.each do |config|
     bs = config.build_settings
-    bs["OTHER_LDFLAGS"] = ["$(inherited)", "-ObjC"] + ld_libs + ld_fw + ld_extra
+    bs["OTHER_LDFLAGS"] = ["$(inherited)", "-ObjC"] + ld_libs + ld_fw + ld_extra +
+                          (config.name == "Debug" ? debug_ld : [])
   end
   puts "linked #{t['name']} [#{k}]: #{closure.size} libs, #{ext_libs.size} ext-libs, #{fworks.size} frameworks"
 end

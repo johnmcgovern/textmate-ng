@@ -4,7 +4,8 @@ _High-level progress tracker. Last updated: 2026-07-26 (Streams 7 & 8, rave pari
 audit, rave/ninja retirement, arm64-only decision, **Phase 2.5 complete**: dead-code
 cleanup, dependency-cycle refactors — 0 cyclic SCCs — all 3 MacroMates-coupled-service
 decisions landed, and the 4 interactive GUI harnesses rewritten as real tests with
-`bin/CxxTest` deleted. 311 tests green)._
+`bin/CxxTest` deleted. 311 tests green. Debug config now builds and launches, which
+immediately caught a pre-existing accessibility crash)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -428,6 +429,41 @@ requires a non-empty `eventString`, so the bound value is arriving non-nil, like
 `NSObjectController` marker or the `NULL_STR` sentinel crossing into ObjC). Left as a
 follow-up rather than fixed here.
 
+**Debug config fixed 2026-07-26 — and a trap worth not re-entering.** The Debug app
+and CLI tools failed at link on the `oak/debug` assert symbols; Pass 2 now links
+`libOakDebug.a`, but **in Debug only**, and that scoping is the whole point rather
+than tidiness:
+
+`OakAssert.mm` has a `+load` that installs an `NSExceptionHandler` whose delegate
+calls **`abort()` on every exception** (bar `FSExecutionErrorException`). `+load`
+does not consult `NDEBUG`. The seed's existing Pass 4 comment reasons that linking
+OakDebug in both configs is "harmless — in Release nothing references it", and the
+first attempt at this fix copied that reasoning into Pass 2. **It is wrong for an
+ObjC archive under `-ObjC`**, which the seed passes precisely so ld pulls in members
+nothing references. Linking it unconditionally would have shipped a Release app that
+aborts on any ObjC exception. Because a frameworks-phase entry and a target
+dependency are per-target and cannot be scoped to a configuration, OakDebug goes in
+as a raw linker input in the Debug `OTHER_LDFLAGS` instead. Verified at the binary
+level, not from build settings: `nm` finds `OakExceptionHandlerDelegate` in the Debug
+executable and **not** in the Release one.
+
+Turning Debug on then exposed a real, pre-existing crash — precisely what an
+abort-on-exception handler is for. `OakAccessibleLink` (`OakTextView.mm`) threw
+`NSAccessibilityException` for any attribute outside its advertised list, but AppKit's
+legacy accessibility path probes beyond that list, so **the Debug app aborted on
+opening any document containing a `markup.underline.link` scope** — any Markdown file
+with a URL in it. Two rounds were needed: replacing the throw with
+`[super accessibilityAttributeValue:]` only traded the exception for
+`doesNotRecognizeSelector`, because on a current SDK **`NSObject` implements none of
+the legacy accessibility methods** (measured: only `accessibilityAttributeValue:
+forParameter:` survives; `NSView` still has them, which is why the same
+defer-to-super idiom is safe in `OakKeyEquivalentView` and not here). The class is now
+self-contained: `nil` for unsupported attributes, `NO` for settable, no-op for set.
+The two `[super …]` calls it already had were the same latent crash and went too.
+Verified by opening the file that reproduced it and walking the AX tree with System
+Events — which now returns real roles (`AXGroup, AXTabGroup, AXButton…`) instead of
+aborting, in both Debug and Release.
+
 **MacroMates-coupled services — decided and landed 2026-07-26:**
 - ~~**`license`**~~ **Removed.** `Frameworks/license` deleted whole (serial-number
   purchase/registration flow, `visitOnlineStore:` hardcoded to
@@ -465,12 +501,21 @@ MacroMates' in the meantime.
 
 - ~~**Test-suite migration.**~~ **Done 2026-07-26** — see Stream 7 below.
 - ~~**Default-bundles provisioning.**~~ **Done 2026-07-26** — see Stream 8 below.
-- **Branch integration order.** Stream 4 (`claude/upbeat-galileo-eae114`) and
-  Stream 1 (`claude/xcode-stream1-seed`) are both unmerged, off master. Stream 1's
-  seed already assumes the 15.0 floor, so merge Stream 4 first (or fold it in).
-- **Debug configuration.** Seed work has been Release-only (incl. an NDEBUG
-  define decision at link time). A working Debug config (asserts, `libOakDebug`)
-  is needed before Phase 2 ends — day-to-day development depends on it.
+- ~~**Branch integration order.**~~ **Stale, struck 2026-07-26.** This said Stream 4
+  (`claude/upbeat-galileo-eae114`) and Stream 1 (`claude/xcode-stream1-seed`) were
+  unmerged and needed ordering. Neither branch exists locally or on
+  `GH-johnmcgovern` any more, `default.rave` already carries `APP_MIN_OS "15.0"`,
+  and there are no `@available` guards left outside the `PlugIns/dialog` submodule.
+  Both streams' content is on master; there is nothing to merge.
+- ~~**Debug configuration.**~~ **Done 2026-07-26** — and the original note
+  mischaracterized it. Debug was never wholly missing: the *test bundles* built and
+  ran in Debug all along (that is how the 311 tests run). Only the **app and tools**
+  failed, at link, on the `oak/debug` assert symbols (`OakBadAssertion`,
+  `OakPrintBadAssertion`, `oak::to_s`) that Release compiles out via `NDEBUG`.
+  `default.rave`'s root-level `config debug { require OakDebug }` is what supplies
+  them, and that block sits outside any target so `extract_specs.rb` drops it. Pass 2
+  now links `libOakDebug.a` **in Debug only**. See "Debug config" under Phase 2.5's
+  follow-ups for why Debug-only is load-bearing rather than incidental.
 
 ## Open decisions (need user input eventually)
 

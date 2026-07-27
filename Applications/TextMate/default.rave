@@ -31,7 +31,7 @@ target "${dirname}" {
 	copy  @Dialog @Dialog2   "PlugIns"
 	copy  @TextMateQL        "Library/QuickLook"
 
-	sources src/*.{cc,mm}
+	sources src/*.{cc,mm,swift}
 	executable "MacOS/${target}"
 	frameworks Cocoa
 }

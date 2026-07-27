@@ -36,6 +36,7 @@
 #import <oak/oak.h>
 #import <scm/scm.h>
 #import <text/types.h>
+#import "TextMate-Swift.h"
 
 void OakOpenDocuments (NSArray* paths, BOOL treatFilePackageAsFolder)
 {
@@ -624,6 +625,12 @@ BOOL HasDocumentWindow (NSArray* windows)
 	// at it. macOS's own system crash reporting is unaffected either way.
 
 	[OakCommitWindowServer sharedInstance]; // Setup server
+
+	// Phase 3 proof-of-life: the first Swift↔ObjC↔C++ round trip, once per
+	// launch. Logged rather than shown — it proves the interop toolchain without
+	// changing behavior. Remove once real Swift code exists (Phase 4).
+	static os_log_t log = os_log_create("com.j23software.TextMate", "swift-interop");
+	os_log(log, "%{public}@", [TMSwiftInterop interopDescription]);
 
 	self.didFinishLaunching = YES;
 }

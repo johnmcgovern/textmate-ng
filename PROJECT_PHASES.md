@@ -1,12 +1,11 @@
 # TextMate → Swift-native macOS: Project Phases & Progress
 
-_High-level progress tracker. Last updated: 2026-07-26 (Streams 7 & 8, rave parity
-audit, rave/ninja retirement, arm64-only decision, **Phase 2.5 complete**: dead-code
-cleanup, dependency-cycle refactors — 0 cyclic SCCs — all 3 MacroMates-coupled-service
-decisions landed, and the 4 interactive GUI harnesses rewritten as real tests with
-`bin/CxxTest` deleted. 311 tests green. Debug config now builds and launches, which
-immediately caught a pre-existing accessibility crash. All functional Phase 2
-cutover criteria verified — only signing/notarization (Stream 3) remains)._
+_High-level progress tracker. Last updated: 2026-07-27 (**Phase 3 complete**: Swift
+interop foundation — toolchain baseline Xcode 26.6 / Swift 6.3.3, Swift-facing Clang
+module farm, bridging header, and the first `.swift` file calling both the C++ core
+and the ObjC layer, verified in the running app. Phase 2's one remaining item is
+still signing/notarization (Stream 3), in progress on the side — Phase 3 never
+depended on it)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -32,7 +31,7 @@ duplicating it here goes stale within hours while the loop runs.
 | 1 | **Build bring-up** (rave → ninja compiling) | ✅ Done / pre-existing | — |
 | 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress (signing left) | Large / Med |
 | 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | ✅ Done 2026-07-26 | Med / Low |
-| 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ⬜ Not started | Small–Med / Med |
+| 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ✅ Done 2026-07-27 | Small–Med / Med |
 | 4 | **Swift-ify the AppKit/UI shell, leaf-first** | ⬜ Not started | Very large / Med |
 | 5 | **App shell & lifecycle in Swift** (= recommended end state) | ⬜ Not started | Med / Low–Med |
 | 6 | **(Optional) core engine → Swift** | ⬜ Likely skip | Huge / High ⚠️ |
@@ -45,10 +44,39 @@ several of its items — the license/CrashReporter/SoftwareUpdate MacroMates cou
 "stop being MacroMates"), and because the dependency-cycle refactors should land
 before Phase 3/4 touch the same lib graph for Swift modularization.
 
-**Phase 3** — enable Clang modules (Phase 2 currently `CLANG_ENABLE_MODULES=NO`;
-Swift needs modules), module maps, C++ interop mode, bridging header, toolchain
-baseline. Land the first `.swift` file (leaf util or new feature) calling both
-layers. Prove toolchain; no behavior change.
+**Phase 3** — ✅ **Done 2026-07-27.** The Swift toolchain is proven end to end: the
+first `.swift` file ([`Applications/TextMate/src/SwiftInterop.swift`](Applications/TextMate/src/SwiftInterop.swift))
+calls a C++ core API (`text::pad`, via a Clang module) and an ObjC API
+(`OakNotEmptyString`, via the bridging header), and is itself called from ObjC++
+(`AppController.mm` through the generated `TextMate-Swift.h`) — the full
+Swift↔ObjC↔C++ round trip, logged once at launch (`os_log` subsystem
+`com.j23software.TextMate`, category `swift-interop`) with zero behavior change.
+Verified in the running Release app; Debug and Release both build; 311 tests green.
+
+Decisions that shaped it, recorded because Phase 4 will lean on all of them:
+
+- **Toolchain baseline: Xcode 26.6 / Swift 6.3.3, `SWIFT_VERSION=6.0`**
+  (strict-concurrency language mode from day one, rather than migrating later),
+  `SWIFT_OBJC_INTEROP_MODE=objcxx`.
+- **Global `CLANG_ENABLE_MODULES=NO` is untouched.** The "Swift needs modules"
+  premise in the old plan was too coarse: Swift's importer runs its own Clang and
+  only needs module maps for what Swift imports, so none of the 61 ObjC++/C++
+  targets changed how they compile. Modules exist only in a generated Swift-facing
+  farm (`ide/gen/swift/`, see `SWIFT_MODULES` in `ide/seed_xcodeproj.rb`): per-module
+  shim headers that include the prelude first — the same "headers assume the PCH"
+  contract every TU already relies on — then the farm headers they expose.
+- **The bridging header is deliberately minimal** (Foundation + `<string>` +
+  `<OakFoundation/OakFoundation.h>`), NOT the full prelude: `prelude.mm` drags
+  WebKit/Quartz/AddressBook through the C++-interop importer on every Swift
+  compile, and skipping it also sidesteps the `network`-farm/WebKit
+  `<Network/Network.h>` collision entirely (no `network` farm dir is on the
+  importer's `-Xcc` path).
+- **C-variadic functions are invisible to Swift** — `text::format(char const*, …)`
+  was the natural first call and cannot be imported; `text::pad` (non-variadic,
+  `std::string` return crossing into Swift `String`) proves the same layer.
+- Swift build settings are scoped to targets that have `.swift` sources (today:
+  the app only) and the importer's `-Xcc` include paths are explicit
+  (`swift_xcc_flags`) rather than trusting Xcode to forward `HEADER_SEARCH_PATHS`.
 
 **Phase 4** — migrate ObjC++ UI frameworks Swift-ward starting where engine contact
 is smallest: Preferences, SoftwareUpdate, CommitWindow, Find, FileBrowser,

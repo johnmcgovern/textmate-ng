@@ -40,6 +40,132 @@ live and matching the entity name helps Apple's verification — they check the 
 
 **Do this in parallel with the build, not after it.**
 
+## 2a. Verified findings (2026-07-26, empirical — not estimates)
+
+Run against `build/Release/TextMate.app`, re-signed by hand in a scratch copy. All four
+results were *tested*, not reasoned about.
+
+**① Hardened Runtime already works. ✅** Re-signed inside-out with `--options runtime`
+and the existing `ide/gen/entitlements/TextMate.plist`: signature valid
+(`flags=0x10002(adhoc,runtime)`), app launches, both `.tmplugin`s load. The usual
+notarization landmine is a non-issue here — *but it is not enabled in the build*:
+`ENABLE_HARDENED_RUNTIME` appears nowhere in `ide/seed_xcodeproj.rb`. One setting to add.
+
+**② 🚨 The app links the builder's Homebrew prefix — this is the real distribution
+blocker.** Four binaries carry absolute load commands into `/opt/homebrew`:
+
+| Binary | Links |
+|---|---|
+| `Contents/MacOS/TextMate` | `libcapnp.1.5.0.dylib`, `libkj.1.5.0.dylib` |
+| `Contents/MacOS/mate` | same |
+| `Contents/MacOS/tm_query` | same |
+| `Contents/Library/QuickLook/TextMateQL.qlgenerator/…/TextMateQL` | same |
+
+On any Mac without capnp installed at that exact path, the app dies at launch with
+`dyld: Library not loaded`. It would notarize fine and still be unusable — notarization
+does not check this. Boost/sparsehash are header-only and Onigmo is static, so capnp/kj
+are the *only* two.
+
+**FIXED in the build (2026-07-26).** `ide/seed_xcodeproj.rb` now adds an *Embed
+dependency dylibs* run-script phase to the app target, running last (after every copy
+phase). It scans the built bundle for Mach-O binaries, transitively vendors any dylib
+under `DEP_PREFIXES` into `Contents/Frameworks/`, rewrites ids and references to
+`@rpath`, adds a correctly-computed `@loader_path/…/Frameworks` rpath, and re-signs what
+it touched. It scans rather than hard-codes capnp/kj so a future dylib dependency cannot
+silently reintroduce the bug. The phase fails the build if any external reference
+survives.
+
+Verified on a real Release build: `Contents/Frameworks/` holds the two dylibs, **0**
+`/opt/homebrew` references remain, `codesign --verify --deep --strict` passes, the app
+launches with both plug-ins loaded, capnp mapped from inside the bundle, and `mate` /
+`tm_query` both run.
+
+**③ `disable-library-validation` is genuinely required — do not drop it.**
+`TMPlugInController.mm:126-128` loads `.tmplugin` bundles from
+`~/Library/Application Support/TextMate/PlugIns` (all domains), i.e. **third-party code
+signed by other developers**. Library validation would reject exactly those. Dropping the
+entitlement removes the plugin architecture. The other three entitlements should still be
+re-audited once a real cert exists.
+
+**④ The "fewest entitlements" test can't be finished ad-hoc.** Library validation compares
+*Team IDs*, and ad-hoc signatures have none — so an ad-hoc build can never satisfy it
+(this is what makes ① pass only with the entitlement present). Re-run the audit once a
+Developer ID cert is in the keychain.
+
+**⑤ Hardened Runtime breaks the bundled CLI tools unless they are given the same
+entitlement.** Caught only by running them. With `ENABLE_HARDENED_RUNTIME=YES`, library
+validation applies to `mate`/`tm_query` too, and they load the embedded `libcapnp` — which
+under an ad-hoc signature has no matching Team ID, so `dyld` refuses it. The app itself was
+unaffected (it already carries `disable-library-validation`), so this fails *silently in
+the GUI* and only shows up on the command line. Fixed by signing the nested executables
+with a generated `ide/gen/entitlements/NestedTool.plist` carrying just
+`disable-library-validation`. Note the app keeps its own full entitlement set: Xcode's
+CodeSign step runs after this phase and supersedes the nested signature on
+`Contents/MacOS/TextMate` — verified with `codesign -d --entitlements`.
+
+**Signing inventory — 9 Mach-O objects, inside-out order:**
+`Frameworks/libkj` → `Frameworks/libcapnp` → `Dialog.tmplugin/…/tm_dialog` →
+`Dialog2.tmplugin/…/tm_dialog2` → `Dialog.tmplugin` → `Dialog2.tmplugin` →
+`TextMateQL.qlgenerator` → `Resources/PrivilegedTool` → `MacOS/mate` → `MacOS/tm_query`
+→ outer `.app` (entitlements only on the outer app).
+
+Note `PrivilegedTool` sits in `Resources/`, not `MacOS/`, and `tm_dialog`/`tm_dialog2` are
+Mach-O binaries inside plugin `Resources/`. Signable, but `--deep` will not do the right
+thing — sign each explicitly.
+
+**Not a notarization blocker, but flagged:** `PrivilegedTool` is invoked via
+`AuthorizationExecuteWithPrivileges` (`Shared/include/oak/compat.h:19`, called from
+`Frameworks/authorization/src/server.cc:26` and `Preferences/TerminalPreferences.mm:50`)
+and does `setuid(geteuid())`. Deprecated since 10.7. Notarization checks signatures, not
+API usage, so this passes — but it is the modern `SMAppService`/`SMJobBless` rewrite
+waiting to happen.
+
+## 2b. Bundle identifier moved to `com.j23software.*` (2026-07-26)
+
+Done deliberately *before* the first public build: the move orphans prefs and saved
+window state, and deferring it to the eventual individual→J23 Team ID migration would
+have broken users twice. Bundle ID is independent of Team ID, so it did not need to wait
+for enrollment. Verified: app builds, launches, and now writes
+`~/Library/Preferences/com.j23software.TextMate.plist` and
+`~/Library/Caches/com.j23software.TextMate/`. **311 tests green.**
+
+**Renamed** — things that name *this app*: the three `CFBundleIdentifier`s (TextMate,
+QuickLookGenerator, SyntaxMate) and `PRODUCT_BUNDLE_IDENTIFIER`; the bundles-index cache
+path (writer `BundlesManager.mm` **plus** both readers, `gtm.cc` and the QuickLook
+generator — they hardcode the same literal and silently break if moved apart); `mate`'s
+`URLForApplicationWithBundleIdentifier:` lookup (would otherwise have launched *real*
+TextMate); the QuickLook generator's `NSUserDefaults` suite name; the encoding and
+updater cache paths; Touch Bar item identifiers; the tab-drag pasteboard type; the
+`OakCommand`/`SyntaxMate` error domains; the commit-window port name; the `os_log`
+subsystem.
+
+**Renamed, and more than cosmetic:** `Frameworks/authorization/src/constants.h`. Those
+constants name a **system-wide** LaunchDaemon, a helper in `/Library/PrivilegedHelperTools`,
+a `/var/run` socket and an Authorization right. Shipping publicly under MacroMates' names
+would have had TextMate-NG and a real TextMate install overwrite each other's daemon and
+contend for one socket. ⚠️ Machines that already installed the old helper keep an orphaned
+`com.macromates.auth_server` daemon and plist — nothing removes it, so this needs an
+uninstall note (and the helper is separately due an `SMAppService` rewrite).
+
+**Deliberately NOT renamed** — these name *data and formats*, not the app:
+
+- **The 38 `com.macromates.textmate.*` UTIs** in `Info.plist`. They identify the tmbundle
+  ecosystem's on-disk formats (`.tmbundle`, `.tmTheme`, `.tmLanguage`, `.tmSnippet`…),
+  which VS Code, Sublime and Linguist also consume. Renaming would fork the format
+  identity and break Finder association with every existing file. Most sit under
+  `UTImportedTypeDeclarations` — renaming a type you merely *import* is simply wrong.
+- **The `com.macromates.*` extended attributes** in `OakDocument.mm` (`bookmarks`,
+  `selectionRange`, `crc32`, `folded`, `visibleIndex`, `backup.*`). These are written onto
+  **the user's own files**. Keeping them is a feature: someone migrating from TextMate
+  keeps their per-file bookmarks, selection and folds.
+- **Submodule internals** (`PlugIns/dialog`, `dialog-1.x`): the plug-in bundle ids
+  `com.macromates.plugin.*` and the Dialog IPC port names. Both sides of each IPC pair
+  live in the submodule, so they stay consistent; nested bundle ids need no relation to
+  the host app's. Changing them means forking the submodules — worth doing eventually for
+  brand coherence, but it breaks nothing today.
+- **`Changes.md`** — historical changelog; the `defaults write com.macromates.TextMate …`
+  lines are a record of past releases, not live instructions.
+
 ## 3. Notarization process (Xcode project — the normal path)
 
 1. **Developer ID Application** certificate (and Developer ID Installer if a `.pkg` is ever wanted).

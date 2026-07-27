@@ -314,12 +314,12 @@ static NSDictionary* RemoveOldCommits (NSDictionary* src)
 	{
 		if([payload[@"level"] isEqualToString:@"error"])
 		{
-			static os_log_t log = os_log_create("com.macromates.JavaScript", "error");
+			static os_log_t log = os_log_create("com.j23software.JavaScript", "error");
 			os_log_error(log, "%{public}@:%{public}@: %{public}@", payload[@"filename"], payload[@"lineno"], payload[@"message"]);
 		}
 		else
 		{
-			static os_log_t log = os_log_create("com.macromates.JavaScript", "log");
+			static os_log_t log = os_log_create("com.j23software.JavaScript", "log");
 			os_log(log, "%{public}@: %{public}@", self.webView.title, payload[@"message"]);
 		}
 	}

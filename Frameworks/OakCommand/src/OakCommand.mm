@@ -22,7 +22,7 @@
 NSNotificationName const OakCommandDidTerminateNotification = @"OakCommandDidTerminateNotification";
 NSNotificationName const OakRevealBundleItemNotification    = @"OakRevealBundleItemNotification";
 NSString* const OakCommandUUIDKey                           = @"uuid";
-NSString* const OakCommandErrorDomain                       = @"com.macromates.TextMate.ErrorDomain";
+NSString* const OakCommandErrorDomain                       = @"com.j23software.TextMate.ErrorDomain";
 
 // kHOFileHandleURLScheme is declared by HTMLOutput, which owns the scheme handler.
 

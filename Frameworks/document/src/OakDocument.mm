@@ -540,6 +540,13 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	for(OakDocumentEditor* editor in self.documentEditors)
 		[editor documentWillSave:self];
 
+	// These com.macromates.* names are deliberately NOT renamed alongside the
+	// 2026-07-26 CFBundleIdentifier move. They are extended attributes written onto
+	// *the user's own files*, not app identity — renaming them would silently orphan
+	// every bookmark, selection and fold state on every file ever opened, and would
+	// drop interop with a real TextMate install. Keeping them is a feature: someone
+	// migrating from TextMate keeps their per-file state. Same reasoning keeps the
+	// com.macromates.textmate.* file-format UTIs in Info.plist.
 	std::map<std::string, std::string> res = {
 		{ "com.macromates.bookmarks",      to_s([self stringifyMarksOfType:OakDocumentBookmarkIdentifier]) },
 		{ "com.macromates.selectionRange", to_s(_selection) },

@@ -2964,9 +2964,9 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 // = Touch Bar =
 // =============
 
-static NSTouchBarItemIdentifier kOTVTouchBarCustomizationIdentifier          = @"com.macromates.TextMate.otv.customizationIdentifer";
-static NSTouchBarItemIdentifier kOTVTouchBarItemIdentifierNavigateBookmarks  = @"com.macromates.TextMate.otv.navigateBookmarks";
-static NSTouchBarItemIdentifier kOTVTouchBarItemIdentifierAddRemoveBookmark  = @"com.macromates.TextMate.otv.addRemoveBookmark";
+static NSTouchBarItemIdentifier kOTVTouchBarCustomizationIdentifier          = @"com.j23software.TextMate.otv.customizationIdentifer";
+static NSTouchBarItemIdentifier kOTVTouchBarItemIdentifierNavigateBookmarks  = @"com.j23software.TextMate.otv.navigateBookmarks";
+static NSTouchBarItemIdentifier kOTVTouchBarItemIdentifierAddRemoveBookmark  = @"com.j23software.TextMate.otv.addRemoveBookmark";
 
 - (NSTouchBar*)makeTouchBar
 {

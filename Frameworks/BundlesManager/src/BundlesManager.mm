@@ -517,21 +517,16 @@ namespace
 
 	for(auto path : bundles::locations())
 		bundlesPaths.push_back(path::join(path, "Bundles"));
-	bundlesIndexPath = path::join(path::home(), "Library/Caches/com.macromates.TextMate/BundlesIndex.binary");
+	bundlesIndexPath = path::join(path::home(), "Library/Caches/com.j23software.TextMate/BundlesIndex.binary");
 	cache.set_content_filter(&prune_dictionary);
 
-	// LEGACY bundle index used prior to 2.0-alpha.9467
-	std::string const oldPath = path::join(path::home(), "Library/Caches/com.macromates.TextMate/BundlesIndex.plist");
-	if(access(oldPath.c_str(), R_OK) == 0)
-	{
-		cache.load(oldPath);
-		cache.save_capnp(bundlesIndexPath);
-		unlink(oldPath.c_str());
-	}
-	else
-	{
-		cache.load_capnp(bundlesIndexPath);
-	}
+	// The migration that used to live here — reading the pre-2.0-alpha.9467 plist
+	// bundle index and rewriting it as capnp — was dropped with the 2026-07-26 move
+	// to com.j23software.*. It only ever fired on a file written by an old MacroMates
+	// build under the *old* caches dir, and nothing in this app writes a .plist index,
+	// so at the new path it was unreachable. No loss: this index is a pure cache and
+	// createBundlesIndex: rebuilds it just below.
+	cache.load_capnp(bundlesIndexPath);
 
 	_needsCreateBundlesIndex = YES;
 	[self createBundlesIndex:self];

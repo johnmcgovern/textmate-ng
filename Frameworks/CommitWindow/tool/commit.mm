@@ -14,7 +14,7 @@ static double const AppVersion = 1.1;
 {
 	if(self = [super init])
 	{
-		_portName   = [NSString stringWithFormat:@"com.macromates.commit-window-client.%d", getpid()];
+		_portName   = [NSString stringWithFormat:@"com.j23software.commit-window-client.%d", getpid()];
 		_connection = [NSConnection new];
 
 		[_connection setRootObject:self];

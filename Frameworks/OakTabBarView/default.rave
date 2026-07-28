@@ -4,6 +4,6 @@ target "${dirname}" {
 
 	files gfx/*.png "Resources"
 
-	sources src/*.mm
+	sources src/*.{mm,swift}
 	frameworks Cocoa
 }

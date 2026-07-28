@@ -1,4 +1,6 @@
 #import "OakTabBarView.h"
+#import "OakAnimatorProxy.h"
+#import "OTBSwiftClasses.h" // OakTabItem, OakBox (Swift)
 #import <OakAppKit/NSImage Additions.h>
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakAppKit/OakAppKit.h>
@@ -23,145 +25,11 @@ static void DisableImplicitAnimationForBlock (void(^handler)())
 // = OakTabItem =
 // ==============
 
-static NSString* const OakTabItemPasteboardType = @"com.j23software.TextMate.tabItem";
 
-@class OakTabView;
 
-@interface OakTabItem : NSObject <NSPasteboardWriting>
-@property (nonatomic, readonly) NSString* identifier;
-@property (nonatomic) NSString* title;
-@property (nonatomic) NSString* path;
-@property (nonatomic, getter = isModified) BOOL modified;
-@property (nonatomic, getter = isSelected) BOOL selected;
-@property (nonatomic) CGFloat fittingWidth;
-@property (nonatomic) BOOL needsLayout;
-@property (nonatomic, weak) OakTabView* tabView;
-@end
 
-@implementation OakTabItem
-+ (instancetype)tabItemWithTitle:(NSString*)aTitle path:(NSString*)aPath identifier:(NSString*)anIdentifier modified:(BOOL)flag
-{
-	return [[OakTabItem alloc] initWithTitle:aTitle path:aPath identifier:anIdentifier modified:flag];
-}
 
-+ (instancetype)tabItemFromPasteboardItem:(NSPasteboardItem*)pasteboardItem
-{
-	NSDictionary* plist = [pasteboardItem propertyListForType:OakTabItemPasteboardType];
-	return plist ? [[OakTabItem alloc] initWithTitle:plist[@"title"] path:plist[@"path"] identifier:plist[@"identifier"] modified:[plist[@"modified"] boolValue]] : nil;
-}
 
-- (instancetype)initWithTitle:(NSString*)title path:(NSString*)path identifier:(NSString*)identifier modified:(BOOL)modified
-{
-	if(self = [super init])
-	{
-		_title       = title;
-		_path        = path;
-		_identifier  = identifier;
-		_modified    = modified;
-		_needsLayout = YES;
-	}
-	return self;
-}
-
-- (NSString*)description
-{
-	return [NSString stringWithFormat:@"<%@: %@>", [self class], _title];
-}
-
-- (void)setTitle:(NSString*)newTitle
-{
-	if(_title == newTitle || [_title isEqualToString:newTitle])
-		return;
-	_title = newTitle;
-	self.needsLayout = YES;
-}
-
-- (NSArray*)writableTypesForPasteboard:(NSPasteboard*)aPasteboard
-{
-	return OakIsEmptyString(_path) ? @[ OakTabItemPasteboardType ] : @[ OakTabItemPasteboardType, (NSString*)kUTTypeFileURL ];
-}
-
-- (NSPasteboardWritingOptions)writingOptionsForType:(NSString*)aType pasteboard:(NSPasteboard*)aPasteboard
-{
-	return 0;
-}
-
-- (id)pasteboardPropertyListForType:(NSString*)aType
-{
-	if([aType isEqualToString:(NSString*)kUTTypeFileURL])
-		return [NSURL fileURLWithPath:_path].absoluteString;
-
-	NSMutableDictionary* dict = [NSMutableDictionary dictionary];
-	dict[@"identifier"] = _identifier;
-	dict[@"title"]      = _title;
-	dict[@"path"]       = OakNotEmptyString(_path) ? _path : nil;
-	dict[@"modified"]   = _modified ? @YES : nil;
-	return dict;
-}
-@end
-
-// ====================
-// = OakAnimatorProxy =
-// ====================
-
-@interface OakAnimatorProxy : NSProxy
-@property (nonatomic) id realObject;
-@end
-
-@implementation OakAnimatorProxy
-- (instancetype)initWithRealObject:(id)realObject
-{
-	_realObject = realObject;
-	return self;
-}
-
-- (void)forwardInvocation:(NSInvocation*)anInvocation
-{
-	[NSAnimationContext runAnimationGroup:^(NSAnimationContext* context){
-		context.allowsImplicitAnimation = YES;
-		[anInvocation setTarget:_realObject];
-		[anInvocation invoke];
-	} completionHandler:^{
-	}];
-}
-
-- (NSMethodSignature*)methodSignatureForSelector:(SEL)aSelector
-{
-	return [_realObject methodSignatureForSelector:aSelector];
-}
-@end
-
-// ==========
-// = OakBox =
-// ==========
-
-@interface OakBox : NSView
-@property (nonatomic) NSColor* fillColor;
-@end
-
-@implementation OakBox
-- (BOOL)wantsUpdateLayer
-{
-	return YES;
-}
-
-- (void)updateLayer
-{
-	self.layer.backgroundColor = _fillColor.CGColor;
-}
-
-- (void)drawRect:(NSRect)aRect
-{
-	[_fillColor set];
-	[NSBezierPath fillRect:aRect];
-}
-
-- (void)setFillColor:(NSColor*)color
-{
-	_fillColor = color;
-	self.needsDisplay = YES;
-}
-@end
 
 // ==============
 // = OakTabView =
@@ -707,7 +575,7 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 
 		[self addSubview:self.createNewTabButton positioned:NSWindowAbove relativeTo:nil];
 
-		[self registerForDraggedTypes:@[ OakTabItemPasteboardType ]];
+		[self registerForDraggedTypes:@[ OakTabItem.pasteboardType ]];
 	}
 	return self;
 }

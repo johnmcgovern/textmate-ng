@@ -17,6 +17,11 @@ Columns, roughly in order of how much they hurt:
   load   +load implementations. Swift has no equivalent. Cheap if the body is a
          one-line registration (FileBrowser), expensive if it encodes an
          ordering guarantee (BundleEditor).
+  objc   Swift-impossible *ObjC* constructs, independent of C++: NSProxy
+         subclasses and NSInvocation (which Swift cannot import at all), and
+         C-variadic methods. Added after OakTabBarView — which scored a clean 3
+         — turned out to contain an NSProxy/NSInvocation animator shim. The
+         C++-only columns missed it entirely.
   state  C++ ivars + @properties. This is the BundleEditor killer: when the
          class's *state* is C++, porting means writing an ObjC model layer
          first, which is new code that exists only to let Swift drive C++.
@@ -99,11 +104,12 @@ def analyze(fw, sdk, incs):
     impl = sorted(glob.glob(f"{src}/*.mm") + glob.glob(f"{src}/*.cc") + glob.glob(f"{src}/*.m"))
     loc = sum(len(open(f, errors="ignore").read().splitlines()) for f in impl)
 
-    ivar = prop = sig = load = cbk = 0
+    ivar = prop = sig = load = cbk = objc = 0
     for f in impl + glob.glob(f"{src}/*.h"):
         t = open(f, errors="ignore").read()
         load += len(re.findall(r'^\+\s*\(\s*void\s*\)\s*load\b', t, re.M))
         cbk += len(re.findall(r'\b\w+::callback_t\b', t))
+        objc += len(re.findall(r':\s*NSProxy\b|\bNSInvocation\b|,\s*\.\.\.\s*\)', t))
         for line in t.splitlines():
             s = line.strip()
             if s.startswith("@property") and CXX.search(s):
@@ -114,7 +120,7 @@ def analyze(fw, sdk, incs):
             ivar += sum(1 for l in blk.splitlines() if CXX.search(l) and l.strip().endswith(";"))
 
     hdrs = public_headers(fw)
-    return dict(fw=fw, loc=loc, state=ivar + prop, sig=sig, load=load, cbk=cbk,
+    return dict(fw=fw, loc=loc, state=ivar + prop, sig=sig, load=load, cbk=cbk, objc=objc,
                 direct=imports_as_plain_objc(fw, hdrs, sdk, incs),
                 nibs=len(glob.glob(f"Frameworks/{fw}/resources/**/*.xib", recursive=True)))
 
@@ -126,14 +132,14 @@ def main():
     rows = [analyze(fw, sdk, incs) for fw in UI]
     for r in rows:
         # weights reflect what actually cost time on the first three ports
-        r["score"] = r["cbk"] * 100 + r["load"] * 5 + r["state"] * 8 + r["sig"] + r["loc"] / 500
+        r["score"] = r["cbk"] * 100 + r["objc"] * 10 + r["load"] * 5 + r["state"] * 8 + r["sig"] + r["loc"] / 500
 
-    print(f"{'framework':<18}{'loc':>6}{'pubAPI':>8}{'state':>7}{'sigs':>6}{'+load':>6}{'cbk':>5}{'xib':>5}{'score':>7}")
-    print("-" * 68)
+    print(f"{'framework':<18}{'loc':>6}{'pubAPI':>8}{'state':>7}{'sigs':>6}{'+load':>6}{'cbk':>5}{'objc':>6}{'xib':>5}{'score':>7}")
+    print("-" * 74)
     for r in sorted(rows, key=lambda r: r["score"]):
         api = "direct" if r["direct"] else ("shim" if r["direct"] is not None else "—")
         print(f"{r['fw']:<18}{r['loc']:>6}{api:>8}{r['state']:>7}{r['sig']:>6}"
-              f"{r['load']:>6}{r['cbk']:>5}{r['nibs']:>5}{r['score']:>7.0f}")
+              f"{r['load']:>6}{r['cbk']:>5}{r['objc']:>6}{r['nibs']:>5}{r['score']:>7.0f}")
     print("\nLower score = easier port. See the module docstring for what each column means.")
 
 

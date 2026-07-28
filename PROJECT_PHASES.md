@@ -920,3 +920,58 @@ Corrections this survey makes to the old ordering:
 - **`HTMLOutputWindow` (77 lines) is trivial but coupled**: it scores 0 only
   because it is nearly empty, and it imports `<HTMLOutput/HTMLOutput.h>`, so it
   is best done together with HTMLOutput (715).
+
+### Phase 4 — OakTabBarView (started 2026-07-28)
+
+Picked off the coupling survey as the best remaining candidate. **Started, not
+finished:** `OakTabItem` (the tab model and drag payload) and `OakBox` are Swift;
+`OakTabView` and `OakTabBarView` itself (1234 lines) are still ObjC++.
+
+Two findings, both of which the survey had missed:
+
+1. **`OakAnimatorProxy` must stay Objective-C permanently.** It is an `NSProxy`
+   that forwards every message to its target inside an implicit-animation group
+   — the trick behind `tabView.animator.frame = …`. Swift cannot express either
+   half: `NSProxy` is not an `NSObject` subclass, and `-forwardInvocation:`
+   needs `NSInvocation`, which **Swift cannot import at all**. Split out into
+   [`OakAnimatorProxy.h/.mm`](Frameworks/OakTabBarView/src/OakAnimatorProxy.mm).
+   `ide/coupling_survey.py` grew an `objc` column for exactly this class of
+   blocker — it had been measuring C++ coupling only, and scored this framework
+   a clean 3 while it contained something as impossible for Swift as a C++
+   virtual subclass. OakTabBarView now scores 23; still the best sizeable
+   candidate, and the ranking is otherwise unchanged.
+2. **`OakTabBarViewController` (235 lines) is dead code.** Nothing in the tree
+   references it — not source, xib, plist, or spec (beyond its own `headers`
+   export). `DocumentWindowController` builds an `OakTabBarView` directly and
+   implements `OakTabBarViewDataSource` itself. It was not ported; deleting it
+   is a separate decision, in the spirit of the Phase 2.5 dead-code removals.
+
+**A porting hazard worth memorising, caught only by running the app:**
+
+```objc
+@property (nonatomic, getter = isSelected) BOOL selected;   // -selected / -setSelected:
+```
+```swift
+@objc(isSelected) var selected: Bool                        // -isSelected / -setIsSelected:  ⚠️
+```
+
+`@objc(name)` on a Swift *property* renames the property, so the setter becomes
+`setIsSelected:` — it is **not** the equivalent of ObjC's `getter=` attribute.
+The build was clean, the tests were green, and the app died with
+`-[OakTabItem setSelected:]: unrecognized selector` the moment a second tab
+opened. The only spelling that reproduces the ObjC accessor pair is to annotate
+each accessor:
+
+```swift
+@objc var selected: Bool {
+    @objc(isSelected) get { _selected }
+    @objc(setSelected:) set { _selected = newValue }
+}
+```
+
+Both `selected` and `modified` had it. **Grep any framework for `getter =`
+before porting its properties** — this pattern is common in this codebase.
+
+Verified in the running app: three files opened into one project window render
+three correctly-titled tabs with the right one selected and its content shown;
+no unrecognized-selector faults in the log.

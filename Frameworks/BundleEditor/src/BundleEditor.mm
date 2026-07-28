@@ -1,6 +1,5 @@
 #import "BundleEditor.h"
-#import "PropertiesViewController.h"
-#import "OakRot13Transformer.h"
+#import "BESwiftClasses.h" // PropertiesViewController, OakRot13Transformer (Swift)
 #import "be_entry.h"
 #import <OakFoundation/NSString Additions.h>
 #import <OakFoundation/OakStringListTransformer.h>

@@ -1,13 +1,14 @@
 # TextMate → Swift-native macOS: Project Phases & Progress
 
 _High-level progress tracker. Last updated: 2026-07-27 (**Phase 3 complete** — Swift
-interop foundation: toolchain baseline Xcode 26.6 / Swift 6.3.3, Swift-facing Clang
-module farm, bridging header, first `.swift` calling both layers. **Phase 4 started**:
-the CommitWindow pilot is ported and verified end to end, and it uncovered two
-pre-existing bugs — `CommitWindowTool` had never been copied into the app bundle, so
-SCM commit was broken in every Xcode-built app since Stream 1. 325 tests green.
-Phase 2's one remaining item is still signing/notarization (Stream 3), in progress on
-the side — neither phase depended on it)._
+interop foundation. **Phase 4 in progress**: CommitWindow (pilot) and Preferences are
+ported and verified in the running app; BundleEditor is partially ported — its
+`PropertiesViewController` and value transformer are Swift, its 1072-line window
+controller deliberately is not, because its state is C++ (`be::entry_t` browser tree,
+`plist::dictionary_t` + boost visitors) and it needs `+load` and a `bundles::callback_t`
+subclass, neither of which Swift can express. 325 tests green. Phase 2's one remaining
+item is still signing/notarization (Stream 3), in progress on the side — no phase
+depended on it)._
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -34,7 +35,7 @@ duplicating it here goes stale within hours while the loop runs.
 | 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress (signing left) | Large / Med |
 | 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | ✅ Done 2026-07-26 | Med / Low |
 | 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ✅ Done 2026-07-27 | Small–Med / Med |
-| 4 | **Swift-ify the AppKit/UI shell, leaf-first** | 🔄 In progress — CommitWindow pilot done 2026-07-27 | Very large / Med |
+| 4 | **Swift-ify the AppKit/UI shell, leaf-first** | 🔄 In progress — CommitWindow + Preferences done, BundleEditor partial (2026-07-27) | Very large / Med |
 | 5 | **App shell & lifecycle in Swift** (= recommended end state) | ⬜ Not started | Med / Low–Med |
 | 6 | **(Optional) core engine → Swift** | ⬜ Likely skip | Huge / High ⚠️ |
 
@@ -90,11 +91,16 @@ uncovered, so each port should land its own tests (the pilot added 14).
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Suggested order — CommitWindow
-(1.1k, ✅ done), Preferences (1.9k, ✅ done), BundleEditor (1.3k), then Find (3.1k)
-and the mid-size leaves, then FileBrowser (5.0k), DocumentWindow (3.6k) and
-OakAppKit (4.8k) last. **`SoftwareUpdate` (1.2k) is deliberately deferred**: the
-open Sparkle question (`NOTARIZATION_HANDOFF.md` §7) may replace that framework
-wholesale, so porting it now risks porting code that gets deleted.
+(1.1k, ✅ done), Preferences (1.9k, ✅ done), BundleEditor (1.3k, ⚠️ partially done —
+see below), then Find (3.1k) and the mid-size leaves, then FileBrowser (5.0k),
+DocumentWindow (3.6k) and OakAppKit (4.8k) last. **`SoftwareUpdate` (1.2k) is
+deliberately deferred**: the open Sparkle question (`NOTARIZATION_HANDOFF.md` §7)
+may replace that framework wholesale, so porting it now risks porting code that
+gets deleted.
+
+**Line count is a bad proxy for port difficulty** — BundleEditor is the
+counterexample (below). Before picking the next framework, grep it for
+`bundles::`/`plist::`/`std::`/`+load`/`callback_t` rather than trusting `wc -l`.
 
 ### Phase 4 pilot — CommitWindow (Done 2026-07-27)
 
@@ -738,3 +744,59 @@ MacroMates' in the meantime.
 - **rave build fate (2026-07-25):** keep it green in parallel until the test suites
   and default-bundles provisioning are migrated to the Xcode world, then tag and
   delete. See "rave retirement policy" under the Phase 2 cutover criteria.
+
+### Phase 4 — BundleEditor (⚠️ partially done 2026-07-27)
+
+**Done:** `PropertiesViewController` and `OakRot13Transformer` are Swift, plus a
+`BESupport.h` shim for `decode::rot13`. `PropertiesViewController` is the File's
+Owner of **all 8 property xibs** (Bundle, Command, FileDrop, Grammar, Macro,
+Shared, Snippet, Theme), so one small class carries eight nib contracts: the
+class name, the outlets `objectController` / `alignmentView` /
+`keyEquivalentView`, and the `properties` key path their object controllers bind
+to.
+
+**Not done: the `BundleEditor` window controller itself (1072 lines).** This is a
+deliberate stop, not an oversight — the survey found it is *not* the leaf its line
+count suggested:
+
+- Its **core state is C++**: `be::entry_ptr` (the NSBrowser model tree),
+  `std::map<bundles::item_ptr, plist::dictionary_t>` (pending edits), and
+  `bundles::item_ptr` (the selected item). The browser delegate methods index
+  into the C++ tree directly (`parent_for_column`).
+- Property bags round-trip through **`plist::dictionary_t` with a
+  `boost::static_visitor`** for `${var}` expansion — a C++ variant visitor with
+  no ObjC-shaped equivalent.
+- Two things **Swift structurally cannot do**: `+load` (used deliberately —
+  Phase 2.5 registered the `OakRevealBundleItemNotification` observer there
+  precisely because the class is otherwise instantiated lazily and would miss the
+  first reveal), and subclassing `bundles::callback_t`, a C++ struct with virtual
+  methods, to receive bundle-change callbacks.
+- Its **public API is C++-typed**: `-revealBundleItem:(bundles::item_ptr const&)`,
+  called from two other targets (`AppController.mm`, `DocumentWindowController.mm`).
+
+Porting it therefore means first writing a real ObjC model layer (`BEModel`)
+wrapping the entry tree, item operations and plist conversion — a few hundred
+lines of *new* ObjC++ whose only purpose is to let Swift drive C++ it could
+otherwise drive directly. That is a legitimate application of the roadmap's
+"expose a clean interface at the boundary" recipe, but it is a materially bigger
+and riskier job than CommitWindow or Preferences, and it should be scheduled as
+its own piece of work rather than folded into a "1.3k-line leaf".
+
+**Recipe note that generalizes** (hit here first, will recur): a framework whose
+Swift **module** name matches one of its own **ObjC class** names cannot import
+its generated `*-Swift.h` from ObjC++ under `SWIFT_OBJC_INTEROP_MODE=objcxx` —
+the header emits `namespace <Module> { … }` and clang rejects it as "redefinition
+of 'X' as a different kind of symbol". The fix is the same hand-written-header
+pattern used for cross-target consumers, applied *internally*: see
+[`BESwiftClasses.h`](Frameworks/BundleEditor/src/BESwiftClasses.h). Nothing checks
+those declarations against the Swift definitions at build time — a mismatch is an
+unrecognized selector at runtime.
+
+**Verification limit worth fixing:** the 8 nib contracts could only be verified
+indirectly (the Bundle Editor window's construction instantiates all 8
+controllers and reads `.view`/`.labelWidth`; the window opens, the browser
+populates with bundles, and nothing nib-related is logged). A direct test —
+instantiate each nib name and assert the outlets connect — needs the seed to copy
+framework resources into test bundles, which Pass 4 does not currently do. That
+is the single highest-value test-infrastructure gap for the rest of Phase 4,
+since every remaining nib-backed framework has the same blind spot.

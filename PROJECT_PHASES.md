@@ -975,3 +975,18 @@ before porting its properties** — this pattern is common in this codebase.
 Verified in the running app: three files opened into one project window render
 three correctly-titled tabs with the right one selected and its content shown;
 no unrecognized-selector faults in the log.
+
+**The remaining ~1150 lines are one indivisible unit — do not split them.**
+`OakTabView` (~400 lines) and `OakTabBarView` (~700) are mutually coupled:
+OakTabBarView's class extension declares `OakTabView*`/`OakTabFrame*` properties
+and its layout code makes ~40 references across 12+ distinct OakTabView members
+(`tabItem`, `frame`, `hidden`, `overflowButtonVisible`, `dragImage`, `target`,
+`action`, `doubleAction`, `dragAction`, `fittingSize`, `backgroundView`…).
+Porting either one alone means hand-declaring the other's interface in
+`OTBSwiftClasses.h` **with nothing checking it against the Swift** — which is
+exactly how the `setSelected:` crash above happened, multiplied by twenty. Port
+both together so the hand-written header disappears instead of growing; at that
+point the whole framework is Swift except `OakAnimatorProxy`.
+
+`OakTabFrame` (a 20-line layout value object) is internal to the `.mm` and goes
+with them.

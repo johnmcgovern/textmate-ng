@@ -94,17 +94,14 @@ frameworks additionally get contract tests — see "nib-contract tests" below;
 **339 tests across 28 bundles** as of 2026-07-28.
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
-(37k total minus OakTextView's 6.9k, which stays). Suggested order — CommitWindow
-(1.1k, ✅ done), Preferences (1.9k, ✅ done), BundleEditor (1.3k, ⚠️ partially done —
-see below), then Find (3.1k) and the mid-size leaves, then FileBrowser (5.0k),
-DocumentWindow (3.6k) and OakAppKit (4.8k) last. **`SoftwareUpdate` (1.2k) is
-deliberately deferred**: the open Sparkle question (`NOTARIZATION_HANDOFF.md` §7)
-may replace that framework wholesale, so porting it now risks porting code that
-gets deleted.
+(37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
+(1.1k ✅), Preferences (1.9k ✅), BundleEditor (1.3k ⚠️ partial). **`SoftwareUpdate`
+(1.2k) is deliberately deferred** — the open Sparkle question
+(`NOTARIZATION_HANDOFF.md` §7) may replace that framework wholesale.
 
-**Line count is a bad proxy for port difficulty** — BundleEditor is the
-counterexample (below). Before picking the next framework, grep it for
-`bundles::`/`plist::`/`std::`/`+load`/`callback_t` rather than trusting `wc -l`.
+**Ordering is now evidence-based, not line-count-based** — see the coupling
+survey below. Re-run it with `python3 ide/coupling_survey.py` before picking the
+next framework.
 
 ### Phase 4 pilot — CommitWindow (Done 2026-07-27)
 
@@ -858,3 +855,68 @@ Recipe notes:
   register the *test runner* as the machine's txmt:// handler. It instantiates
   the nib directly with the controller as File's Owner instead, which exercises
   the contracts under test without the side effect.
+
+### Phase 4 coupling survey (2026-07-28)
+
+Re-run with `python3 ide/coupling_survey.py`. The roadmap originally ordered
+frameworks by `wc -l`; BundleEditor proved that misleading, so this measures what
+actually cost time on the three completed ports.
+
+| framework | loc | pubAPI | state | sigs | +load | cbk | xib | score |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| HTMLOutputWindow | 77 | shim | 0 | 0 | 0 | 0 | 0 | **0** |
+| CrashReporter | 262 | direct | 0 | 0 | 0 | 0 | 0 | **1** |
+| MenuBuilder | 399 | shim | 0 | 0 | 0 | 0 | 0 | **1** ⚠️ |
+| BundleMenu | 240 | shim | 0 | 1 | 0 | 0 | 0 | **1** |
+| SoftwareUpdate | 1243 | direct | 0 | 0 | 0 | 0 | 0 | **2** (deferred) |
+| **OakTabBarView** | **1601** | **direct** | **0** | **0** | **0** | **0** | **0** | **3** |
+| TMFileReference | 761 | shim | 1 | 1 | 0 | 0 | 0 | 11 |
+| HTMLOutput | 715 | shim | 1 | 3 | 0 | 0 | 0 | 12 |
+| OakCommand | 672 | shim | 1 | 5 | 0 | 0 | 0 | 14 |
+| BundlesManager | 995 | shim | 4 | 3 | 0 | 0 | 0 | 37 |
+| Find | 3123 | shim | 4 | 5 | 0 | 0 | 0 | 43 |
+| OakAppKit | 4815 | shim | 3 | 12 | 0 | 0 | 2 | 46 |
+| DocumentWindow | 3564 | shim | 4 | 11 | 0 | 0 | 0 | 50 |
+| OakFilterList | 2528 | shim | 7 | 4 | 0 | 0 | 0 | 65 |
+| FileBrowser | 4585 | shim | 4 | 9 | 3 | 0 | 0 | 65 |
+| BundleEditor | 1254 | shim | 3 | 9 | 1 | 1 | 8 | 141 |
+| OakTextView | 6917 | shim | 16 | 53 | 0 | 4 | 1 | 595 |
+
+`state` = C++ ivars/properties, `sigs` = ObjC methods with C++ in their
+signature, `cbk` = C++ virtual-callback subclasses, `pubAPI` = whether the public
+headers parse as plain ObjC. **`pubAPI: shim` is not by itself a blocker** —
+bridging headers are compiled with `SWIFT_OBJC_INTEROP_MODE=objcxx` and can read
+C++; it means consumers face interop questions, not that the port is hard.
+
+The ranking validates against experience: **OakTextView is worst by 4×**, which
+is exactly the framework the roadmap says stays ObjC++ permanently, and
+**BundleEditor is second-worst despite being only 1254 lines** — matching what
+the partial port actually ran into.
+
+**Recommended next: `OakTabBarView` (1601 lines).** Substantial, user-visible UI
+with *zero* C++ state, zero C++ method signatures, no `+load`, no callback
+subclasses, no nibs, and a public API that imports as plain ObjC. It is the only
+sizeable framework in the tree with a clean bill on every axis. Note its one C++
+line — `std::vector<tab_t>` in a local layout routine (`OakTabBarView.mm:1093`)
+— is a function-local, not state.
+
+Corrections this survey makes to the old ordering:
+
+- **`Find` (3.1k) was slated next; it should not be.** At score 43 it is an order
+  of magnitude harder than OakTabBarView for twice the code. Still a reasonable
+  mid-wave pick, just not the next one.
+- **`OakFilterList` is worse than its size suggests** (7 C++ state members —
+  the highest outside OakTextView). Demote it below DocumentWindow.
+- **`FileBrowser`'s three `+load` are harmless** — each is a one-line
+  `[self registerClass:… forURLScheme:…]`, nothing like the ordering guarantee
+  BundleEditor's encodes. Its score is volume, not structural blockage.
+- ⚠️ **`MenuBuilder` scores 1 but is a trap.** Its *public API is a C++ DSL* —
+  `typedef std::vector<MBMenuItem> MBMenu` plus a designated-initializer
+  aggregate, which Swift cannot construct (both the CommitWindow and Preferences
+  ports had to hand-roll menus instead of calling `MBCreateMenu`). Porting it
+  means redesigning that API for Swift callers, which is a design decision, not
+  a mechanical port. The score is low because the C++ is a typedef rather than
+  state — a known blind spot of the metric.
+- **`HTMLOutputWindow` (77 lines) is trivial but coupled**: it scores 0 only
+  because it is nearly empty, and it imports `<HTMLOutput/HTMLOutput.h>`, so it
+  is best done together with HTMLOutput (715).

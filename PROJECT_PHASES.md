@@ -6,7 +6,9 @@ ported and verified in the running app; BundleEditor is partially ported — its
 `PropertiesViewController` and value transformer are Swift, its 1072-line window
 controller deliberately is not, because its state is C++ (`be::entry_t` browser tree,
 `plist::dictionary_t` + boost visitors) and it needs `+load` and a `bundles::callback_t`
-subclass, neither of which Swift can express. 325 tests green. Phase 2's one remaining
+subclass, neither of which Swift can express. Nib-contract tests now cover the xib
+string contracts that used to fail silently, and caught two real bugs on their first
+run. 339 tests green. Phase 2's one remaining
 item is still signing/notarization (Stream 3), in progress on the side — no phase
 depended on it)._
 
@@ -87,7 +89,9 @@ as ObjC++ — tightest engine coupling. **Precondition met 2026-07-26 (Stream 7)
 25 XCTest bundles, **311 tests** green under `xcodebuild test`. Phase 2.5 turned
 the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
-uncovered, so each port should land its own tests (the pilot added 14).
+uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
+frameworks additionally get contract tests — see "nib-contract tests" below;
+**339 tests across 28 bundles** as of 2026-07-28.
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Suggested order — CommitWindow
@@ -792,11 +796,65 @@ pattern used for cross-target consumers, applied *internally*: see
 those declarations against the Swift definitions at build time — a mismatch is an
 unrecognized selector at runtime.
 
-**Verification limit worth fixing:** the 8 nib contracts could only be verified
-indirectly (the Bundle Editor window's construction instantiates all 8
-controllers and reads `.view`/`.labelWidth`; the window opens, the browser
-populates with bundles, and nothing nib-related is logged). A direct test —
-instantiate each nib name and assert the outlets connect — needs the seed to copy
-framework resources into test bundles, which Pass 4 does not currently do. That
-is the single highest-value test-infrastructure gap for the rest of Phase 4,
-since every remaining nib-backed framework has the same blind spot.
+**Verification gap — closed 2026-07-28**, see "Nib-contract tests" below. The 8
+property xibs now have direct coverage.
+
+### Phase 4 infrastructure — nib-contract tests (Done 2026-07-28)
+
+Nib wiring is the one thing in these ports that fails **silently**: renaming a
+Swift class, an `@IBOutlet`, or a bound key path produces no build error and no
+test failure — just a dead pane, found whenever a user next opens it. Through the
+first three ports the only check was launching the app and looking, and for
+BundleEditor even that was impossible (NSBrowser would not take a synthetic
+selection). Test bundles could not cover it because `ide/seed_xcodeproj.rb`
+Pass 4 built them with **no resources at all**, so any nib load failed.
+
+- **Seed:** `add_test_resources` copies the framework's own `Resources` assets
+  into its `.xctest` bundle, routing `.lproj` content through `add_localized`
+  (a `PBXVariantGroup`) so xibs go through Xcode's ibtool rule — the same
+  mechanism Pass 3 uses, and for the same reason. Deliberately *not*
+  `asset_closure`: a test needs the nibs of the framework under test, and pulling
+  every transitive dependency's resources into 28 bundles would cost build time
+  and reintroduce the duplicate-basename collisions Pass 3 dedups around.
+- **Tests:** 10 in `BundleEditorTests` (one per property xib, plus the
+  `properties` key path and the key-equivalent view) and 4 in `PreferencesTests`
+  (TerminalPreferences' nib, its 5 outlets, the misspelled
+  `installIndicaitorImage` binding, and the defaults-backed key paths that go
+  through `PreferencesPane`'s undefined-key routing). **339 tests, 28 bundles.**
+
+Two real bugs surfaced on the suite's first run — the gap was hiding things:
+
+1. **`CommandProperties.xib` could only be loaded after `+[BundleEditor
+   sharedInstance]` had run.** It binds through six named value transformers that
+   the singleton registered in its `dispatch_once`. Nothing enforced that order;
+   it merely happened to hold because the Bundle Editor window is the only way to
+   reach those nibs. Registration moved to `+load`, which that file already uses
+   for exactly this "must exist before anyone asks" reason.
+2. **`TerminalPreferences.init()` was never exposed to ObjC.** Swift stopped
+   inferring `@objc` for members of ObjC subclasses in Swift 4, so `-init` fell
+   through to `NSViewController`'s, which chains to `-initWithNibName:bundle:` —
+   an initializer `PreferencesPane` does not implement (it declares its own
+   designated init, so `NSViewController`'s are not inherited) — and the Swift
+   runtime trapped. Invisible until something creates the class from ObjC, which
+   is precisely what a test does.
+
+**Interop hazard worth carrying forward:** an `NSException` raised inside nib
+loading now unwinds through a Swift frame (`-[NSViewController view]` calls into
+Swift's `loadView`), and the Swift runtime aborts with *"C++ exception handling
+detected but the Swift runtime was compiled with exceptions disabled"*. What used
+to be a catchable, loggable ObjC exception is now immediate process death — so
+latent ordering bugs like #1 stop being survivable as this layer moves to Swift.
+
+Recipe notes:
+- A test bundle reaches Swift classes that are `internal` to their framework via
+  the **hand-written ObjC declaration** (`BESwiftClasses.h`,
+  `TerminalPreferences.h`) plus `-ObjC` force-loading the linked archive — *not*
+  by recompiling the Swift sources into the test bundle, which would put two
+  `@objc` classes with the same runtime name in one process.
+- Any initializer a test (or any ObjC caller) uses must be explicitly `@objc`.
+- Bridging headers are now looked up in `<dir>/tests/` before `<dir>/src/`.
+- `TerminalPreferencesNibTests` deliberately avoids `-[NSViewController view]`:
+  `loadView` calls `LSSetDefaultHandlerForURLScheme("txmt", …)`, which would
+  register the *test runner* as the machine's txmt:// handler. It instantiates
+  the nib directly with the controller as File's Owner instead, which exercises
+  the contracts under test without the side effect.

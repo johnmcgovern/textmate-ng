@@ -304,8 +304,11 @@ def apply_swift_settings(bs, config, dir, name, xcc)
   bs["SWIFT_OPTIMIZATION_LEVEL"] = config.name == "Release" ? "-O" : "-Onone"
   bs["SWIFT_INCLUDE_PATHS"]      = ["$(inherited)", "$(SRCROOT)/#{GEN_SWIFT}"]
   bs["OTHER_SWIFT_FLAGS"]        = ["$(inherited)"] + xcc
-  bh = File.join(dir, "src", "#{name}-Bridging-Header.h")
-  bs["SWIFT_OBJC_BRIDGING_HEADER"] = "$(SRCROOT)/#{bh}" if File.exist?(File.join(ROOT, bh))
+  # tests/ first so a test bundle's bridging header lives next to its tests;
+  # src/ is the convention for the framework/app targets themselves.
+  bh = ["tests", "src"].map { |sub| File.join(dir, sub, "#{name}-Bridging-Header.h") }
+                       .find { |p| File.exist?(File.join(ROOT, p)) }
+  bs["SWIFT_OBJC_BRIDGING_HEADER"] = "$(SRCROOT)/#{bh}" if bh
 end
 
 # A target with no Swift of its own linking a static lib that contains Swift
@@ -981,6 +984,56 @@ end
 # Tests are plain free functions asserting with OAK_ASSERT*; ide/gen_xctest.rb wraps
 # them in XCTestCase subclasses.
 
+# A test bundle gets the framework's OWN `Resources` assets, so nib-backed classes
+# can be tested. Without this a test bundle has no Resources at all, and
+# -[NSViewController view] fails with "Could not load NIB" — which is why the
+# nib string contracts (File's Owner class name, outlet names, bound key paths)
+# had no automated coverage through the first three Phase 4 ports. Those contracts
+# break silently: no build error, no test failure, just a dead pane at runtime.
+#
+# Localized files go through add_localized (a PBXVariantGroup in the Resources
+# phase) for the same reason Pass 3 does it: that is what runs .xib through
+# Xcode's built-in ibtool rule, and routing a localized file through a Copy Files
+# phase makes Xcode nest it as English.lproj/English.lproj/.
+#
+# Deliberately NOT the full asset_closure(name) that Pass 3 walks: a test bundle
+# needs the nibs of the framework it is testing, and pulling every transitive
+# dependency's resources into 26 bundles would cost build time and reintroduce the
+# duplicate-basename collisions Pass 3 has to dedup around. Widen this if a test
+# ever needs a dependency's asset.
+def add_test_resources(project, target, t)
+  loc, plain, taken = [], [], {}
+
+  (t["files"].to_a + t["copy"].to_a).each do |entry|
+    spec, sub = copy_dest(entry["dest"])
+    next unless spec == :resources
+    (entry["inputs"] || []).each do |input|
+      expand_input(input).each do |rel|
+        next if File.basename(rel) == "Info.plist"
+        next if rel.end_with?(".md")                  # About pages: app-only, generated
+        parent    = File.basename(File.dirname(rel))
+        localized = parent.end_with?(".lproj")
+        key       = localized ? [:lproj, parent, File.basename(rel)] : [:plain, sub, File.basename(rel)]
+        next if taken[key]
+        taken[key] = rel
+        localized ? loc << rel : plain << [sub, rel]
+      end
+    end
+  end
+  return 0 if loc.empty? && plain.empty?
+
+  loc.each { |rel| add_localized(project, target, rel) }
+
+  plain.group_by(&:first).each do |sub, items|
+    phase = target.new_copy_files_build_phase("Copy resources#{sub.empty? ? '' : "/#{sub}"}")
+    phase.symbol_dst_subfolder_spec = :resources
+    phase.dst_path = sub
+    items.each { |(_, rel)| phase.add_file_reference(project.main_group.new_file(File.join(ROOT, rel))) }
+  end
+
+  loc.size + plain.size
+end
+
 # The framework under test itself. header_closure deliberately excludes self, but a
 # test compiles against the very framework it is testing. Unlike farm_dir there is
 # no target_includes? gate: the headers are the point.
@@ -1069,7 +1122,11 @@ specs.reject { |t| t["tests"].empty? }.each do |t|
                           (swift_tests.empty? && link_libs.any? { |n| BY_NAME[n]["sources"].any? { |s| s.end_with?(".swift") } } ? swift_runtime_ldflags : [])
     apply_swift_settings(bs, config, t["dir"], test_name, swift_xcc_flags(specs)) unless swift_tests.empty?
   end
-  puts "test bundle #{test_name}: #{t['tests'].size} test file(s), #{link_libs.size} libs#{swift_tests.empty? ? '' : ", #{swift_tests.size} swift"}"
+
+  nres = add_test_resources(project, target, t)
+
+  puts "test bundle #{test_name}: #{t['tests'].size} test file(s), #{link_libs.size} libs" \
+       "#{swift_tests.empty? ? '' : ", #{swift_tests.size} swift"}#{nres.zero? ? '' : ", #{nres} resource(s)"}"
 end
 
 # Aggregate to compile-check every static library at once.

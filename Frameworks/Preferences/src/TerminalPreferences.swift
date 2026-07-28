@@ -29,7 +29,14 @@ import AppKit
 
 	@objc dynamic var installIndicaitorImage: NSImage?
 
-	init() {
+	// @objc is load-bearing: Swift stopped inferring @objc for members of ObjC
+	// subclasses in Swift 4, so without it -init is not this initializer at all —
+	// it falls through to NSViewController's, which chains to
+	// -initWithNibName:bundle:, which PreferencesPane does not implement (it
+	// declares its own designated init, so NSViewController's are not inherited)
+	// and the Swift runtime traps. Only shows up when something creates the class
+	// from ObjC, which is exactly what the nib tests do.
+	@objc init() {
 		super.init(nibName: "TerminalPreferences", label: "Terminal", image: NSImage(named: "Terminal", inSameBundleAsClass: TerminalPreferences.self))
 
 		OakStringListTransformer.createTransformer(withName: "OakRMateInterfaceTransformer", andObjectsArray: [kRMateServerListenLocalhost, kRMateServerListenRemote])

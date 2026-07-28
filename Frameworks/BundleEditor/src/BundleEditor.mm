@@ -146,19 +146,51 @@ static be::entry_ptr parent_for_column (NSBrowser* aBrowser, NSInteger aColumn, 
 }
 
 @implementation BundleEditor
-// OakCommand posts this instead of calling us directly — that direct call used
-// to close a cycle in the framework graph (OakCommand required BundleEditor,
-// BundleEditor required OakTextView, OakTextView required OakCommand).
-//
-// Registered in +load, not +sharedInstance/-init: BundleEditor is normally only
-// instantiated lazily (opening the Bundle Editor, or an earlier reveal call), so
-// a crash before that first happens would otherwise post into a class that was
-// never around to observe it. +load runs unconditionally at process startup,
-// matching what the original direct call actually did — [BundleEditor.sharedInstance
-// revealBundleItem:] created the instance on demand if it didn't exist yet, and
-// the notification-based version needs the same guarantee.
+// Everything here has to happen before anything else in the framework is touched
+// — see the two blocks inside for why each one cannot wait for +sharedInstance.
 + (void)load
 {
+	// The property xibs bind through these transformers BY NAME, so they have to
+	// exist before any of those nibs is loaded — CommandProperties.xib alone uses
+	// six of them. They used to be registered in +sharedInstance's dispatch_once,
+	// which happened to work only because the Bundle Editor window is the sole way
+	// to reach those nibs, so the singleton always ran first. That was an invisible
+	// ordering dependency, and the nib tests added 2026-07-28 fell straight into
+	// it: loading CommandProperties.xib without it raises "cannot find value
+	// transformer with name …".
+	//
+	// Worth knowing generally now that this layer is Swift: an NSException raised
+	// inside nib loading unwinds through a Swift frame (-[NSViewController view]
+	// here calls into Swift's loadView), and the Swift runtime traps on it —
+	// "C++ exception handling detected but the Swift runtime was compiled with
+	// exceptions disabled". What used to be a catchable/loggable ObjC exception is
+	// now immediate process death, so latent ordering bugs like this one stop
+	// being survivable.
+	static struct { NSString* name; NSArray* array; } const converters[] =
+	{
+		{ @"OakSaveStringListTransformer",                  @[ @"nop", @"saveActiveFile", @"saveModifiedFiles" ] },
+		{ @"OakInputStringListTransformer",                 @[ @"selection", @"document", @"scope", @"line", @"word", @"character", @"none" ] },
+		{ @"OakInputFormatStringListTransformer",           @[ @"text", @"xml" ] },
+		{ @"OakOutputLocationStringListTransformer",        @[ @"replaceInput", @"replaceDocument", @"atCaret", @"afterInput", @"newWindow", @"toolTip", @"discard", @"replaceSelection" ] },
+		{ @"OakOutputFormatStringListTransformer",          @[ @"text", @"snippet", @"html", @"completionList" ] },
+		{ @"OakOutputCaretStringListTransformer",           @[ @"afterOutput", @"selectOutput", @"interpolateByChar", @"interpolateByLine", @"heuristic" ] },
+	};
+
+	[OakRot13Transformer register];
+	for(auto const& converter : converters)
+		[OakStringListTransformer createTransformerWithName:converter.name andObjectsArray:converter.array];
+
+	// OakCommand posts this instead of calling us directly — that direct call used
+	// to close a cycle in the framework graph (OakCommand required BundleEditor,
+	// BundleEditor required OakTextView, OakTextView required OakCommand).
+	//
+	// Registered in +load, not +sharedInstance/-init: BundleEditor is normally only
+	// instantiated lazily (opening the Bundle Editor, or an earlier reveal call), so
+	// a crash before that first happens would otherwise post into a class that was
+	// never around to observe it. +load runs unconditionally at process startup,
+	// matching what the original direct call actually did — [BundleEditor.sharedInstance
+	// revealBundleItem:] created the instance on demand if it didn't exist yet, and
+	// the notification-based version needs the same guarantee.
 	[NSNotificationCenter.defaultCenter addObserverForName:OakRevealBundleItemNotification object:nil queue:nil usingBlock:^(NSNotification* notification){
 		oak::uuid_t const uuid = to_s((NSString*)notification.userInfo[OakCommandUUIDKey]);
 		if(bundles::item_ptr item = bundles::lookup(uuid))
@@ -168,23 +200,6 @@ static be::entry_ptr parent_for_column (NSBrowser* aBrowser, NSInteger aColumn, 
 
 + (instancetype)sharedInstance
 {
-	static dispatch_once_t onceToken;
-	dispatch_once(&onceToken, ^{
-		static struct { NSString* name; NSArray* array; } const converters[] =
-		{
-			{ @"OakSaveStringListTransformer",                  @[ @"nop", @"saveActiveFile", @"saveModifiedFiles" ] },
-			{ @"OakInputStringListTransformer",                 @[ @"selection", @"document", @"scope", @"line", @"word", @"character", @"none" ] },
-			{ @"OakInputFormatStringListTransformer",           @[ @"text", @"xml" ] },
-			{ @"OakOutputLocationStringListTransformer",        @[ @"replaceInput", @"replaceDocument", @"atCaret", @"afterInput", @"newWindow", @"toolTip", @"discard", @"replaceSelection" ] },
-			{ @"OakOutputFormatStringListTransformer",          @[ @"text", @"snippet", @"html", @"completionList" ] },
-			{ @"OakOutputCaretStringListTransformer",           @[ @"afterOutput", @"selectOutput", @"interpolateByChar", @"interpolateByLine", @"heuristic" ] },
-		};
-
-		[OakRot13Transformer register];
-		for(auto const& converter : converters)
-			[OakStringListTransformer createTransformerWithName:converter.name andObjectsArray:converter.array];
-	});
-
 	static BundleEditor* sharedInstance = [self new];
 	return sharedInstance;
 }

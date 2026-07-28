@@ -1,10 +1,10 @@
 target "${dirname}" {
 	require BundlesManager OakAppKit OakFoundation MenuBuilder SoftwareUpdate bundles io ns regexp settings text
 	require_headers OakTabBarView
-	headers src/{Preferences,Keys,TerminalPreferences,PreferencesPane}.h
+	headers src/{Preferences,Keys,TerminalPreferences}.h
 
 	files resources/* icons/* "Resources"
 
-	sources src/*.mm
+	sources src/*.{mm,swift}
 	frameworks Cocoa
 }

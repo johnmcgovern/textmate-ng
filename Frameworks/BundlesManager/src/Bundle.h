@@ -1,5 +1,11 @@
 @class BundleGrammar;
 
+// Swift maps NSBundle to `Bundle`, so this class — a tmbundle in the bundle
+// index, nothing to do with NSBundle — would be ambiguous the moment any Swift
+// file imports both Foundation and this header (Phase 4, 2026-07-27). The
+// annotation renames it for Swift only; the ObjC name and every existing ObjC
+// call site are untouched.
+NS_SWIFT_NAME(TMBundle)
 @interface Bundle : NSObject
 - (instancetype)initWithIdentifier:(NSUUID*)anIdentifier;
 

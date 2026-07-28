@@ -1,18 +1,8 @@
-#import "PreferencesPane.h"
-@interface TerminalPreferences : PreferencesPane
-{
-	IBOutlet NSTextField* installStatusText;
-	IBOutlet NSTextField* installSummaryText;
-	IBOutlet NSPopUpButton* installPathPopUp;
-	IBOutlet NSButton* installButton;
-	IBOutlet NSTextField* rmateSummaryText;
-
-	std::string statusTextFormat;
-	std::string summaryTextFormat;
-}
-@property (nonatomic) NSImage* installIndicaitorImage;
-- (IBAction)performInstallMate:(id)sender;
-- (IBAction)performUninstallMate:(id)sender;
-
+// Public ObjC surface for the Terminal pane — see the note in Preferences.h.
+// AppController.mm calls +updateMateIfRequired at launch; that is the whole
+// cross-target API. The class itself is implemented in TerminalPreferences.swift
+// as @objc(TerminalPreferences), which is also the name TerminalPreferences.xib
+// names as its File's Owner.
+@interface TerminalPreferences : NSViewController
 + (void)updateMateIfRequired;
 @end

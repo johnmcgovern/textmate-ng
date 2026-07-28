@@ -90,11 +90,11 @@ uncovered, so each port should land its own tests (the pilot added 14).
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Suggested order — CommitWindow
-(1.1k, ✅ done), Preferences (1.9k), BundleEditor (1.3k), then Find (3.1k) and the
-mid-size leaves, then FileBrowser (5.0k), DocumentWindow (3.6k) and OakAppKit
-(4.8k) last. **`SoftwareUpdate` (1.2k) is deliberately deferred**: the open Sparkle
-question (`NOTARIZATION_HANDOFF.md` §7) may replace that framework wholesale, so
-porting it now risks porting code that gets deleted.
+(1.1k, ✅ done), Preferences (1.9k, ✅ done), BundleEditor (1.3k), then Find (3.1k)
+and the mid-size leaves, then FileBrowser (5.0k), DocumentWindow (3.6k) and
+OakAppKit (4.8k) last. **`SoftwareUpdate` (1.2k) is deliberately deferred**: the
+open Sparkle question (`NOTARIZATION_HANDOFF.md` §7) may replace that framework
+wholesale, so porting it now risks porting code that gets deleted.
 
 ### Phase 4 pilot — CommitWindow (Done 2026-07-27)
 
@@ -164,6 +164,70 @@ Recipe notes for the next port:
 - `.swift` files listed in a framework's `tests` glob compile straight into the test
   bundle (no OAK-assert shim). Shared logic files listed there must stay free of
   ObjC metadata, or `-ObjC` force-loads the archive's copy and it collides.
+
+### Phase 4 — Preferences (Done 2026-07-27)
+
+The 6-pane preferences window (Files, Projects, Bundles, Variables, Software
+Update, Terminal) plus its `PreferencesPane` base and window/toolbar controller.
+**~1.9k lines, all of it now Swift** except `Keys.h/.mm` (a constants header 8
+other frameworks import — porting it would force every consumer to take a
+generated Swift header for no gain) and the boundary in
+[`PWSupport.h`](Frameworks/Preferences/src/PWSupport.h): `settings_t` wrappers,
+`bundles::query`, `format_string::expand`, the `NSGridView` helper (it took
+`std::vector<NSUInteger>`), and the whole `mate` install path
+(`AuthorizationRef` + C varargs + recursive POSIX file ops — not expressible in
+Swift at all).
+
+**Three new reusable techniques, none of which the pilot needed:**
+
+1. **A framework's public ObjC header can stay hand-written while its
+   implementation moves to Swift.** `Preferences.h` still declares
+   `@interface Preferences : NSWindowController`; the Swift class is
+   `@objc(Preferences)`. `AppController.mm` was not touched at all. This is how
+   a framework gets ported without editing its consumers, and it avoids exporting
+   build-directory `*-Swift.h` through the include farm. The rule that makes it
+   work: ObjC++ *inside* the framework must not import that header, or it
+   collides with the generated one.
+2. **KVC routing survives the port unchanged.** Panes bind to key paths that are
+   not properties, and `value(forUndefinedKey:)` / `setValue(_:forUndefinedKey:)`
+   redirect them to `NSUserDefaults` or the C++ `settings` layer. This works in
+   Swift for the same reason it worked in ObjC — `NSViewController` is an ObjC
+   class and the ObjC KVC machinery does the dispatch. Verified by toggling a
+   checkbox and watching the default flip `0`↔`1`.
+3. **A nib-backed controller ports fine, but its xib is a set of string
+   contracts.** `TerminalPreferences.xib` names File's Owner `TerminalPreferences`
+   (hence `@objc(TerminalPreferences)`), five outlets by name, and — the trap —
+   binds `installIndicaitorImage`, whose original misspelling **must be
+   preserved** or the binding silently breaks.
+
+Two upstream annotations were added rather than worked around locally, because
+every later port hits the same thing:
+
+- **`NS_SWIFT_NAME(TMBundle)` on BundlesManager's `Bundle`.** Swift maps NSBundle
+  to `Bundle`, so a tmbundle-index `Bundle` is ambiguous the moment a file
+  imports Foundation. ObjC name and all existing ObjC call sites unchanged.
+- The `Oak*` UI constructors are unannotated C++, so Swift imports them as
+  implicitly-unwrapped optionals — **and an IUO decays to a plain `Optional`
+  wherever the type is inferred.** Every call site needs an explicit type
+  (`let b: NSButton = OakCreateCheckBox(…)`). A blanket `NS_ASSUME_NONNULL` on
+  that header would be wrong (`OakCreateLabel`'s `font` is legitimately nil).
+
+**One real bug was introduced by the port and caught by launching it** — worth
+recording as the shape of mistake to watch for. `BundlesPreferences.selectedIndex`
+did `Int(selectedIndex) < labels.count`; with `allowsEmptySelection` the scope bar
+reports "no selection" as `NSUInteger`'s max, which is not representable as `Int`,
+so Swift's *checked* conversion trapped and the app died on opening the Bundles
+pane. The ObjC++ original compared unsigned-to-unsigned and was fine. **Swift
+turns silently-wrapping ObjC integer conversions into hard crashes**: keep bounds
+checks in the unsigned domain and convert only after they pass.
+
+Verified in the running app, not just built: all 6 toolbar panes switch without
+crashing; the Terminal nib loads with outlets connected (its `${…}` status
+templates expand — "Shell support not installed", `/usr/local/bin/mate`
+interpolated into the summary — and the status image resolves through the
+misspelled binding); Bundles lists 255 bundles across 6 category buttons;
+Variables renders its 3-column table; and a checkbox toggle writes through to
+`NSUserDefaults`. 325 tests green.
 
 **Phase 5** — AppDelegate, NSDocument architecture, MenuBuilder, entry point;
 optionally SwiftUI for auxiliary surfaces (prefs/dialogs/about). Main editing

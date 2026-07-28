@@ -13,12 +13,22 @@ version our own branding without touching the submodule.
 - `legacy/TextMate.icns` — backup of the previous app icon (the classic upstream
   purple daisy) at the time of the switch. The pristine original also remains
   untouched in the `../icons/` submodule.
+- `variants/` — alternate 1024×1024 renders kept for reference (not shipped).
+  Each differs from the primary only in the tile gradient (step 1 in
+  `render-icon.swift`); swap the three colors below into the `bg` gradient and
+  re-render to reproduce:
+  - **teal-mid** (current primary): `c(150,236,228), c(42,187,186), c(10,122,138)`
+  - **teal-deep** (`TextMate-NG_1024_teal-deep.png`): `c(70,200,200), c(20,140,155), c(4,80,105)`
+  - **teal-light** (`TextMate-NG_1024_teal-light.png`): `c(214,250,244), c(150,224,216), c(84,180,184)`
 
 ## Design
-macOS 26 ("Liquid Glass") style: TextMate's heritage purple daisy composited on a
-full-bleed superellipse (squircle) tile with a soft lavender gradient, a glass
-sheen, and two glossy pill badges — red **Alpha** (pre-release marker, top-right)
-and purple **NG** (fork marker, bottom-right).
+macOS 26 ("Liquid Glass") style: TextMate's heritage purple daisy (enlarged to
+90% of the tile) composited on a full-bleed superellipse (squircle) tile with a
+teal liquid-glass gradient, a glass sheen, a refracted bottom rim light, and two
+glossy pill badges — red **Alpha** (pre-release marker, top-right) and purple
+**NG** (fork marker, bottom-right). The teal ground is deliberate: upstream
+TextMate's icon sits on white/lavender, so NG reads instantly in the Dock and
+in side-by-side comparisons.
 
 ## Regenerate
 ```bash

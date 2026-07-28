@@ -2,7 +2,9 @@ import AppKit
 
 // TextMate-NG app icon renderer (macOS 26 / "Liquid Glass" style).
 // Keeps TextMate's heritage purple daisy; modernizes the container to a
-// full-bleed superellipse (squircle) tile with a gradient + glass sheen + NG badge.
+// full-bleed superellipse (squircle) tile with a teal liquid-glass gradient +
+// sheen + NG badge. Teal was chosen to make NG instantly distinguishable from
+// upstream TextMate's white/lavender icon in the Dock.
 
 let size: CGFloat = 1024
 let args = CommandLine.arguments
@@ -74,11 +76,11 @@ let full = CGRect(x: 0, y: 0, width: size, height: size)
 let tileRect = full.insetBy(dx: size*0.008, dy: size*0.008)
 let tile = squircle(tileRect)
 
-// 1) Tile background gradient (soft luminous lavender-white so the purple pops).
+// 1) Tile background gradient (luminous teal liquid-glass; complements the purple).
 cg.saveGState()
 tile.setClip()
-let bg = NSGradient(colors: [c(245,242,252), c(228,224,240), c(214,208,230)],
-                    atLocations: [0.0, 0.62, 1.0], colorSpace: .sRGB)!
+let bg = NSGradient(colors: [c(150,236,228), c(42,187,186), c(10,122,138)],
+                    atLocations: [0.0, 0.58, 1.0], colorSpace: .sRGB)!
 bg.draw(in: tileRect, angle: -90)
 
 // 2) Soft radial glass sheen, upper area.
@@ -87,19 +89,25 @@ sheen.draw(fromCenter: NSPoint(x: size*0.5, y: size*0.80), radius: 0,
            toCenter: NSPoint(x: size*0.5, y: size*0.72), radius: size*0.62, options: [])
 
 // 3) Very subtle bottom inner vignette for depth.
-let vignette = NSGradient(colors: [c(60,40,90,0.0), c(60,40,90,0.10)],
+let vignette = NSGradient(colors: [c(0,45,65,0.0), c(0,45,65,0.16)],
                           atLocations: [0.5, 1.0], colorSpace: .sRGB)!
 vignette.draw(in: tileRect, angle: -90)
+
+// 3b) Faint refracted rim light along the bottom edge (liquid-glass cue).
+let rim = NSGradient(colors: [c(210,255,250,0.32), c(210,255,250,0.0)],
+                     atLocations: [0.0, 1.0], colorSpace: .sRGB)!
+rim.draw(fromCenter: NSPoint(x: size*0.5, y: -size*0.30), radius: 0,
+         toCenter: NSPoint(x: size*0.5, y: -size*0.30), radius: size*0.62, options: [])
 cg.restoreGState()
 
 // 4) The heritage flower, centered, with a soft grounded shadow.
 if let flower = NSImage(contentsOfFile: flowerPath) {
-    let scale: CGFloat = 0.80
+    let scale: CGFloat = 0.90
     let w = size*scale, h = size*scale
     let fr = CGRect(x: (size-w)/2, y: (size-h)/2 + size*0.015, width: w, height: h)
     cg.saveGState()
     cg.setShadow(offset: CGSize(width: 0, height: -size*0.012), blur: size*0.045,
-                 color: c(40,10,60,0.30).cgColor)
+                 color: c(0,35,50,0.38).cgColor)
     flower.draw(in: fr, from: .zero, operation: .sourceOver, fraction: 1.0)
     cg.restoreGState()
 }

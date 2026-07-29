@@ -1,7 +1,11 @@
 #import <oak/misc.h>
+#import "OakTabBarViewProtocols.h"
 
-@protocol OakTabBarViewDelegate, OakTabBarViewDataSource;
-
+// OakTabBarView is implemented in Swift (@objc(OakTabBarView), see
+// OakTabBarView.swift). This header is hand-written and stays the framework's
+// public ObjC surface — the same pattern as Preferences.h — because the module
+// name equals the class name and the generated *-Swift.h cannot be exported
+// through the include farm. Keep it in step with the Swift class by hand.
 @interface OakTabBarView : NSView
 @property (nonatomic, weak) id <OakTabBarViewDelegate> delegate;
 @property (nonatomic, weak) id <OakTabBarViewDataSource> dataSource;
@@ -11,27 +15,4 @@
 - (void)performClose:(id)sender;
 
 @property (nonatomic) BOOL neverHideLeftBorder;
-@end
-
-@protocol OakTabBarViewDelegate <NSObject>
-@optional
-- (BOOL)tabBarView:(OakTabBarView*)aTabBarView shouldSelectIndex:(NSUInteger)anIndex;
-- (void)tabBarView:(OakTabBarView*)aTabBarView didDoubleClickIndex:(NSUInteger)anIndex;
-- (void)tabBarViewDidDoubleClick:(OakTabBarView*)aTabBarView;
-- (NSMenu*)menuForTabBarView:(OakTabBarView*)aTabBarView;
-
-// Methods sent to the delegate which the tab was dragged to
-- (BOOL)performDropOfTabItem:(NSUUID*)tabItemUUID fromTabBar:(OakTabBarView*)sourceTabBar index:(NSUInteger)dragIndex toTabBar:(OakTabBarView*)destTabBar index:(NSUInteger)droppedIndex operation:(NSDragOperation)operation;
-
-- (void)performCloseTab:(OakTabBarView*)sender;
-- (void)performCloseOtherTabsXYZ:(OakTabBarView*)sender;
-@end
-
-@protocol OakTabBarViewDataSource <NSObject>
-- (NSUInteger)numberOfRowsInTabBarView:(OakTabBarView*)aTabBarView;
-
-- (NSString*)tabBarView:(OakTabBarView*)aTabBarView titleForIndex:(NSUInteger)anIndex;
-- (NSString*)tabBarView:(OakTabBarView*)aTabBarView pathForIndex:(NSUInteger)anIndex;
-- (NSUUID*)tabBarView:(OakTabBarView*)aTabBarView UUIDForIndex:(NSUInteger)anIndex;
-- (BOOL)tabBarView:(OakTabBarView*)aTabBarView isEditedAtIndex:(NSUInteger)anIndex;
 @end

@@ -1,6 +1,11 @@
 # TextMate → Swift-native macOS: Project Phases & Progress
 
-_High-level progress tracker. Last updated: 2026-07-27 (**Phase 3 complete** — Swift
+_High-level progress tracker. Last updated: 2026-07-28 — **OakTabBarView is fully
+ported** (OakTabView + OakTabFrame + OakTabBarView in one change; both hand-written
+interop headers and the 1234-line `.mm` deleted; the dead OakTabBarViewController
+removed first as its own commit). The framework is Swift except `OakAnimatorProxy`.
+358 tests across 28 bundles green, Debug and Release both build, and the tab bar was
+exercised in the running app. Earlier: 2026-07-27 (**Phase 3 complete** — Swift
 interop foundation. **Phase 4 in progress**: CommitWindow (pilot) and Preferences are
 ported and verified in the running app; BundleEditor is partially ported — its
 `PropertiesViewController` and value transformer are Swift, its 1072-line window
@@ -37,7 +42,7 @@ duplicating it here goes stale within hours while the loop runs.
 | 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress (signing left) | Large / Med |
 | 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | ✅ Done 2026-07-26 | Med / Low |
 | 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ✅ Done 2026-07-27 | Small–Med / Med |
-| 4 | **Swift-ify the AppKit/UI shell, leaf-first** | 🔄 In progress — CommitWindow + Preferences done, BundleEditor partial (2026-07-27) | Very large / Med |
+| 4 | **Swift-ify the AppKit/UI shell, leaf-first** | 🔄 In progress — CommitWindow, Preferences, OakTabBarView done; BundleEditor partial (2026-07-28) | Very large / Med |
 | 5 | **App shell & lifecycle in Swift** (= recommended end state) | ⬜ Not started | Med / Low–Med |
 | 6 | **(Optional) core engine → Swift** | ⬜ Likely skip | Huge / High ⚠️ |
 
@@ -95,7 +100,8 @@ frameworks additionally get contract tests — see "nib-contract tests" below;
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
-(1.1k ✅), Preferences (1.9k ✅), BundleEditor (1.3k ⚠️ partial). **`SoftwareUpdate`
+(1.1k ✅), Preferences (1.9k ✅), **OakTabBarView (1.6k ✅, 2026-07-28)**,
+BundleEditor (1.3k ⚠️ partial). **`SoftwareUpdate`
 (1.2k) is deliberately deferred** — the open Sparkle question
 (`NOTARIZATION_HANDOFF.md` §7) may replace that framework wholesale.
 
@@ -978,17 +984,98 @@ Verified in the running app: three files opened into one project window render
 three correctly-titled tabs with the right one selected and its content shown;
 no unrecognized-selector faults in the log.
 
-**The remaining ~1150 lines are one indivisible unit — do not split them.**
-`OakTabView` (~400 lines) and `OakTabBarView` (~700) are mutually coupled:
-OakTabBarView's class extension declares `OakTabView*`/`OakTabFrame*` properties
-and its layout code makes ~40 references across 12+ distinct OakTabView members
-(`tabItem`, `frame`, `hidden`, `overflowButtonVisible`, `dragImage`, `target`,
-`action`, `doubleAction`, `dragAction`, `fittingSize`, `backgroundView`…).
-Porting either one alone means hand-declaring the other's interface in
-`OTBSwiftClasses.h` **with nothing checking it against the Swift** — which is
-exactly how the `setSelected:` crash above happened, multiplied by twenty. Port
-both together so the hand-written header disappears instead of growing; at that
-point the whole framework is Swift except `OakAnimatorProxy`.
+**The remaining ~1150 lines were one indivisible unit — ✅ ported together
+2026-07-28.** `OakTabView` (~400 lines) and `OakTabBarView` (~700) are mutually
+coupled: OakTabBarView's class extension declared `OakTabView*`/`OakTabFrame*`
+properties and its layout code makes ~40 references across 12+ distinct
+OakTabView members (`tabItem`, `frame`, `hidden`, `overflowButtonVisible`,
+`dragImage`, `target`, `action`, `doubleAction`, `dragAction`, `fittingSize`,
+`backgroundView`…). Porting either alone would have meant hand-declaring the
+other's interface in `OTBSwiftClasses.h` **with nothing checking it against the
+Swift** — exactly how the `setSelected:` crash above happened, multiplied by
+twenty. Both went in one change, so **`OTBSwiftClasses.h` and `OTBObjCClasses.h`
+are deleted rather than grown**, along with `OakTabBarView.mm` (1234 lines).
+`OakTabFrame` (a 20-line layout value object) went with them, as a Swift
+`NSObject` subclass.
 
-`OakTabFrame` (a 20-line layout value object) is internal to the `.mm` and goes
-with them.
+### Phase 4 — OakTabBarView complete (2026-07-28)
+
+**The framework is now Swift except `OakAnimatorProxy`** (which stays ObjC
+permanently, see above): `OakTabBarView.swift`, `OakTabView.swift`,
+`OakTabItem.swift`, `OakBox.swift`. Net −1317/+26 lines against the ObjC++.
+Also deleted first, as a separate verified commit: the dead
+`OakTabBarViewController.{h,mm}` (235 lines).
+
+Five things this port established that the earlier ones did not:
+
+1. **Splitting the protocols out of the public header is what makes the
+   module-name collision survivable.** The bridging header still cannot import
+   `OakTabBarView.h` (module name == class name, the `namespace OakTabBarView`
+   rejection from BundleEditor), but the Swift code *needs* the delegate and
+   data-source protocol types. They moved to a new
+   [`OakTabBarViewProtocols.h`](Frameworks/OakTabBarView/src/OakTabBarViewProtocols.h),
+   which only forward-declares the class and so carries no collision;
+   `OakTabBarView.h` imports it, leaving every external consumer unchanged.
+   **It must be added to the spec's `headers` line**, or consumers that import
+   `<OakTabBarView/OakTabBarView.h>` fail with "file not found" — the include
+   farm only exports declared headers. This is the general recipe for porting a
+   framework whose module name matches its principal class.
+2. **KVO-observed properties must be `@objc dynamic`, not merely `@objc`.**
+   `OakTabItem`'s `title`/`path`/`modified`/`selected` are observed by
+   `OakTabView`. A plain `@objc var` lets Swift store straight to the backing
+   field, so the observation never fires; it only worked while every mutation
+   came from ObjC, which always dispatched through the setter. Porting the
+   *mutating* side (OakTabBarView) is what would have broken it — silently, as a
+   tab bar that stops updating its titles.
+3. **`NSKeyValueObservation` tokens sidestep the `@MainActor` deinit problem.**
+   CommitWindow needed an explicit `teardown()` because a `@MainActor` class
+   cannot touch its state from `deinit` under Swift 6. Observation tokens
+   invalidate themselves when replaced or deallocated, so no teardown call and
+   no lifetime bookkeeping. The handlers are `@Sendable`: they must **not**
+   forward the observed object into the isolated region ("sending 'item' risks
+   causing data races") — read from `self` inside `MainActor.assumeIsolated`
+   instead, which is what the ObjC `observeValue:` did anyway.
+4. **The AppKit accessibility marker protocols cannot be adopted under Swift 6**
+   — `NSAccessibilityRadioButton`/`NSAccessibilityGroup` conformance "crosses
+   into main actor-isolated code". Dropping the conformance costs nothing: the
+   role is established at runtime by `setAccessibilityRole(.radioButton)` /
+   `.tabGroup` plus the `accessibility*()` overrides, which is what VoiceOver
+   actually reads. Verified in the running app — System Events resolves a tab as
+   `radio button 2 of tab group 1`.
+5. **`NSProxy` is reachable from Swift via `unsafeBitCast`.** The animator
+   trick (`tabView.animator.mouseInside = …`) survives the port: wrap
+   `super.animator()` in `OakAnimatorProxy` and bit-cast it back to the class
+   type. It works only because the forwarded properties are `dynamic`, which
+   forces `objc_msgSend` and so reaches `-forwardInvocation:`.
+
+**A latent bug found and deliberately preserved:** `countOfVisibleTabs` is a
+public readonly `NSInteger` property that **has no getter implementation** in the
+ObjC++ original — an auto-synthesized ivar nothing ever assigned, so it always
+returned 0. Its one consumer (`DocumentWindowController`'s tab auto-close) masks
+it with `max(…, 8)`, so it only matters above 8 visible tabs. Ported as-is with a
+comment; fixing it is a behaviour change and belongs in its own commit.
+
+**The signedness trap bit again, and the port fixes it.** `selectedTabIndex` is
+`NSUInteger` in the public header; typing it `Int` in Swift is not harmless.
+`DocumentWindowController` passes `MIN(_selectedTabIndex, _documents.count-1)`,
+which is `NSUIntegerMax` when the document list is empty: as `NSUInteger` that
+fails the `< count` guard harmlessly (what the ObjC did), but as `Int` it arrives
+as −1, **passes** the guard, and indexes the array out of bounds. Declared `UInt`.
+Same lesson as the `BundlesPreferences.selectedIndex` crash — **keep bounds
+checks in the unsigned domain**, and match the header's signedness exactly.
+
+**Verified in the running app, not just built** (Debug, where `OakAssert.mm`'s
+handler `abort()`s on any ObjC exception — so surviving these interactions is
+itself the assertion): three files open as three correctly-titled tabs with the
+right one selected and its content shown; **clicking** a tab switches selection,
+content and window title (the exact path the `setSelected:` crash died on);
+**⌘W** closes a tab and the bar re-lays out 3 → 2; **16 documents** render 5 tabs
+with the overflow chevron on the last one — and the *selected* document is forced
+into the last visible slot, which exercises the `didIncludeSelected` branch of
+the layout algorithm; **clicking the overflow button** builds and pops its menu
+(`TMFileReference` icons + the `setModifiedState:` category) without incident;
+and **typing** in a document flips the tab's accessibility label to
+`file14.txt (modified)`, proving the `modified` KVO chain and the close-button
+image swap. The unified log shows zero errors, exceptions or unrecognized
+selectors, and no crash reports were generated. Debug and Release both build;
+**358 tests across 28 bundles green**, unchanged from before the port.

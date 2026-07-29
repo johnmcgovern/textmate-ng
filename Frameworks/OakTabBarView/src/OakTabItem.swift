@@ -14,7 +14,13 @@ import UniformTypeIdentifiers
 	@objc static let pasteboardType = NSPasteboard.PasteboardType("com.j23software.TextMate.tabItem")
 
 	@objc private(set) var identifier: String?
-	@objc var path: String?
+
+	// title/path/modified/selected are observed via KVO by OakTabView. They must
+	// be `dynamic` so the observation fires when OakTabBarView (now Swift) mutates
+	// them: a plain `@objc var` lets Swift store straight to the backing field and
+	// KVO never sees the change. It only worked before because every mutation came
+	// from ObjC (OakTabBarView.mm), which always dispatched through the setter.
+	@objc dynamic var path: String?
 
 	// ObjC's `getter=isModified` keeps the setter as -setModified:. Swift's
 	// @objc(isModified) on the *property* is NOT the same thing — it renames the
@@ -23,13 +29,13 @@ import UniformTypeIdentifiers
 	// is the only spelling that reproduces the ObjC pair. (Caught at runtime, not
 	// by the build: the crash is on opening a second tab.)
 	private var _modified: Bool
-	@objc var modified: Bool {
+	@objc dynamic var modified: Bool {
 		@objc(isModified) get { _modified }
 		@objc(setModified:) set { _modified = newValue }
 	}
 
 	private var _selected = false
-	@objc var selected: Bool {
+	@objc dynamic var selected: Bool {
 		@objc(isSelected) get { _selected }
 		@objc(setSelected:) set { _selected = newValue }
 	}
@@ -38,7 +44,7 @@ import UniformTypeIdentifiers
 	@objc var needsLayout: Bool
 	@objc weak var tabView: OakTabView?
 
-	@objc var title: String? {
+	@objc dynamic var title: String? {
 		didSet {
 			guard title != oldValue else { return }
 			needsLayout = true

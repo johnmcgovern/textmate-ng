@@ -4,8 +4,8 @@ _High-level progress tracker. Last updated: 2026-07-28 — **OakTabBarView is fu
 ported** (OakTabView + OakTabFrame + OakTabBarView in one change; both hand-written
 interop headers and the 1234-line `.mm` deleted; the dead OakTabBarViewController
 removed first as its own commit). The framework is Swift except `OakAnimatorProxy`.
-358 tests across 28 bundles green, Debug and Release both build, and the tab bar was
-exercised in the running app. Earlier: 2026-07-27 (**Phase 3 complete** — Swift
+383 tests across 29 bundles green (the port landed its own 25-test bundle), Debug
+and Release both build, and the tab bar was exercised in the running app. Earlier: 2026-07-27 (**Phase 3 complete** — Swift
 interop foundation. **Phase 4 in progress**: CommitWindow (pilot) and Preferences are
 ported and verified in the running app; BundleEditor is partially ported — its
 `PropertiesViewController` and value transformer are Swift, its 1072-line window
@@ -96,7 +96,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**339 tests across 28 bundles** as of 2026-07-28.
+**383 tests across 29 bundles** as of 2026-07-28.
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
@@ -1079,3 +1079,40 @@ and **typing** in a document flips the tab's accessibility label to
 image swap. The unified log shows zero errors, exceptions or unrecognized
 selectors, and no crash reports were generated. Debug and Release both build;
 **358 tests across 28 bundles green**, unchanged from before the port.
+
+#### OakTabBarView tests (2026-07-28)
+
+The port landed with no coverage — the framework was the only ported one without
+a test bundle, and the roadmap's own policy is that each port lands its own.
+**25 tests, `OakTabBarViewTests` (bundle 29, 383 tests total).** They drive the
+bar through its *public ObjC surface* rather than its internals, because that
+surface is the hand-written header nothing checks against the Swift.
+
+The test bundle can `#import "../src/OakTabBarView.h"` — safe **here** precisely
+because it is unsafe inside the framework: there is no generated
+`OakTabBarView-Swift.h` in this target for the `namespace` emission to collide
+with. So the tests are also the missing build-time check on that header.
+
+Covered: the header's selector contract; data-source dispatch and reload
+(add/rename/remove); selection, including that it survives a reload; the
+delegate's `performCloseTab:` and the `tag` it reads; the layout — tabs stop at
+`tabItemMaxWidth`, tile edge-to-edge with no gaps when squeezed, cap by
+available width, and **always keep the selected document visible**
+(`didIncludeSelected`); and `OakTabItem`'s pasteboard wire format.
+
+**Two tests were checked by mutation, and the first draft of one was worthless.**
+`testEditedStateReachesTheTabThroughKVO` asserted on the tab's accessibility
+label — which reads *through* to the tab item, so it passed with `dynamic`
+removed. The label proves nothing about the observation. The `modified`
+observation's only visible effect is the close-button image swap, so the test now
+asserts on that; dropping `dynamic` makes it, and only it, fail. The lesson
+generalises: **when testing a KVO chain, assert on state that exists only
+because the observation fired**, never on something that reads through to the
+source. The signedness regression is guarded twice on purpose — the typed
+assignment pins `UInt` at compile time (reverting stops the build), and a KVC
+assignment reproduces the ObjC caller's path, which with a signed property dies
+with `Fatal error: Index out of range`. Both verified by mutating the source and
+watching them fail.
+
+`countOfVisibleTabs`'s always-zero behaviour is pinned by a test too, so fixing
+it has to be deliberate.

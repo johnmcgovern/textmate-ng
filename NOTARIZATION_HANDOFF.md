@@ -45,11 +45,20 @@ live and matching the entity name helps Apple's verification — they check the 
 Run against `build/Release/TextMate.app`, re-signed by hand in a scratch copy. All four
 results were *tested*, not reasoned about.
 
-**① Hardened Runtime already works. ✅** Re-signed inside-out with `--options runtime`
-and the existing `ide/gen/entitlements/TextMate.plist`: signature valid
-(`flags=0x10002(adhoc,runtime)`), app launches, both `.tmplugin`s load. The usual
-notarization landmine is a non-issue here — *but it is not enabled in the build*:
-`ENABLE_HARDENED_RUNTIME` appears nowhere in `ide/seed_xcodeproj.rb`. One setting to add.
+**① Hardened Runtime already works. ✅ — and is now enabled in the build.** Originally
+proven by re-signing a scratch copy inside-out with `--options runtime` and the existing
+`ide/gen/entitlements/TextMate.plist`: signature valid (`flags=0x10002(adhoc,runtime)`),
+app launches, both `.tmplugin`s load. The usual notarization landmine is a non-issue here.
+
+> **Correction (2026-07-29).** This item used to end "*but it is not enabled in the
+> build*: `ENABLE_HARDENED_RUNTIME` appears nowhere in `ide/seed_xcodeproj.rb`. One
+> setting to add." That is stale — the setting landed in `f9fddd71` ("Stream 3: make the
+> app self-contained and Hardened-Runtime ready") and is now scoped to Release
+> (`ide/seed_xcodeproj.rb`, `bs["ENABLE_HARDENED_RUNTIME"] = config.name == "Release" ?
+> "YES" : "NO"`), with the embed-dylibs phase honouring it when it re-signs. Debug stays
+> off deliberately so lldb/Instruments behave normally. Verified on the current Release
+> binary, not from the setting: `codesign -dv` reports `flags=0x10002(adhoc,runtime)`.
+> **There is nothing left to do for this item.**
 
 **② 🚨 The app links the builder's Homebrew prefix — this is the real distribution
 blocker.** Four binaries carry absolute load commands into `/opt/homebrew`:

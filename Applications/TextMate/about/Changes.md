@@ -2,6 +2,19 @@ Title: Release Notes
 
 # Changes
 
+## 2026-07-29 (v2026.7-alpha.2)
+
+Second alpha. The app now has its own identity separate from upstream TextMate, runs on Macs that have never seen a developer toolchain, and has begun moving its user interface to Swift.
+
+* **TextMate-NG has its own bundle identifier** (`com.j23software.TextMate`). It no longer shares preferences, application support or saved state with an installed upstream TextMate, so the two can be run side by side. Settings are not migrated from a TextMate 2 install; this alpha starts from defaults.
+* **The app is self-contained.** Its Cap’n Proto dependencies are vendored inside the bundle rather than linked from the build machine’s Homebrew prefix, so a copied build launches on any supported Mac. Release builds also enable the Hardened Runtime.
+* **New app icon**, replacing the one introduced in alpha.1: the heritage daisy is enlarged and set on a teal liquid-glass tile, so TextMate-NG is distinguishable from upstream TextMate at a glance in the Dock. The Alpha and NG badges are unchanged.
+* **The tab bar has been rewritten in Swift**, along with the commit window, the preferences window and part of the bundle editor’s property panes. These are ports, not redesigns — the intent is no visible change in behaviour.
+* Two long-standing bugs were fixed along the way: the SCM commit window’s helper tool was never copied into the app bundle, so committing from a bundle command could not work in any Xcode-built app; and opening a document containing a link (any Markdown file with a URL) could abort a debug build through the accessibility layer.
+* Test coverage grew from nothing to **383 automated tests across 29 bundles**, including the first checks that nib-backed windows still connect their outlets and bindings — a class of breakage that previously failed silently at runtime.
+
+**Known limitations in this alpha:** the app is not yet signed with an Apple Developer ID or notarized. A copy that reaches another Mac carrying a quarantine flag is refused by Gatekeeper as “damaged”, which it is not — clearing the flag with `xattr -dr com.apple.quarantine` on the copy allows it to run. Software update channels and crash-report submission are deliberately switched off while the fork has no server of its own. The QuickLook generator is built but cannot load until the app is properly signed.
+
 ## 2026-07-26 (v2026.7-alpha.1)
 
 First release of **TextMate-NG**, a fork of TextMate 2 focused on modernizing the app for current macOS.

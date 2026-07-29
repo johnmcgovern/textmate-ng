@@ -44,12 +44,15 @@ final class OakTabBarView: NSView, NSDraggingSource {
 	@objc weak var delegate: (any OakTabBarViewDelegate)?
 	@objc weak var dataSource: (any OakTabBarViewDataSource)?
 
-	// FAITHFUL PORT OF A LATENT BUG. In OakTabBarView.mm this was a readonly
-	// @property with no getter implementation, so the compiler auto-synthesized a
-	// backing ivar that nothing ever assigned — it always returned 0. Its sole
-	// consumer (DocumentWindowController's tab auto-close) masks it with
-	// max(_, 8), so the 0 only mattered when more than 8 tabs were visible.
-	// Preserved as-is; fixing it is a behaviour change tracked out of band.
+	// Fixed 2026-07-29. In OakTabBarView.mm this was a readonly @property with no
+	// getter implementation — an auto-synthesized ivar nothing ever assigned, so
+	// it always returned 0. The port preserved that verbatim; it is now assigned
+	// from the layout pass (see makeLayout).
+	//
+	// The consumer is DocumentWindowController's tab auto-close, which computes
+	// `documents.count - max(countOfVisibleTabs, 8)`. With the old constant 0 it
+	// always closed down to 8 tabs; it now keeps whatever is actually on screen
+	// when that is more than 8, which is what the max() was plainly there for.
 	@objc private(set) var countOfVisibleTabs: Int = 0
 
 	@objc var neverHideLeftBorder: Bool = false // public but referenced nowhere; kept for surface parity
@@ -590,7 +593,24 @@ final class OakTabBarView: NSView, NSDraggingSource {
 
 	private func makeLayout() -> [OakTabFrame] {
 		let visibleWidth = NSWidth(bounds) - NSWidth(createNewTabButton.frame)
-		let visibleTabCount = min(max(0, Int(floor(visibleWidth / CGFloat(minimumTabSize)))), tabItems.count)
+
+		// Clamp in the floating-point domain, then convert — never the other way
+		// round. `minimumTabSize` is the user default `tabItemMinWidth`, so a zero
+		// (or negative) value is reachable, and the division is then ±infinity or
+		// NaN. The ObjC++ original ran MIN/MAX first and only narrowed to
+		// NSUInteger afterwards, so it tolerated that; Swift's checked Int()
+		// conversion traps on a non-representable value and would take the app
+		// down at launch. Matches the original for every case, NaN included
+		// (MAX(0, NaN) is 0 there, because the NaN comparison is false).
+		let slots = (visibleWidth / CGFloat(minimumTabSize)).rounded(.down)
+		let visibleTabCount: Int
+		if slots.isNaN || slots < 0 {
+			visibleTabCount = 0
+		} else if slots >= CGFloat(tabItems.count) {
+			visibleTabCount = tabItems.count
+		} else {
+			visibleTabCount = Int(slots)
+		}
 
 		var layoutTabItems: [OakTabItem] = []
 		var didIncludeSelected = tabItems.filter { $0.selected }.isEmpty
@@ -621,6 +641,12 @@ final class OakTabBarView: NSView, NSDraggingSource {
 
 			layoutTabItems.append(tabItem)
 		}
+
+		// The number of document tabs this layout admits. `visibleCount` includes a
+		// tab being dragged out — it still occupies one of the visible slots — but
+		// not the dummy margin item inserted at a drop target, which is not a
+		// document. See the note on the property for what this used to report.
+		countOfVisibleTabs = visibleCount
 
 		var existingTabViews: [String: OakTabView] = [:]
 		for tabFrame in currentLayout {

@@ -50,6 +50,22 @@ DEPLOY_TGT = "15.0"                       # migration floor (Stream 4); also > S
 APP_VERSION = (File.read(File.join(File.expand_path("..", __dir__),
                 "Applications/TextMate/about/Changes.md"))[/^## .* \(v(.*)\)$/, 1] || "0.0.0")
 
+# CFBundleVersion, as ${APP_BUILD}. Taken from the HEAD commit's *date*, not the
+# wall clock, so rebuilding a given commit reproduces its build number instead of
+# stamping whatever today is.
+#
+# The YYYYMMDD shape is deliberate and load-bearing: CFBundleVersion has to
+# increase monotonically for update mechanisms to order two builds correctly, and
+# shipped builds already carry 20260726/20260729. Switching to something like a
+# commit count would be a *decrease* and would make a newer build look older.
+#
+# This used to be hand-edited in Info.plist and had gone stale by two days at the
+# 2026.7-alpha.2 release, which is the whole reason it is derived now.
+APP_BUILD = begin
+  date = `git -C #{File.expand_path("..", __dir__).shellescape} log -1 --format=%cd --date=format:%Y%m%d 2>/dev/null`.strip
+  date =~ /\A\d{8}\z/ ? date : Time.now.strftime("%Y%m%d")  # fall back for a tarball/no-git checkout
+end
+
 # Preprocessor defs from default.rave's global FLAGS. Passed as verbatim -D tokens
 # in OTHER_CFLAGS (GCC_PREPROCESSOR_DEFINITIONS strips the inner quotes that make
 # NULL_STR a C string literal). Backslash-escaped so quotes survive xcodebuild's
@@ -531,6 +547,7 @@ specs.each do |t|
       # formats, not this app. See NOTARIZATION_HANDOFF.md.
       bs["PRODUCT_BUNDLE_IDENTIFIER"] = "com.j23software.$(TARGET_NAME)"
       bs["APP_VERSION"] = APP_VERSION                 # ${APP_VERSION} in Info.plist
+      bs["APP_BUILD"]   = APP_BUILD                   # ${APP_BUILD}   in Info.plist
       # Pinned, not left to the default: the default-bundles script phase runs `bl`,
       # which downloads from api.textmate.org, and a sandboxed script phase cannot
       # reach the network. Recent Xcode templates turn this on for new projects.

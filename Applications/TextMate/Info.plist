@@ -7,7 +7,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>${APP_VERSION}</string>
 	<key>CFBundleVersion</key>
-	<string>20260729</string>
+	<string>${APP_BUILD}</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.j23software.${TARGET_NAME}</string>
 	<key>CFBundleDevelopmentRegion</key>

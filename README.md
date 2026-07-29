@@ -2,7 +2,41 @@
 
 ## Download
 
-You can [download TextMate from here](https://macromates.com/download).
+TextMate-NG has no published download yet — alpha builds are handed over
+directly. That link is *upstream* TextMate 2:
+[download TextMate from here](https://macromates.com/download).
+
+## Installing a test build
+
+Alpha builds are **Apple Silicon only and need macOS 15 Sequoia or later** (see
+the Apple Silicon and minimum-version notes in the release notes). They are
+signed ad-hoc rather than with an Apple Developer ID, and are not notarized —
+that is gated on Stream 3 in `PROJECT_PHASES.md`.
+
+Unpack with `ditto` rather than double-clicking the archive, so the code
+signature and extended attributes survive:
+
+```
+ditto -x -k TextMate-NG-<version>.zip /Applications/
+```
+
+If the archive reached the machine by a route that sets the quarantine flag —
+AirDrop, a browser download, email — Gatekeeper will refuse to open it, reporting
+that the app "is damaged and can't be opened". It is not damaged; that is what
+Gatekeeper says about an app it cannot verify because it is unsigned and
+unnotarized. Clear the flag on the copy:
+
+```
+xattr -dr com.apple.quarantine /Applications/TextMate.app
+```
+
+Copying with `scp` or `rsync` over SSH does not set the flag in the first place,
+which avoids the step entirely.
+
+Two things a test build deliberately will not do: it will not update itself
+(software-update channels are unconfigured while the fork has no server), and
+its QuickLook generator will not load, because Apple's QuickLook host processes
+are library-validated and refuse ad-hoc-signed plug-ins.
 
 ## Feedback
 

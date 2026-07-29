@@ -344,17 +344,77 @@ final class OakTabBarViewTests: XCTestCase {
 		              "the selected document must keep a visible tab; got \(labels)")
 	}
 
-	// MARK: Known-latent behaviour
+	// MARK: countOfVisibleTabs
 
-	// countOfVisibleTabs has no getter in the ObjC++ original either — it is an
-	// auto-synthesized readonly property nothing ever assigns, so it has always
-	// reported 0. Its one consumer masks it with max(_, 8). Pinned so that
-	// fixing it is a deliberate change with this test updated alongside, rather
-	// than an accident.
-	@MainActor func testCountOfVisibleTabsIsStillTheLatentZero() {
-		let (bar, _, _) = makeBar(titles: ["alpha.txt", "beta.txt", "gamma.txt"])
-		XCTAssertEqual(bar.countOfVisibleTabs, 0,
-		               "countOfVisibleTabs started reporting a real value — that is a behaviour change; see PROJECT_PHASES.md")
+	// Was an auto-synthesized readonly property nothing ever assigned — it
+	// reported 0 in the ObjC++ original and in the first Swift port. Fixed
+	// 2026-07-29 to report what the layout actually admits.
+	@MainActor func testCountOfVisibleTabsReportsTheTabsOnScreen() {
+		let (bar, _, _) = makeBar(width: 1400, titles: ["alpha.txt", "beta.txt", "gamma.txt"])
+		XCTAssertEqual(bar.countOfVisibleTabs, 3)
+		XCTAssertEqual(bar.countOfVisibleTabs, tabViews(of: bar).count,
+		               "the reported count must match the tabs actually laid out")
+	}
+
+	@MainActor func testCountOfVisibleTabsIsCappedWhenTabsOverflow() {
+		let titles = (1...20).map { "file\($0).txt" }
+		let (bar, _, _) = makeBar(width: 700, titles: titles)
+
+		XCTAssertGreaterThan(bar.countOfVisibleTabs, 0)
+		XCTAssertLessThan(bar.countOfVisibleTabs, titles.count,
+		                  "20 documents cannot fit in a 700pt bar")
+		XCTAssertEqual(bar.countOfVisibleTabs, tabViews(of: bar).count)
+	}
+
+	@MainActor func testCountOfVisibleTabsIsZeroWithNoDocuments() {
+		let (bar, _, _) = makeBar(titles: [])
+		XCTAssertEqual(bar.countOfVisibleTabs, 0)
+	}
+
+	// REGRESSION. tabItemMinWidth is a user default, so 0 is reachable
+	// (`defaults write … tabItemMinWidth 0`). That makes the slots-available
+	// division ±infinity or NaN, and the first Swift port fed it straight into a
+	// checked Int() conversion, which traps — the ObjC++ original clamped first
+	// and survived. A trap here kills the app as the tab bar lays out.
+	//
+	// The override goes through the *argument* domain, which is volatile: it has
+	// the highest precedence in the defaults search order and is never written to
+	// disk, so a crash mid-test cannot leave the value behind. Writing it with
+	// `defaults.set` instead persists into the test runner's own domain, and a
+	// trapping run then skips the restore and poisons every later run — which is
+	// exactly what happened while this fix was being mutation-tested, and is why
+	// it is written this way.
+	@MainActor func testDegenerateMinimumTabWidthDoesNotTrap() {
+		let defaults = UserDefaults.standard
+		let original = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+		defer { defaults.setVolatileDomain(original, forName: UserDefaults.argumentDomain) }
+
+		// Expected counts match what the ObjC++ original produced for the same
+		// inputs, which is the bar the port has to clear:
+		//   0  → the division is +infinity, so there is effectively no width limit
+		//        and every tab fits (MIN(inf, count) == count).
+		//   -1 → the slot count is negative and clamps to none (MAX(0, -1374) == 0).
+		for (degenerate, expectedVisible) in [(0, 2), (-1, 0)] {
+			var domain = original
+			domain["tabItemMinWidth"] = degenerate
+			defaults.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
+
+			// Guard against a vacuous pass: if the override did not take effect the
+			// bar would just use the normal 120 and prove nothing.
+			XCTAssertEqual(defaults.integer(forKey: "tabItemMinWidth"), degenerate,
+			               "the argument-domain override did not take effect")
+
+			let bar = OakTabBarView(frame: NSMakeRect(0, 0, 1400, 23))
+			// `dataSource` is a weak property: assigning a freshly constructed stub
+			// inline lets it deallocate immediately, reloadData() then returns at its
+			// `guard let dataSource`, and makeLayout — the code under test — never
+			// runs. Hold it strongly. (This test was vacuous until that was fixed.)
+			let dataSource = StubTabDataSource(titles: ["alpha.txt", "beta.txt"])
+			bar.dataSource = dataSource
+			bar.reloadData() // must not trap
+			XCTAssertEqual(bar.countOfVisibleTabs, expectedVisible,
+			               "tabItemMinWidth=\(degenerate) should behave as the ObjC++ original did")
+		}
 	}
 }
 

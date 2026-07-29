@@ -4,7 +4,7 @@ _High-level progress tracker. Last updated: 2026-07-28 — **OakTabBarView is fu
 ported** (OakTabView + OakTabFrame + OakTabBarView in one change; both hand-written
 interop headers and the 1234-line `.mm` deleted; the dead OakTabBarViewController
 removed first as its own commit). The framework is Swift except `OakAnimatorProxy`.
-383 tests across 29 bundles green (the port landed its own 25-test bundle), Debug
+386 tests across 29 bundles green (the port landed its own test bundle), Debug
 and Release both build, and the tab bar was exercised in the running app. Earlier: 2026-07-27 (**Phase 3 complete** — Swift
 interop foundation. **Phase 4 in progress**: CommitWindow (pilot) and Preferences are
 ported and verified in the running app; BundleEditor is partially ported — its
@@ -96,7 +96,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**383 tests across 29 bundles** as of 2026-07-28.
+**386 tests across 29 bundles** as of 2026-07-29.
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
@@ -1114,5 +1114,47 @@ assignment reproduces the ObjC caller's path, which with a signed property dies
 with `Fatal error: Index out of range`. Both verified by mutating the source and
 watching them fail.
 
-`countOfVisibleTabs`'s always-zero behaviour is pinned by a test too, so fixing
-it has to be deliberate.
+`countOfVisibleTabs`'s always-zero behaviour was pinned by a test too — now
+superseded, see below.
+
+#### Post-port hardening (2026-07-29)
+
+- **`countOfVisibleTabs` fixed.** It now reports what the layout pass actually
+  admits instead of the auto-synthesized 0 it had returned since the ObjC++ days.
+  The consumer, `DocumentWindowController`'s tab auto-close, computes
+  `documents.count - max(countOfVisibleTabs, 8)`: with the constant 0 it always
+  closed down to 8 tabs, and it now keeps whatever is on screen when that is
+  more than 8 — which is plainly what the `max()` was for.
+- **A crash regression the port introduced, found while fixing the above.**
+  `Int(floor(visibleWidth / CGFloat(minimumTabSize)))` converts *before*
+  clamping. `minimumTabSize` is the user default `tabItemMinWidth`, so 0 is
+  reachable (`defaults write … tabItemMinWidth 0`), the division is then ±∞ or
+  NaN, and Swift's checked `Int()` traps — killing the app as the tab bar lays
+  out. The ObjC++ original ran `MIN`/`MAX` first and narrowed to `NSUInteger`
+  afterwards, so it survived. Now clamped in the floating-point domain, matching
+  the original for every input including NaN. **This is the third instance of
+  the same rule** (after `BundlesPreferences.selectedIndex` and
+  `selectedTabIndex`): *clamp in the wide domain, convert last.*
+- **`CFBundleVersion` is derived**, from the HEAD commit's date via `${APP_BUILD}`
+  (`ide/seed_xcodeproj.rb`), so rebuilding a commit reproduces its build number
+  rather than stamping today. The `YYYYMMDD` shape is deliberate: shipped builds
+  already carry `20260726`/`20260729`, and CFBundleVersion must increase
+  monotonically for update ordering — a commit count would be a *decrease*.
+- **README gained an "Installing a test build" section** — Apple Silicon/macOS 15
+  requirements, `ditto` unpacking, and the quarantine flag, since alpha builds
+  are handed over directly rather than downloaded.
+
+**Two testing lessons, both found by tests failing rather than by review:**
+
+1. **A test that writes to `UserDefaults.standard` poisons every later run if it
+   crashes.** The degenerate-width test set `tabItemMinWidth` and restored it in
+   a `defer`; a mutation run trapped before the `defer`, leaving `0` in
+   `com.apple.dt.xctest.tool`, and two unrelated layout tests then failed
+   claiming 20 tabs fit a 700pt bar. Overrides now go through the **argument
+   domain**, which is volatile and never written to disk — verified to survive a
+   deliberately crashing run.
+2. **`dataSource` is `weak`, so `bar.dataSource = Stub()` deallocates
+   immediately.** `reloadData()` then returns at its `guard let dataSource` and
+   the code under test never runs. The test passed against the *buggy* build and
+   was only exposed by mutation testing. Hold test doubles in a local — and treat
+   a regression test that passes under mutation as broken, not as good news.

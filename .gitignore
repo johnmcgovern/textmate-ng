@@ -5,3 +5,6 @@
 /ide/gen/
 /TextMate.xcodeproj/
 .DS_Store
+
+# Local planning notes, deliberately unpublished (still on disk, just untracked)
+/NOTARIZATION_HANDOFF.md

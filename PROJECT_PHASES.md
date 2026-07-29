@@ -102,8 +102,10 @@ Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
 (1.1k ✅), Preferences (1.9k ✅), **OakTabBarView (1.6k ✅, 2026-07-28)**,
 BundleEditor (1.3k ⚠️ partial). **`SoftwareUpdate`
-(1.2k) is deliberately deferred** — the open Sparkle question
-(`NOTARIZATION_HANDOFF.md` §7) may replace that framework wholesale.
+(1.2k) is deliberately deferred** — the open Sparkle question may replace that
+framework wholesale. (It is §7 of `NOTARIZATION_HANDOFF.md`, which is kept as a
+local working note and deliberately not published — so that reference resolves
+only in a working copy, not on the remote.)
 
 **Ordering is now evidence-based, not line-count-based** — see the coupling
 survey below. Re-run it with `python3 ide/coupling_survey.py` before picking the

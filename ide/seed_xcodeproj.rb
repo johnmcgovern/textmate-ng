@@ -61,9 +61,21 @@ APP_VERSION = (File.read(File.join(File.expand_path("..", __dir__),
 #
 # This used to be hand-edited in Info.plist and had gone stale by two days at the
 # 2026.7-alpha.2 release, which is the whole reason it is derived now.
+# The `.N` suffix counts commits sharing that date, so two builds cut from
+# different commits on the same day are still distinguishable — the ambiguity
+# that a plain YYYYMMDD leaves, and the reason a build handed to a tester could
+# otherwise be confused with the one released earlier the same day. Ordering
+# still works against already-shipped builds: a missing component reads as 0, so
+# 20260729 < 20260729.2 < 20260730.1.
 APP_BUILD = begin
-  date = `git -C #{File.expand_path("..", __dir__).shellescape} log -1 --format=%cd --date=format:%Y%m%d 2>/dev/null`.strip
-  date =~ /\A\d{8}\z/ ? date : Time.now.strftime("%Y%m%d")  # fall back for a tarball/no-git checkout
+  root = File.expand_path("..", __dir__).shellescape
+  date = `git -C #{root} log -1 --format=%cd --date=format:%Y%m%d 2>/dev/null`.strip
+  if date =~ /\A\d{8}\z/
+    same_day = `git -C #{root} log --format=%cd --date=format:%Y%m%d 2>/dev/null`.lines.count { |l| l.strip == date }
+    "#{date}.#{[same_day, 1].max}"
+  else
+    "#{Time.now.strftime("%Y%m%d")}.1"  # fall back for a tarball/no-git checkout
+  end
 end
 
 # Preprocessor defs from default.rave's global FLAGS. Passed as verbatim -D tokens

@@ -940,11 +940,13 @@ Two findings, both of which the survey had missed:
    a clean 3 while it contained something as impossible for Swift as a C++
    virtual subclass. OakTabBarView now scores 23; still the best sizeable
    candidate, and the ranking is otherwise unchanged.
-2. **`OakTabBarViewController` (235 lines) is dead code.** Nothing in the tree
-   references it — not source, xib, plist, or spec (beyond its own `headers`
-   export). `DocumentWindowController` builds an `OakTabBarView` directly and
-   implements `OakTabBarViewDataSource` itself. It was not ported; deleting it
-   is a separate decision, in the spirit of the Phase 2.5 dead-code removals.
+2. **`OakTabBarViewController` (235 lines) was dead code — deleted 2026-07-28.**
+   Nothing in the tree referenced it — not source, xib, plist, or spec (beyond
+   its own `headers` export). `DocumentWindowController` builds an `OakTabBarView`
+   directly and implements `OakTabBarViewDataSource` itself. Removed the `.h`/`.mm`
+   and its `default.rave` `headers` entry (the `sources src/*.{mm,swift}` glob
+   dropped the `.mm` automatically), in the spirit of the Phase 2.5 dead-code
+   removals. Build and the full suite stayed green across the deletion.
 
 **A porting hazard worth memorising, caught only by running the app:**
 

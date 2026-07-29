@@ -1,6 +1,6 @@
 target "${dirname}" {
 	require OakFoundation OakAppKit TMFileReference
-	headers src/OakTabBarView.h src/OakTabBarViewController.h
+	headers src/OakTabBarView.h
 
 	files gfx/*.png "Resources"
 

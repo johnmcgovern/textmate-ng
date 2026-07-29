@@ -50,6 +50,7 @@ private let kOakCommitWindowTableViewHeight: CGFloat = 190
 	private var bottomButtonsConstraints: [NSLayoutConstraint] = []
 
 	private var retainedSelf: OakCommitWindow?
+	private var windowWillCloseObserver: (any NSObjectProtocol)?
 	private var eventMonitor: Any?
 	private var didTearDown = false
 
@@ -191,6 +192,10 @@ private let kOakCommitWindowTableViewHeight: CGFloat = 190
 		if let eventMonitor {
 			NSEvent.removeMonitor(eventMonitor)
 			self.eventMonitor = nil
+		}
+		if let windowWillCloseObserver {
+			NotificationCenter.default.removeObserver(windowWillCloseObserver)
+			self.windowWillCloseObserver = nil
 		}
 	}
 
@@ -428,8 +433,18 @@ private let kOakCommitWindowTableViewHeight: CGFloat = 190
 		UserDefaults.standard.set(flag, forKey: kOakCommitWindowShowFileList)
 	}
 
-	@objc(beginSheetModalForWindow:completionHandler:)
-	func beginSheetModal(for aWindow: NSWindow, completionHandler: @escaping (NSApplication.ModalResponse) -> Void) {
+	// Presents the commit window, as a sheet when there is a window to attach to
+	// and standalone otherwise.
+	//
+	// `parentWindow` used to be non-optional and was passed `NSApp.mainWindow`,
+	// which is nil whenever the app is merely *inactive* — the normal state when
+	// a commit is started from a terminal. `[nil beginSheet:…]` is a silent
+	// no-op, so nothing appeared and CommitWindowTool blocked forever on a reply
+	// that could never come. Reproduced 2026-07-29: with TextMate inactive the
+	// tool hung indefinitely and the parent window reported 0 sheets; with
+	// TextMate active the same call presented normally.
+	@objc(presentAttachedToWindow:)
+	func present(attachedTo parentWindow: NSWindow?) {
 		let fileType = CWCommitMessageGrammarForSCMName(environment["TM_SCM_NAME"])
 
 		let message = options["--log"] ?? ""
@@ -442,7 +457,41 @@ private let kOakCommitWindowTableViewHeight: CGFloat = 190
 
 		retainedSelf = self
 
-		aWindow.beginSheet(window!, completionHandler: completionHandler)
+		// Last-resort guarantee that the client is never left waiting: however
+		// this window goes away, a reply goes out. sendCommitMessageToClient is
+		// idempotent — it returns early once clientPortName has been cleared — so
+		// the normal Commit/Cancel paths are unaffected.
+		if let window {
+			windowWillCloseObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+				MainActor.assumeIsolated { self?.sendCommitMessageToClient(false) }
+			}
+		}
+
+		// The user is being asked for a commit message while a command-line tool
+		// blocks on the answer, so bring the app forward. Without this the window
+		// opens behind whatever is frontmost and the terminal just looks wedged —
+		// which is the same user-visible symptom as the hang being fixed here.
+		NSApp.activate(ignoringOtherApps: true)
+
+		if let parentWindow, parentWindow.isVisible {
+			parentWindow.beginSheet(window!) { _ in }
+		} else {
+			window?.center()
+			window?.makeKeyAndOrderFront(nil)
+		}
+	}
+
+	/// Dismisses the window however it was presented: ending the sheet when it is
+	/// one, closing it when it is standalone. The old code only ever called
+	/// `sheetParent?.endSheet`, which is a no-op for a standalone window and would
+	/// leave it on screen after a commit.
+	private func dismiss() {
+		guard let window else { return }
+		if let sheetParent = window.sheetParent {
+			sheetParent.endSheet(window)
+		} else {
+			window.close()
+		}
 	}
 
 	private func sendCommitMessageToClient(_ success: Bool, andContinue continueFlag: Bool = false) {
@@ -555,19 +604,17 @@ private let kOakCommitWindowTableViewHeight: CGFloat = 190
 
 	@objc private func performCommit(_ sender: Any?) {
 		sendCommitMessageToClient(true)
-		window?.sheetParent?.endSheet(window!, returnCode: .OK)
+		dismiss()
 	}
 
 	@objc private func performCommitAndContinue(_ sender: Any?) {
 		sendCommitMessageToClient(true, andContinue: true)
-		window?.sheetParent?.endSheet(window!, returnCode: .OK)
+		dismiss()
 	}
 
 	@objc func cancel(_ sender: Any?) {
 		sendCommitMessageToClient(false)
-		if let window, let sheetParent = window.sheetParent {
-			sheetParent.endSheet(window, returnCode: .cancel)
-		}
+		dismiss()
 	}
 
 	@objc private func checkAll(_ sender: Any?) {

@@ -165,18 +165,34 @@ NSString* CWCommitMessageGrammarForSCMName (NSString* scmName)
 		}
 	}
 
-	// Pre-existing, confirmed 2026-07-27 during the Phase 4 port: when the app has
-	// no main window (not frontmost, or every window closed), projectWindow is nil
-	// and the sheet is never presented — leaving CommitWindowTool blocked on a
-	// reply that never comes, so the bundle's commit command hangs. The ObjC++
-	// original behaved identically (`[nil beginSheet:…]` is a silent no-op); the
-	// port preserves it rather than changing behavior mid-migration. Logged so the
-	// failure is diagnosable instead of silent. Real fix (separate change): fall
-	// back to a standalone window, or reply with a failure so the tool exits.
+	// -[NSApplication mainWindow] is nil whenever the app is merely *inactive*,
+	// not only when every window is closed — and inactive is the normal state
+	// when a commit is started from a terminal. That nil then reached
+	// `[nil beginSheet:…]`, a silent no-op, so nothing was presented and
+	// CommitWindowTool blocked forever on a reply that could never come.
+	// Reproduced 2026-07-29: TextMate inactive with two documents open, the tool
+	// hung indefinitely and the window reported 0 sheets; the identical call with
+	// TextMate active presented normally.
+	//
+	// So: prefer the key window, then any ordinary visible window, before giving
+	// up. Giving up is no longer fatal either — the window presents standalone
+	// (see -presentAttachedToWindow:) and the client is answered when it closes.
 	if(!projectWindow)
-		os_log_error(OS_LOG_DEFAULT, "CommitWindow: no main window to attach the commit sheet to; the client will not receive a reply");
+		projectWindow = NSApp.keyWindow;
+
+	if(!projectWindow)
+	{
+		for(NSWindow* window in NSApp.orderedWindows)
+		{
+			if(window.isVisible && window.canBecomeMainWindow)
+			{
+				projectWindow = window;
+				break;
+			}
+		}
+	}
 
 	OakCommitWindow* commitWindow = [[OakCommitWindow alloc] initWithOptions:someOptions];
-	[commitWindow beginSheetModalForWindow:projectWindow completionHandler:^(NSModalResponse returnCode){ }];
+	[commitWindow presentAttachedToWindow:projectWindow];
 }
 @end

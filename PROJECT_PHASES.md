@@ -153,13 +153,43 @@ and the `?`-status file correctly unchecked; **Commit** returned
    declares them." It was the exact same class of gap as the Stream 1 resource
    correction, and is fixed the same way — closure-wide. It is also why the pilot
    could not be verified until it was fixed.
-2. **No main window ⇒ the commit command hangs forever.** If the app is not frontmost
-   (or has no open window), `NSApp.mainWindow` is nil, `[nil beginSheet:…]` is a
-   silent no-op, and the tool blocks on a reply that never arrives. Identical in the
-   ObjC++ original, so the port preserves it rather than changing behavior
-   mid-migration; an `os_log_error` now makes it diagnosable. Real fix — fall back to
-   a standalone window, or reply with a failure so the tool exits — is a separate
-   change.
+2. ~~**No main window ⇒ the commit command hangs forever.**~~ **Fixed 2026-07-29,
+   and it was worse than this described.** The original note assumed the trigger
+   was "no open window". It is not: `-[NSApplication mainWindow]` is nil whenever
+   the app is merely **inactive**, which is the normal state when a commit is
+   started from a terminal. So the hang did not need an edge case — with two
+   documents open and TextMate simply not frontmost, the tool blocked forever.
+
+   Reproduced before fixing, which is what corrected the diagnosis: with TextMate
+   inactive the parent window reported **0 sheets** and `CommitWindowTool` never
+   returned; the identical call with TextMate active reported **1 sheet** and
+   worked. Three layers of fix:
+
+   - **Window selection** (`CommitWindowServer.mm`): after the `TM_PROJECT_UUID`
+     match and `mainWindow`, fall back to `keyWindow`, then to the first visible
+     window that `canBecomeMainWindow`.
+   - **Presentation** (`CommitWindow.swift`): `beginSheetModalForWindow:` took a
+     *non-optional* window and was handed nil from ObjC, so `beginSheet` was a
+     silent no-op. Replaced by `-presentAttachedToWindow:`, which takes an
+     optional and presents standalone when there is nothing to attach to. It also
+     calls `NSApp.activate` — the user is being asked for a commit message while a
+     CLI tool blocks on the answer, so a window that opens behind another app is
+     the same user-visible symptom as the hang.
+   - **A guarantee**: an `NSWindow.willCloseNotification` observer sends a failure
+     reply if none was sent, so no future window-selection mistake can wedge a
+     terminal again. `sendCommitMessageToClient` is idempotent, so the normal
+     Commit/Cancel paths are unaffected.
+
+   Dismissal had to change with it: every exit path called
+   `sheetParent?.endSheet(…)`, which is a no-op for a standalone window and would
+   have left it on screen after a commit. `dismiss()` now ends the sheet or closes
+   the window as appropriate.
+
+   Verified end to end in both presentations: inactive-with-windows produced a
+   sheet on the frontmost window and returned
+   ` -m 'fix verified from an inactive app'  a.txt`; with **every** window closed
+   the standalone window appeared, returned ` -m 'standalone window commit'  a.txt`,
+   and closed itself. Both exited cleanly instead of hanging.
 
 Recipe notes for the next port:
 - Framework Swift needs a per-framework **bridging header** (`<dir>/src/<Target>-Bridging-Header.h`);
@@ -486,7 +516,9 @@ ready to delete once Stream 3 no longer wants it as a reference.
 > `** BUILD SUCCEEDED **`; 0 raw xibs and 0 nested `.lproj` in the wrapper;
 > `codesign --verify --deep --strict` passes; the app launches, stays alive as a
 > foreground GUI process, and `mate --name smoke <file>` opens a document into it
-> with no errors in the unified log.
+> with no errors in the unified log. (That last clause is unsupported for the same
+> reason as the Phase 4 correction below — `log show` captures nothing for this
+> app. The launch and the `mate` round trip are the real evidence here.)
 
 Generator decision (**confirmed by user**): **hand-authored `.xcodeproj`**, seeded
 programmatically via the `xcodeproj` Ruby gem (`ide/extract_specs.rb` +
@@ -1078,9 +1110,22 @@ the layout algorithm; **clicking the overflow button** builds and pops its menu
 (`TMFileReference` icons + the `setModifiedState:` category) without incident;
 and **typing** in a document flips the tab's accessibility label to
 `file14.txt (modified)`, proving the `modified` KVO chain and the close-button
-image swap. The unified log shows zero errors, exceptions or unrecognized
-selectors, and no crash reports were generated. Debug and Release both build;
-**358 tests across 28 bundles green**, unchanged from before the port.
+image swap. No crash reports were generated, and the app survived all of it in a
+**Debug** build — where `OakAssert.mm`'s handler `abort()`s on any ObjC
+exception, so staying alive is itself the assertion. Debug and Release both
+build; **358 tests across 28 bundles green**, unchanged from before the port.
+
+> **Correction (2026-07-29).** This paragraph also claimed "the unified log shows
+> zero errors, exceptions or unrecognized selectors." That was not evidence.
+> `log show --predicate 'process == "TextMate"'` returns **nothing at all** for
+> this app — not even the launch-time `swift-interop` message Phase 3 emits on
+> every run — so the absence of errors was an absence of capture, not a clean
+> run. Found while diagnosing the CommitWindow hang, where the same query hid the
+> `os_log_error` that had been added specifically to make that failure visible.
+> The behavioural checks and the abort-on-exception Debug build are what carry
+> the verification above. **Do not cite `log show` as evidence for this app until
+> the logging is shown to be captured** — and note that the diagnostic os_log in
+> `CommitWindowServer.mm` was never observable either.
 
 #### OakTabBarView tests (2026-07-28)
 

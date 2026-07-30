@@ -1223,6 +1223,37 @@ its input is worse than no metric**, because it produces confident wrong
 rankings. This one was caught only by acting on its recommendation and finding
 the framework twice the advertised size.
 
+#### The survey's real blind spot: C++ *free functions* in a public API (2026-07-30)
+
+`BundleMenu` scores **1** and is unportable. Its entire public API is C++:
+
+```objc
+bundles::item_ptr OakShowMenuForBundleItems (std::vector<bundles::item_ptr> const& items, NSView*, NSPoint);
+void OakAddBundlesToMenu (std::vector<bundles::item_ptr> const& items, bool, NSMenu*, SEL);   // Private.h
+- (scope::context_t)scopeContext;                                                             // BundleMenuDelegate
+```
+
+Swift can implement none of it. The score is 1 because `state` counts C++
+**ivars/properties** and `sigs` counts **ObjC methods** with C++ in the
+signature — so a framework whose API is C++ *free functions over C++ types*
+registers almost nothing. `pubAPI: shim` is the only hint, and this document
+previously told the reader to discount it ("not by itself a blocker"). For
+`BundleMenu` it is the blocker.
+
+**This is the third pick the score has misdirected** — `MenuBuilder` (C++ DSL
+typedef), `HTMLOutput` (non-recursive glob), `BundleMenu` (C++ free functions).
+Treat `pubAPI: shim` as a question to answer by reading the exported headers, not
+a footnote — and prefer `pubAPI: direct` when picking on score alone. A useful
+next improvement to the tool: count C++ tokens in *exported* headers and weight
+them like state, since an API Swift cannot express is a harder blocker than an
+ivar it cannot hold.
+
+**What this reframes.** `BundleMenu`, `BundleEditor` and probably `MenuBuilder`
+are all blocked on the *same* missing piece: an ObjC-shaped model layer over
+`bundles::item_ptr` (the `BEModel` that BundleEditor's partial port already
+identified). So the highest-leverage next work is not another framework port —
+it is building that wrapper once and unblocking three frameworks with it.
+
 #### Conversion-safety audit of the ported Swift (2026-07-29)
 
 Three separate crashes this project has shipped or nearly shipped share one

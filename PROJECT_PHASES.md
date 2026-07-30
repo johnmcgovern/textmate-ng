@@ -4,7 +4,7 @@ _High-level progress tracker. Last updated: 2026-07-28 — **OakTabBarView is fu
 ported** (OakTabView + OakTabFrame + OakTabBarView in one change; both hand-written
 interop headers and the 1234-line `.mm` deleted; the dead OakTabBarViewController
 removed first as its own commit). The framework is Swift except `OakAnimatorProxy`.
-386 tests across 29 bundles green (the port landed its own test bundle), Debug
+387 tests across 29 bundles green (the port landed its own test bundle), Debug
 and Release both build, and the tab bar was exercised in the running app. Earlier: 2026-07-27 (**Phase 3 complete** — Swift
 interop foundation. **Phase 4 in progress**: CommitWindow (pilot) and Preferences are
 ported and verified in the running app; BundleEditor is partially ported — its
@@ -96,7 +96,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**386 tests across 29 bundles** as of 2026-07-29.
+**387 tests across 29 bundles** as of 2026-07-29.
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
@@ -1167,6 +1167,55 @@ watching them fail.
 
 `countOfVisibleTabs`'s always-zero behaviour was pinned by a test too — now
 superseded, see below.
+
+#### Conversion-safety audit of the ported Swift (2026-07-29)
+
+Three separate crashes this project has shipped or nearly shipped share one
+shape: **Swift's checked numeric conversions trap where the ObjC++ original
+silently wrapped or stayed unsigned.** `BundlesPreferences.selectedIndex`
+(crashed on opening the pane), `OakTabBarView.selectedTabIndex` (found reading
+the diff), and `Int(floor(width / minimumTabSize))` (found only by chance while
+editing that line for something else). None was caught by a build, by the test
+suite, or by review.
+
+So the ported surface was swept deliberately rather than waiting for a fourth.
+**Scope: 21 Swift files across 4 frameworks** (CommitWindow, Preferences,
+BundleEditor-partial, OakTabBarView) — every numeric conversion, force unwrap,
+computed array subscript, `removeFirst`, `String.index(after:)` and `NSRange`
+construction.
+
+**Result: the ported Swift is clean.** One site was hardened; everything else is
+either already guarded or safe by construction. Recording the reasoning, because
+the value of an audit is knowing *why* each site is fine:
+
+- `reloadData`'s row count — **fixed.** `Int(dataSource.numberOfRows(in:))` is a
+  checked conversion on an `NSUInteger` that crosses a protocol boundary, so it
+  traps above `Int.max` where the original kept it unsigned. Now
+  `Int(exactly:) ?? 0`. No real data source can produce such a count; the point
+  is that a bad one cannot take the app down mid-reload.
+- Index conversions (`UInt(i)`, `UInt(index)`, `.map(UInt.init)`) — inputs come
+  from `firstIndex`/loop bounds, so non-negative by construction.
+- `selectedIndex` / `selectedTabIndex` — both compare unsigned *before*
+  narrowing, which is the fix from their respective crashes.
+- `UInt(bitPattern:)` in `performDrop` — deliberately reproduces the ObjC
+  `NSInteger`→`NSUInteger` reinterpretation; `UInt(_:)` would trap on −1.
+- `CGFloat(count)` divisions in the layout — only reachable with `count > 0`
+  (the zero case returns before the division in both branches).
+- `log(Float(extraWidth - (hairSpaceWidth - 1)))` — inside `width <
+  desiredWidth`, so the argument is `0.5*(desiredWidth - width) + 1 > 1`;
+  finite and positive, no NaN.
+- `messages.removeFirst()` — guarded by `count > messageHistoryLimit`.
+- `string.index(after: colon)` — `colon` comes from `firstIndex(of:)`, so it is
+  an element index, never `endIndex`.
+- `NSRange(location: 2, length: 1)` — the string is `hairSpace + char +
+  hairSpace`, at least 3 units.
+- The `!` sites are `@IBOutlet`s, or values assigned in `init` before use.
+
+**The rule for every future port, now part of the checklist: clamp in the wide
+domain, convert last — and treat any integer arriving from ObjC, a protocol, or
+a user default as untrusted.** `Int(exactly:)` where a foreign value could be
+out of range; compare bounds unsigned before narrowing; and clamp
+floating-point in floating-point, since `Int(±∞)` and `Int(NaN)` both trap.
 
 #### Logging is observable — and the trap that hid it (2026-07-29)
 

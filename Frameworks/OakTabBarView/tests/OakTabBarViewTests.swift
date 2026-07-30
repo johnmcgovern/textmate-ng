@@ -371,6 +371,27 @@ final class OakTabBarViewTests: XCTestCase {
 		XCTAssertEqual(bar.countOfVisibleTabs, 0)
 	}
 
+	// A data source's row count is an NSUInteger crossing a protocol boundary, so
+	// reloadData converts it with Int(exactly:) — a checked Int() would trap on a
+	// value above Int.max, where the ObjC++ original kept it unsigned and carried
+	// on. Nothing legitimate produces such a count; the point is that a bad one
+	// cannot take the app down as the tab bar reloads.
+	@MainActor func testAbsurdRowCountFromTheDataSourceDoesNotTrap() {
+		final class AbsurdDataSource: NSObject, OakTabBarViewDataSource {
+			func numberOfRows(in aTabBarView: OakTabBarView) -> UInt { UInt.max }
+			func tabBarView(_ v: OakTabBarView, titleFor i: UInt) -> String { "x" }
+			func tabBarView(_ v: OakTabBarView, pathFor i: UInt) -> String { "" }
+			func tabBarView(_ v: OakTabBarView, uuidFor i: UInt) -> UUID { UUID() }
+			func tabBarView(_ v: OakTabBarView, isEditedAt i: UInt) -> Bool { false }
+		}
+
+		let bar = OakTabBarView(frame: NSMakeRect(0, 0, 1400, 23))
+		let dataSource = AbsurdDataSource() // held strongly — dataSource is weak
+		bar.dataSource = dataSource
+		bar.reloadData() // must not trap
+		XCTAssertEqual(bar.countOfVisibleTabs, 0, "an unrepresentable row count should yield no tabs, not a crash")
+	}
+
 	// REGRESSION. tabItemMinWidth is a user default, so 0 is reachable
 	// (`defaults write … tabItemMinWidth 0`). That makes the slots-available
 	// division ±infinity or NaN, and the first Swift port fed it straight into a

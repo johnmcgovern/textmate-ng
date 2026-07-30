@@ -201,7 +201,13 @@ final class OakTabBarView: NSView, NSDraggingSource {
 	@objc func reloadData() {
 		guard let dataSource else { return }
 
-		let newCount = Int(dataSource.numberOfRows(in: self))
+		// Int(exactly:) rather than Int(): this NSUInteger crosses a protocol
+		// boundary, so its value is not ours to trust, and a checked Int() traps on
+		// anything above Int.max where the ObjC++ original just kept it unsigned.
+		// No real data source can produce that — DocumentWindowController returns
+		// `_documents.count` — but "convert a foreign integer defensively" is the
+		// rule this framework has already been bitten by three times.
+		let newCount = Int(exactly: dataSource.numberOfRows(in: self)) ?? 0
 		if newCount > tabItems.count {
 			freezeTabFramesLeftOfIndex = 0
 		}

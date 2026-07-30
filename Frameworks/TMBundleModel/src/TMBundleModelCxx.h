@@ -20,7 +20,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (nullable TMBundleItem*)itemWithCxxItem:(bundles::item_ptr const&)item;
 + (NSArray<TMBundleItem*>*)itemsWithCxxItems:(std::vector<bundles::item_ptr> const&)items;
 
-// Null item_ptr when the receiver is nil, for the same reason.
+// Read this only on a non-nil receiver. It returns a non-trivial C++ type, and
+// objc_msgSend to nil does not produce a valid one — check for nil first rather
+// than relying on a zeroed return.
 @property (nonatomic, readonly) bundles::item_ptr cxxItem;
 @end
 

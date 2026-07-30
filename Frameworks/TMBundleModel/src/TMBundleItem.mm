@@ -107,7 +107,7 @@ static std::mutex& InternMutex ()
 	return [self itemWithCxxItem:bundles::lookup(str)];
 }
 
-+ (TMBundleItem*)separatorItem
++ (TMBundleItem*)menuItemSeparator
 {
 	return [self itemWithCxxItem:bundles::item_t::menu_item_separator()];
 }

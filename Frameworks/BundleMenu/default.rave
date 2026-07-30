@@ -1,6 +1,7 @@
 target "${dirname}" {
-	require OakAppKit OakFoundation bundles text cf ns
+	require OakAppKit OakFoundation TMBundleModel bundles cf ns text
 	headers src/BundleMenu.h
-	sources src/*.mm
+	sources src/*.{mm,swift}
+	tests tests/t_*.mm
 	frameworks AppKit
 }

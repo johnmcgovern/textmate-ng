@@ -119,7 +119,7 @@ void test_kind_matches_the_cxx_enum ()
 	OAK_ASSERT_EQ((NSUInteger)[TMBundleItem itemWithCxxItem:TestGrammar].kind, (NSUInteger)TMBundleItemKindGrammar);
 	OAK_ASSERT_EQ((NSUInteger)[TMBundleItem itemWithCxxItem:TestProxy].kind,   (NSUInteger)TMBundleItemKindProxy);
 	OAK_ASSERT_EQ((NSUInteger)[TMBundleItem itemWithCxxItem:TestBundle].kind,  (NSUInteger)TMBundleItemKindBundle);
-	OAK_ASSERT_EQ((NSUInteger)TMBundleItem.separatorItem.kind, (NSUInteger)TMBundleItemKindMenuItemSeparator);
+	OAK_ASSERT_EQ((NSUInteger)TMBundleItem.menuItemSeparator.kind, (NSUInteger)TMBundleItemKindMenuItemSeparator);
 }
 
 void test_values_round_trip ()
@@ -170,7 +170,7 @@ void test_lookup_rejects_a_non_uuid ()
 
 void test_separator_item_is_a_singleton ()
 {
-	OAK_ASSERT(TMBundleItem.separatorItem == TMBundleItem.separatorItem);
+	OAK_ASSERT(TMBundleItem.menuItemSeparator == TMBundleItem.menuItemSeparator);
 }
 
 // =====================

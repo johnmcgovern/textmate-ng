@@ -17,10 +17,14 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-// Mirrors bundles::kind_t. A bitmask, because the query APIs take a union of
-// kinds. The raw values are pinned against the C++ enum by static_assert in
+// Mirrors bundles::kind_t. NS_ENUM and not NS_OPTIONS even though the C++ values
+// are powers of two: the bitmask exists so the *query* APIs can take a union of
+// kinds, and none of those are exposed here — an item's -kind is always exactly
+// one of these, and an enum is what lets Swift switch over it exhaustively.
+//
+// The raw values are pinned against the C++ enum by static_assert in
 // TMBundleItem.mm — a silent divergence here would mis-route every menu item.
-typedef NS_OPTIONS(NSUInteger, TMBundleItemKind) {
+typedef NS_ENUM(NSUInteger, TMBundleItemKind) {
 	TMBundleItemKindCommand           = 1,
 	TMBundleItemKindDragCommand       = 2,
 	TMBundleItemKindGrammar           = 4,
@@ -49,20 +53,24 @@ typedef NS_OPTIONS(NSUInteger, TMBundleItemKind) {
 
 // bundles::lookup. nil when no item carries that UUID — including when
 // uuidString is not a UUID at all.
-+ (nullable TMBundleItem*)itemWithUUIDString:(nullable NSString*)uuidString;
+//
+// NS_SWIFT_NAME because an ObjC class method whose name echoes its class is
+// otherwise imported as an initializer, and a failable init reads as "make one
+// of these" rather than "find the one with this UUID".
++ (nullable TMBundleItem*)itemWithUUIDString:(nullable NSString*)uuidString NS_SWIFT_NAME(item(uuidString:));
 
 // bundles::item_t::menu_item_separator(). A process-wide singleton, so
-// `TMBundleItem.separatorItem == TMBundleItem.separatorItem`.
-@property (class, nonatomic, readonly) TMBundleItem* separatorItem;
+// `TMBundleItem.menuItemSeparator == TMBundleItem.menuItemSeparator`.
+@property (class, nonatomic, readonly) TMBundleItem* menuItemSeparator;
 
 // bundles::items_for_proxy — expands a kProxy item into the items it stands for
 // in the given scope. Pass nil for the wildcard scope.
-+ (NSArray<TMBundleItem*>*)itemsForProxy:(TMBundleItem*)proxyItem scope:(nullable TMScopeContext*)scope;
++ (NSArray<TMBundleItem*>*)itemsForProxy:(TMBundleItem*)proxyItem scope:(nullable TMScopeContext*)scope NS_SWIFT_NAME(items(forProxy:scope:));
 
 // Sorted by name using the same case-insensitive collation the ObjC++ menus
 // used (text::less_t). Menu order is user-visible, so this is not merely
 // -localizedCaseInsensitiveCompare: by another name — it is the existing one.
-+ (NSArray<TMBundleItem*>*)itemsSortedByName:(NSArray<TMBundleItem*>*)items;
++ (NSArray<TMBundleItem*>*)itemsSortedByName:(NSArray<TMBundleItem*>*)items NS_SWIFT_NAME(sortedByName(_:));
 
 @property (nonatomic, readonly) TMBundleItemKind kind;
 

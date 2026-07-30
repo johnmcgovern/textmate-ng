@@ -195,6 +195,16 @@ static char const* kOakMenuItemTabTrigger    = "OakMenuItemTabTrigger";
 		[self setActivationString:[NSString stringWithCxxString:(" "+aTabTrigger+"⇥")] withFont:[NSFont menuBarFontOfSize:floor([(self.menu.font ?: [NSFont menuFontOfSize:0]) pointSize] * 0.85)]];
 }
 
+- (void)setInactiveKeyEquivalent:(NSString*)aKeyEquivalent
+{
+	[self setInactiveKeyEquivalentCxxString:aKeyEquivalent ? to_s(aKeyEquivalent) : NULL_STR];
+}
+
+- (void)setTabTrigger:(NSString*)aTabTrigger
+{
+	[self setTabTriggerCxxString:aTabTrigger ? to_s(aTabTrigger) : NULL_STR];
+}
+
 - (void)setModifiedState:(BOOL)flag
 {
 	if(NSImage* image = [NSImage imageNamed:@"NSMenuItemBullet"])

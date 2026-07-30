@@ -163,7 +163,11 @@ and the `?`-status file correctly unchecked; **Commit** returned
    Reproduced before fixing, which is what corrected the diagnosis: with TextMate
    inactive the parent window reported **0 sheets** and `CommitWindowTool` never
    returned; the identical call with TextMate active reported **1 sheet** and
-   worked. Three layers of fix:
+   worked. Confirmed afterwards straight from the app, once `/usr/bin/log` was
+   being invoked correctly (see the logging note above) — inactive with one
+   document open it reports `mainWindow=nil keyWindow=nil orderedWindows=1
+   chosen=sheet`, and with every window closed `orderedWindows=0
+   chosen=standalone`. Three layers of fix:
 
    - **Window selection** (`CommitWindowServer.mm`): after the `TM_PROJECT_UUID`
      match and `mainWindow`, fall back to `keyWindow`, then to the first visible
@@ -1163,6 +1167,48 @@ watching them fail.
 
 `countOfVisibleTabs`'s always-zero behaviour was pinned by a test too — now
 superseded, see below.
+
+#### Logging is observable — and the trap that hid it (2026-07-29)
+
+**`zsh` has a `log` builtin that shadows `/usr/bin/log`.** It fails with
+`too many arguments`, which looks nothing like a PATH problem, and with stderr
+redirected it looks exactly like an app that logs nothing. A whole diagnostic
+detour was spent this session concluding TextMate's `os_log` output "was not
+observable" and that a `no main window` diagnostic "never fired". Both were
+wrong. **Always spell it `/usr/bin/log`**, and never redirect its stderr while
+you are still establishing whether a query works:
+
+```
+/usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate"'
+/usr/bin/log show --last 30m --predicate 'process == "TextMate" AND messageType == error' --style compact
+```
+
+Proven with a deterministic probe rather than assumed: `main.mm` logs
+`Received SIGTERM: Quick shutdown.`, and after `kill -TERM` that line appears
+attributed to `TextMate[…]`. Levels matter for after-the-fact diagnosis —
+`os_log` (default) and `os_log_error` persist to the log store; `os_log_info`
+and `os_log_debug` are memory-only and need `--info`/`--debug`.
+
+**A correction this forces.** The OakTabBarView port write-up claimed "the
+unified log shows zero errors" as evidence. That query never ran. Re-run
+properly, the app does emit error-level lines, but every one comes from an Apple
+subsystem (`com.apple.appintents`, `AppKit:StateRestoration`, `CFNetwork`,
+`BaseBoard`, `TextInputUI`) — ordinary noise for any AppKit app. Nothing from
+this codebase, no unrecognized selectors, no exceptions. The conclusion stands;
+the evidence for it is now real.
+
+**New convention: [`Shared/include/oak/log.h`](Shared/include/oak/log.h)** defines
+`OAK_LOG_SUBSYSTEM` (`com.j23software.TextMate`) so one predicate finds
+everything the app emits, with a category per area:
+
+```objc
+static os_log_t const kLogCommitWindow = os_log_create(OAK_LOG_SUBSYSTEM, "commit-window");
+```
+
+Adoption is incremental. 168 sites still use `os_log_error(OS_LOG_DEFAULT, …)`,
+which works but carries no subsystem and can only be filtered by process; a few
+older sites invented non-reverse-DNS subsystems of their own (`Pasteboard`,
+`KEventManager`) that group with nothing. Move them as they are touched.
 
 #### Post-port hardening (2026-07-29)
 

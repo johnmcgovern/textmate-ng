@@ -10,7 +10,13 @@
 #import <io/io.h>
 #import <regexp/format_string.h>
 #import <ns/ns.h>
+#import <oak/log.h>
 #import <oak/oak.h>
+
+// Read with:
+//   /usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate"'
+// (`/usr/bin/log`, not `log` — zsh has a builtin of that name.)
+static os_log_t const kLogCommitWindow = os_log_create(OAK_LOG_SUBSYSTEM, "commit-window");
 
 // ======================
 // = Boundary functions =
@@ -191,6 +197,16 @@ NSString* CWCommitMessageGrammarForSCMName (NSString* scmName)
 			}
 		}
 	}
+
+	// One line per commit invocation, at default level so it persists: which
+	// window the sheet attached to, and why. This is the state that decided
+	// whether the client got a reply at all, so it is worth having in a log a
+	// user can send you.
+	os_log(kLogCommitWindow, "presenting commit window: mainWindow=%{public}s keyWindow=%{public}s orderedWindows=%lu chosen=%{public}s",
+	       NSApp.mainWindow ? "yes" : "nil",
+	       NSApp.keyWindow  ? "yes" : "nil",
+	       (unsigned long)NSApp.orderedWindows.count,
+	       projectWindow ? "sheet" : "standalone");
 
 	OakCommitWindow* commitWindow = [[OakCommitWindow alloc] initWithOptions:someOptions];
 	[commitWindow presentAttachedToWindow:projectWindow];

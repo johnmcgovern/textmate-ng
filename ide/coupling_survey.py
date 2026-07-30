@@ -101,11 +101,22 @@ def imports_as_plain_objc(fw, hdrs, sdk, incs):
 
 def analyze(fw, sdk, incs):
     src = f"Frameworks/{fw}/src"
-    impl = sorted(glob.glob(f"{src}/*.mm") + glob.glob(f"{src}/*.cc") + glob.glob(f"{src}/*.m"))
+    # Recurse. Four frameworks keep sources in subdirectories of src/ —
+    # HTMLOutput/src/browser, FileBrowser, OakFilterList, scm — and two specs
+    # already glob them with `src/**/*.mm`. A non-recursive glob here did not
+    # merely undercount loc: every coupling metric below was computed from the
+    # top-level files only, so a framework's C++ state, C++-typed signatures and
+    # ObjC-only constructs could sit in a subdirectory and score zero. That is
+    # how HTMLOutput came to be recommended as a ~715-line score-12 port when it
+    # is ~1440 lines with a std::map in its public API. (Found 2026-07-29 while
+    # acting on that recommendation.)
+    impl = sorted(glob.glob(f"{src}/**/*.mm", recursive=True)
+                  + glob.glob(f"{src}/**/*.cc", recursive=True)
+                  + glob.glob(f"{src}/**/*.m", recursive=True))
     loc = sum(len(open(f, errors="ignore").read().splitlines()) for f in impl)
 
     ivar = prop = sig = load = cbk = objc = 0
-    for f in impl + glob.glob(f"{src}/*.h"):
+    for f in impl + glob.glob(f"{src}/**/*.h", recursive=True):
         t = open(f, errors="ignore").read()
         load += len(re.findall(r'^\+\s*\(\s*void\s*\)\s*load\b', t, re.M))
         cbk += len(re.findall(r'\b\w+::callback_t\b', t))

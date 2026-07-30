@@ -1168,6 +1168,61 @@ watching them fail.
 `countOfVisibleTabs`'s always-zero behaviour was pinned by a test too — now
 superseded, see below.
 
+### Phase 4 — HTMLOutputWindow (Done 2026-07-29), and a survey defect it exposed
+
+**`HTMLOutputWindow` is fully Swift** — the standalone window hosting a bundle
+command's HTML output. 77 lines, no interop shims, `HTMLOutputWindow.h` stays
+hand-written as the public surface (the Preferences pattern), and its three
+consumers were untouched. It ports cleanly because it never calls the one method
+it could not: `OakHTMLOutputView`'s C++-typed
+`-loadRequest:environment:autoScrolls:`. Its bridging header still imports
+`<HTMLOutput/HTMLOutput.h>` — the objcxx importer parses the header and simply
+omits members it cannot represent, which costs nothing here.
+
+Two notes for the next port of this shape: `dealloc` teardown moved to
+`windowWillClose:` (a `@MainActor` class cannot touch its state from `deinit`),
+and the window title binds to `mainFrameTitle`, a key path that is **not** in
+`HTMLOutput.h` and resolves through KVC — renaming it breaks the title silently.
+
+#### ⚠️ The coupling survey was undercounting four frameworks
+
+**`ide/coupling_survey.py` globbed `src/*.mm` non-recursively.** Four frameworks
+keep sources in subdirectories — `HTMLOutput/src/browser`, `FileBrowser`,
+`OakFilterList`, `scm` — and two specs already glob them with `src/**/*.mm`. This
+was not merely a wrong `loc`: **every coupling metric was computed from the
+top-level files only**, so C++ state, C++-typed signatures and `+load` sitting in
+a subdirectory scored zero. Fixed to recurse.
+
+What that did to the framework this session set out to port:
+
+| | before | after |
+|---|---:|---:|
+| `HTMLOutput` loc | 715 | **1843** |
+| C++ state / C++-typed sigs | 1 / 3 | **4 / 10** |
+| `+load` | 0 | **1** |
+| **score** | **12** | **51** |
+
+So **`HTMLOutput` is not the easy next port it was recommended as** — at 51 it is
+harder than `Find` (43) and `DocumentWindow` (50). Its public API takes a
+`std::map<std::string, std::string>` (one caller, `OakCommand.mm:240`), its
+`environment` ivar is a `std::map`, `HOFileHandleScheme.mm` (384 lines) does
+`std::string` stream rewriting and calls
+`oak::kill_process_group_in_background`, and there is a `+load` in
+`browser/HOWebViewDelegateHelper.mm`. **Deferred**; it needs the CommitWindow
+treatment (an ObjC++ adapter, or changing that one caller's API) planned as its
+own piece of work.
+
+Corrected loc for the others: `FileBrowser` 4585 → 5600, `OakFilterList`
+2528 → 2757, `scm` unchanged in rank. **The best remaining candidates are now
+`TMFileReference` (761, score 11) and `OakCommand` (672, score 14)**, with
+`CrashReporter` (262) and `BundleMenu` (240) as small clean wins. `MenuBuilder`
+still scores 1 and is still the documented trap (its public API is a C++ DSL).
+
+The lesson generalises past this tool: **a metric that silently sees only part of
+its input is worse than no metric**, because it produces confident wrong
+rankings. This one was caught only by acting on its recommendation and finding
+the framework twice the advertised size.
+
 #### Conversion-safety audit of the ported Swift (2026-07-29)
 
 Three separate crashes this project has shipped or nearly shipped share one

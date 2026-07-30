@@ -153,7 +153,7 @@ static NSString* GetHardwareInfo (int field, BOOL isInteger = NO)
 				}
 				else
 				{
-					os_log_error(OS_LOG_DEFAULT, "Unexpected status code (%ld) from %{publuc}@", rc, request.URL);
+					os_log_error(OS_LOG_DEFAULT, "Unexpected status code (%ld) from %{public}@", rc, request.URL);
 				}
 				unlink(gzippedReport.fileSystemRepresentation);
 			}];
@@ -245,17 +245,17 @@ static NSString* GetHardwareInfo (int field, BOOL isInteger = NO)
 			}
 			else
 			{
-				os_log_error(OS_LOG_DEFAULT, "Failed creating file %{publuc}@", gzPath);
+				os_log_error(OS_LOG_DEFAULT, "Failed creating file %{public}@", gzPath);
 			}
 		}
 		else
 		{
-			os_log_error(OS_LOG_DEFAULT, "Failed creating directory %{publuc}@", gzPath.stringByDeletingLastPathComponent);
+			os_log_error(OS_LOG_DEFAULT, "Failed creating directory %{public}@", gzPath.stringByDeletingLastPathComponent);
 		}
 	}
 	else
 	{
-		os_log_error(OS_LOG_DEFAULT, "Failed reading %{publuc}@", path);
+		os_log_error(OS_LOG_DEFAULT, "Failed reading %{public}@", path);
 	}
 	return res;
 }

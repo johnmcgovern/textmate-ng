@@ -1,0 +1,7 @@
+target "${dirname}" {
+	require OakFoundation bundles cf ns scope text
+	headers src/TMBundleItem.h src/TMScopeContext.h src/TMBundleModelCxx.h
+	sources src/*.mm
+	tests tests/t_*.mm
+	frameworks Cocoa
+}

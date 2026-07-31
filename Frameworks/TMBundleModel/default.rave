@@ -1,5 +1,5 @@
 target "${dirname}" {
-	require OakFoundation bundles cf ns scope text
+	require OakFoundation bundles cf ns plist scope text
 	headers src/TMBundleItem.h src/TMScopeContext.h src/TMBundleModelCxx.h
 	sources src/*.mm
 	tests tests/t_*.mm

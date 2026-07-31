@@ -10,8 +10,8 @@
 // bridging header and exported through the include farm unchanged.
 //
 // SCOPE: only what the consumers actually touch, not all of bundles::item_t.
-// There is no field-string lookup, no scope_selector, no does_match, no
-// plist round-trip — those arrive when the consumer that needs them does.
+// Still deliberately absent: scope_selector, does_match, bundle_variables,
+// set_parent_menu, add_path. They arrive with the consumer that needs them.
 #import <Cocoa/Cocoa.h>
 #import "TMScopeContext.h"
 
@@ -91,6 +91,69 @@ typedef NS_ENUM(NSUInteger, TMBundleItemKind) {
 // item_t::menu()'s default. Empty for anything that is not a bundle or a menu.
 @property (nonatomic, readonly) NSArray<TMBundleItem*>* menu;
 
+// "Name — Bundle", the Bundle Editor's window title.
+@property (nonatomic, readonly, nullable) NSString* nameWithBundle;
+
+// Every file this item is stored in. Usually one; a non-local item that has been
+// overridden locally has more, which is why the Bundle Editor offers a path menu
+// rather than a single represented URL.
+@property (nonatomic, readonly) NSArray<NSString*>* paths;
+
+// The bundle's Support directory. nil when it has none.
+@property (nonatomic, readonly, nullable) NSString* supportPath;
+
+@property (nonatomic, readonly, getter=isDisabled) BOOL disabled;
+@property (nonatomic, readonly, getter=isHiddenFromUser) BOOL hiddenFromUser;
+
+// MARK: - Property bag
+//
+// item_t's plist as a Foundation object graph. This is the shape an editor
+// wants: the Bundle Editor binds its property xibs straight to a mutable copy
+// of `properties` and writes the result back, so no per-field accessor is
+// needed and nothing has to know the plist variant type.
+
+// Reading gives the stored plist; assigning replaces it. Assigning does NOT
+// write to disk — call -save for that.
+@property (nonatomic, copy) NSDictionary* properties;
+
+// Multi-valued fields (a grammar's file extensions, a drag command's drop
+// extensions) — item_t stores these flattened, so they are not reachable
+// through `properties`.
+- (NSArray<NSString*>*)valuesForField:(NSString*)field;
+
+// plist::equal against the item's *stored* plist. The Bundle Editor uses this to
+// decide whether an edit is still pending, so it must compare values and not
+// object identity — and it cannot be -[NSDictionary isEqual:], because the round
+// trip through plist::any_t does not preserve every Foundation class.
+- (BOOL)storedPropertiesEqual:(NSDictionary*)properties;
+
+// MARK: - Persistence and the index
+
+- (BOOL)save;
+- (BOOL)saveToDirectory:(NSString*)directory;
+- (BOOL)moveToTrash;
+
+// Creates an item and adds it to the running index. `bundle` is nil only when
+// creating a bundle itself.
++ (TMBundleItem*)createItemOfKind:(TMBundleItemKind)kind inBundle:(nullable TMBundleItem*)bundle properties:(NSDictionary*)properties;
+
+// bundles::remove_item. Does not touch the file — -moveToTrash does that.
+- (void)removeFromIndex;
+
+// bundles::query restricted to one bundle, including disabled and hidden items,
+// with proxies left unresolved — the Bundle Editor lists what is *there*, not
+// what would apply in some scope. Pass nil for every bundle.
++ (NSArray<TMBundleItem*>*)itemsInBundle:(nullable TMBundleItem*)bundle ofKinds:(TMBundleItemKind)kinds NS_SWIFT_NAME(items(inBundle:ofKinds:));
+
 @end
+
+// Posted on the main thread after the bundle index changes.
+//
+// This is the wrapper's answer to bundles::callback_t, which is a C++ struct
+// with virtual methods that Swift cannot subclass. One process-wide subscriber
+// is registered in +load and re-broadcasts as a notification, so consumers need
+// no C++ at all — and get the ordering guarantee for free, which is the same
+// reason BundleEditor registers its reveal observer in +load rather than lazily.
+extern NSNotificationName const TMBundleItemsDidChangeNotification;
 
 NS_ASSUME_NONNULL_END

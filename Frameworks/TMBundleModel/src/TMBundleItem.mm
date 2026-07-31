@@ -3,9 +3,11 @@
 #import <text/ctype.h>
 #import <ns/ns.h>
 
+NSNotificationName const TMBundleItemsDidChangeNotification = @"TMBundleItemsDidChangeNotification";
+
 // The header's raw values are load-bearing — they cross into Swift as a
-// TMBundleItemKind option set and are compared against items coming back out of
-// the C++ index. A divergence would compile clean and mis-route every menu item,
+// TMBundleItemKind enum and are compared against items coming back out of the
+// C++ index. A divergence would compile clean and mis-route every menu item,
 // so it is pinned here rather than trusted.
 static_assert((NSUInteger)bundles::kItemTypeCommand           == TMBundleItemKindCommand,           "TMBundleItemKind out of sync with bundles::kind_t");
 static_assert((NSUInteger)bundles::kItemTypeDragCommand       == TMBundleItemKindDragCommand,       "TMBundleItemKind out of sync with bundles::kind_t");
@@ -29,6 +31,58 @@ static_assert((NSUInteger)bundles::kItemTypeUnknown           == TMBundleItemKin
 @implementation TMBundleItem
 {
 	bundles::item_ptr _item;
+}
+
+// bundles::callback_t is a C++ struct with virtual methods, so no Swift type can
+// subclass it. Exactly one subscriber exists for the whole process and it
+// re-broadcasts as a notification, which is what lets every consumer stay free
+// of C++ rather than each carrying its own ObjC++ shim for this.
+//
+// ⚠️ This CANNOT be registered directly from +load, though that is where it
+// belongs. **dyld runs ObjC +load methods before the C++ static initializers of
+// the same image**, and bundles::query.cc's `Callbacks` is a
+// oak::callbacks_t — which has a user-provided constructor, so it is
+// dynamically initialized, and its std::mutex is still raw memory at +load
+// time. Calling add_callback there aborts the process with
+// "mutex lock failed: Invalid argument" — not a link error, not a warning, a
+// crash at launch. Found by a test; it would have been found by the app.
+//
+// So registration happens from two places, each covering what the other cannot:
+static void RegisterBundleCallback ()
+{
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		struct callback_t : bundles::callback_t
+		{
+			void bundles_did_change ()
+			{
+				// The index can be rebuilt off the main thread (BundlesManager
+				// reloads in the background); AppKit observers cannot be.
+				dispatch_async(dispatch_get_main_queue(), ^{
+					[NSNotificationCenter.defaultCenter postNotificationName:TMBundleItemsDidChangeNotification object:nil];
+				});
+			}
+		};
+
+		static callback_t cb;
+		bundles::add_callback(&cb);
+	});
+}
+
+// …the first main-queue turn, by which time every static initializer has run.
+// This is what covers a consumer that only ever observes the notification and
+// never messages this class — BundleEditor is exactly that.
++ (void)load
+{
+	dispatch_async(dispatch_get_main_queue(), ^{ RegisterBundleCallback(); });
+}
+
+// …and the first message to the class, which covers an index change that
+// happens before the run loop has turned at all. +initialize is safe where
+// +load is not: it fires on a message send, long after image initialization.
++ (void)initialize
+{
+	RegisterBundleCallback();
 }
 
 - (instancetype)initPrivate
@@ -162,6 +216,118 @@ static std::mutex& InternMutex ()
 - (NSArray<TMBundleItem*>*)menu
 {
 	return [TMBundleItem itemsWithCxxItems:_item->menu()];
+}
+
+- (NSString*)nameWithBundle
+{
+	return [NSString stringWithCxxString:_item->name_with_bundle()];
+}
+
+- (NSArray<NSString*>*)paths
+{
+	NSMutableArray<NSString*>* res = [NSMutableArray array];
+	for(auto const& path : _item->paths())
+	{
+		// A path is bytes, not necessarily UTF-8 — go through the file-system
+		// representation rather than +stringWithCxxString:, which would drop a
+		// path this process can still open.
+		if(NSString* str = [NSFileManager.defaultManager stringWithFileSystemRepresentation:path.data() length:path.size()])
+			[res addObject:str];
+	}
+	return res;
+}
+
+- (NSString*)supportPath
+{
+	return [NSString stringWithCxxString:_item->support_path()];
+}
+
+- (BOOL)isDisabled
+{
+	return _item->disabled();
+}
+
+- (BOOL)isHiddenFromUser
+{
+	return _item->hidden_from_user();
+}
+
+// ==================
+// = Property bag   =
+// ==================
+
+- (NSDictionary*)properties
+{
+	return ns::to_mutable_dictionary(_item->plist()) ?: @{};
+}
+
+- (void)setProperties:(NSDictionary*)properties
+{
+	_item->set_plist(plist::convert((__bridge CFPropertyListRef)(properties ?: @{})));
+}
+
+- (NSArray<NSString*>*)valuesForField:(NSString*)field
+{
+	NSMutableArray<NSString*>* res = [NSMutableArray array];
+	for(auto const& value : _item->values_for_field(to_s(field)))
+	{
+		if(NSString* str = [NSString stringWithCxxString:value])
+			[res addObject:str];
+	}
+	return res;
+}
+
+- (BOOL)storedPropertiesEqual:(NSDictionary*)properties
+{
+	return plist::equal(plist::convert((__bridge CFPropertyListRef)(properties ?: @{})), _item->plist());
+}
+
+// ================================
+// = Persistence and the index    =
+// ================================
+
+- (BOOL)save
+{
+	return _item->save();
+}
+
+- (BOOL)saveToDirectory:(NSString*)directory
+{
+	return _item->save_to(to_s(directory));
+}
+
+- (BOOL)moveToTrash
+{
+	return _item->move_to_trash();
+}
+
++ (TMBundleItem*)createItemOfKind:(TMBundleItemKind)kind inBundle:(TMBundleItem*)bundle properties:(NSDictionary*)properties
+{
+	auto item = std::make_shared<bundles::item_t>(oak::uuid_t().generate(), bundle.cxxItem, (bundles::kind_t)kind);
+
+	// The generated UUID has to reach the plist too: it is what the item is
+	// looked up by once saved, and set_plist would otherwise leave the stored
+	// copy without one.
+	plist::dictionary_t plist = plist::convert((__bridge CFPropertyListRef)(properties ?: @{}));
+	plist[bundles::kFieldUUID] = to_s(item->uuid());
+	item->set_plist(plist);
+
+	bundles::add_item(item);
+	return [self itemWithCxxItem:item];
+}
+
+- (void)removeFromIndex
+{
+	bundles::remove_item(_item);
+}
+
++ (NSArray<TMBundleItem*>*)itemsInBundle:(TMBundleItem*)bundle ofKinds:(TMBundleItemKind)kinds
+{
+	// filter:false and includeDisabledItems:true — the Bundle Editor lists what
+	// is there, not what would apply in some scope, and a disabled item is
+	// precisely the thing a user opens the editor to re-enable.
+	oak::uuid_t const bundleUUID = bundle ? bundle.cxxItem->uuid() : oak::uuid_t();
+	return [self itemsWithCxxItems:bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, (int)kinds, bundleUUID, false, true)];
 }
 
 // Interning makes these redundant today. They are spelled out anyway because

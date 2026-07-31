@@ -1,11 +1,19 @@
 # TextMate → Swift-native macOS: Project Phases & Progress
 
-_High-level progress tracker. Last updated: 2026-07-28 — **OakTabBarView is fully
+_High-level progress tracker. Last updated: 2026-07-30 — **`TMBundleModel` exists
+and `BundleMenu` is fully ported onto it.** The shared blocker under BundleMenu
+and BundleEditor was one missing piece, not two: `bundles`' public API is C++ free
+functions over `bundles::item_ptr`. `TMBundleItem`/`TMScopeContext` wrap it once;
+BundleMenu is now Swift with a 13-line ObjC++ shim, 402 lines deleted. **396 tests
+across 31 bundles green**, Debug and Release both build, and the Bundles menu,
+nested submenus, a bundle command run from the menu, and the ⌘-key-equivalent path
+through the C++ shim were all exercised in the running Debug app. Earlier:
+2026-07-28 — **OakTabBarView is fully
 ported** (OakTabView + OakTabFrame + OakTabBarView in one change; both hand-written
 interop headers and the 1234-line `.mm` deleted; the dead OakTabBarViewController
 removed first as its own commit). The framework is Swift except `OakAnimatorProxy`.
-387 tests across 29 bundles green (the port landed its own test bundle), Debug
-and Release both build, and the tab bar was exercised in the running app. Earlier: 2026-07-27 (**Phase 3 complete** — Swift
+Debug and Release both build, and the tab bar was exercised in the running app.
+Earlier: 2026-07-27 (**Phase 3 complete** — Swift
 interop foundation. **Phase 4 in progress**: CommitWindow (pilot) and Preferences are
 ported and verified in the running app; BundleEditor is partially ported — its
 `PropertiesViewController` and value transformer are Swift, its 1072-line window
@@ -96,11 +104,21 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**387 tests across 29 bundles** as of 2026-07-29.
+**396 tests across 31 bundles** as of 2026-07-30.
+
+> **Correction (2026-07-30).** This line, and the header above it, previously
+> read **387 tests across 29 bundles**. The bundle count was right; the test
+> count was not. Measured by running the suite with the new bundles skipped, the
+> 29-bundle baseline is **368**. Where 387 came from is unknown — it does not
+> match the count with the 13 `SKIPPED_TESTS` added back either. Counted here as
+> `Test Case … passed` lines, which agrees with summing each bundle's own
+> `Executed N tests`. **Re-measure rather than incrementing the documented
+> figure**; it has been wrong by 19 for at least one session.
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
 (1.1k ✅), Preferences (1.9k ✅), **OakTabBarView (1.6k ✅, 2026-07-28)**,
+**BundleMenu (240 ✅, 2026-07-30, on the new `TMBundleModel`)**,
 BundleEditor (1.3k ⚠️ partial). **`SoftwareUpdate`
 (1.2k) is deliberately deferred** — the open Sparkle question may replace that
 framework wholesale. (It is §7 of `NOTARIZATION_HANDOFF.md`, which is kept as a
@@ -908,10 +926,10 @@ actually cost time on the three completed ports.
 
 | framework | loc | pubAPI | state | sigs | +load | cbk | xib | score |
 |---|---:|---|---:|---:|---:|---:|---:|---:|
-| HTMLOutputWindow | 77 | shim | 0 | 0 | 0 | 0 | 0 | **0** |
+| HTMLOutputWindow | 77 | shim | 0 | 0 | 0 | 0 | 0 | **0** ✅ |
 | CrashReporter | 262 | direct | 0 | 0 | 0 | 0 | 0 | **1** |
 | MenuBuilder | 399 | shim | 0 | 0 | 0 | 0 | 0 | **1** ⚠️ |
-| BundleMenu | 240 | shim | 0 | 1 | 0 | 0 | 0 | **1** |
+| BundleMenu | 240 | shim | 0 | 1 | 0 | 0 | 0 | **1** ⚠️ ✅ |
 | SoftwareUpdate | 1243 | direct | 0 | 0 | 0 | 0 | 0 | **2** (deferred) |
 | **OakTabBarView** | **1601** | **direct** | **0** | **0** | **0** | **0** | **0** | **3** |
 | TMFileReference | 761 | shim | 1 | 1 | 0 | 0 | 0 | 11 |
@@ -1218,6 +1236,13 @@ Corrected loc for the others: `FileBrowser` 4585 → 5600, `OakFilterList`
 `CrashReporter` (262) and `BundleMenu` (240) as small clean wins. `MenuBuilder`
 still scores 1 and is still the documented trap (its public API is a C++ DSL).
 
+> **Updated 2026-07-30.** `BundleMenu` ✅ is done — it was not the "small clean
+> win" the score implied, it was the framework that forced `TMBundleModel` into
+> existence (see the blind-spot note directly below). `CrashReporter` (262,
+> `pubAPI: direct`) is now the small clean win, with `TMFileReference` (761) and
+> `OakCommand` (672) still the best mid-size picks. **`TMFileReference` carries a
+> known 4-byte `scm::status::type` ABI trap** — see "deliberately not landed".
+
 The lesson generalises past this tool: **a metric that silently sees only part of
 its input is worse than no metric**, because it produces confident wrong
 rankings. This one was caught only by acting on its recommendation and finding
@@ -1248,11 +1273,134 @@ next improvement to the tool: count C++ tokens in *exported* headers and weight
 them like state, since an API Swift cannot express is a harder blocker than an
 ivar it cannot hold.
 
-**What this reframes.** `BundleMenu`, `BundleEditor` and probably `MenuBuilder`
-are all blocked on the *same* missing piece: an ObjC-shaped model layer over
-`bundles::item_ptr` (the `BEModel` that BundleEditor's partial port already
-identified). So the highest-leverage next work is not another framework port —
-it is building that wrapper once and unblocking three frameworks with it.
+**What this reframes.** `BundleMenu` and `BundleEditor` are blocked on the *same*
+missing piece: an ObjC-shaped model layer over `bundles::item_ptr` (the `BEModel`
+that BundleEditor's partial port already identified). So the highest-leverage
+next work is not another framework port — it is building that wrapper once.
+**Done 2026-07-30 as `TMBundleModel`; see below.**
+
+> **Correction (2026-07-30).** This paragraph originally said "and probably
+> `MenuBuilder`", and claimed the wrapper would unblock **three** frameworks. It
+> unblocks two. `MenuBuilder` has *zero* contact with this: no `bundles::`, no
+> `scope::`, no `item_ptr` anywhere in `Frameworks/MenuBuilder/src/`, and no
+> `require bundles` in its spec. Its only C++ is `typedef std::vector<MBMenuItem>
+> MBMenu` plus the designated-initializer aggregate — the C++ DSL already
+> recorded as its own separate trap. Checked by grep before building anything,
+> which is the general lesson: the survey's `pubAPI: shim` flag says *some* C++ is
+> in the exported headers, never *which* C++, and two frameworks can be flagged
+> for entirely unrelated reasons.
+
+### Phase 4 — TMBundleModel, the wrapper (Done 2026-07-30)
+
+`Frameworks/TMBundleModel` — `TMBundleItem` over `bundles::item_ptr`, plus
+`TMScopeContext` over `scope::context_t`. Its own framework rather than living in
+`bundles` (pure C++, and consumed by QuickLookGenerator and 20+ non-AppKit
+targets — ObjC++ there would pull Foundation into all of them) or in
+`BundlesManager` (BundleMenu does not require it, and it does network/index
+work). The framework name deliberately differs from every class name, so the
+module-name/class-name collision cannot arise inside it.
+
+**It is a reference type wrapping the `shared_ptr`, and that was the one design
+question that actually had a forced answer.** Both consumers key containers on
+`item_ptr` *identity* — BundleMenu tracked emitted items in a
+`std::set<item_ptr>`, BundleEditor keys pending edits with
+`std::map<item_ptr, plist::dictionary_t>` — and a value projection cannot be a
+dictionary key across a bundle reload. Instances are interned on the raw
+`item_t*` so `==` holds and not merely `-isEqual:`; `-isEqual:`/`-hash` are
+implemented anyway so an intern-table regression degrades to "equal but not
+identical" rather than to items that compare unequal. `NSCopying` returning
+`self`, because a dictionary key needs it.
+
+Three things worth carrying forward:
+
+1. **The intern table's key is an `NSValue`, not the pointer cast to `id`.** An
+   opaque-personality `NSMapTable` would accept the cast, but ARC retains
+   anything it sees as an object across a call, and sending `-retain` to a C++
+   object is a crash.
+2. **`NS_ENUM`, not `NS_OPTIONS`, for `TMBundleItemKind`** — the C++ values are
+   powers of two, but the bitmask exists for the *query* APIs, none of which are
+   exposed. An item's kind is exactly one value, and an enum is what lets Swift
+   switch over it. The raw values are pinned to `bundles::kind_t` by
+   `static_assert`; a divergence there compiles clean and mis-routes every menu
+   item.
+3. **Do not name a class property `separatorItem`.** `NSMenuItem`'s deprecated
+   `+separatorItem` shadows the name badly enough that swiftc reports *"renamed
+   to 'separator'"* against an unrelated class. It is `+menuItemSeparator`.
+
+**Scope is deliberately only what the consumers touch** — no field-string
+lookup (`value_for_field` is reached for the tab trigger alone today, so that is
+a property), no `scope_selector`, no `does_match`, no plist round-trip. The
+mutating half and the `bundles::callback_t` notification arrive with
+BundleEditor, which is the consumer that needs them.
+
+`TMBundleItem.h`/`TMScopeContext.h` are free of C++ so a Swift bridging header
+can import them; `TMBundleModelCxx.h` holds the `item_ptr` ↔ ObjC conversions
+for the ObjC++ shims a ported framework keeps, and **must stay out of any
+bridging header**.
+
+**15 tests, ObjC++ and not Swift on purpose**: what needs checking is that the
+wrapper agrees with the C++ it wraps, and a test that could only see the ObjC
+side cannot tell agreement from a plausible lie. `test::bundle_index_t`
+(`Shared/include/test/bundle_index.h`) builds a synthetic index; note
+`bundles::set_index` is process-global, so it is one index per test *class*.
+
+**A test that passed for the wrong reason, and how it was caught.** The
+`+itemWithUUIDString:` guard exists because `oak::uuid_t` logs and then *clears*
+an unparseable string to all-zeroes. The first draft of its test passed with the
+guard removed — no fixture held the zero UUID, so `lookup` returned nil either
+way. It now carries an item with that UUID (which a bundle whose plist has a
+malformed `uuid` really does produce), and fails without the guard. The comment
+in the source was wrong too: it claimed a cleared UUID was the separator item's,
+and `kSeparatorUUID` is a real UUID. **Mutation-check every guard you add**; a
+green test on a fixture that cannot exercise it is worse than no test.
+
+### Phase 4 — BundleMenu (Done 2026-07-30)
+
+The first consumer of the wrapper, and the point of building it. `BundleMenu.mm`,
+`BundleMenuDelegate.mm` and `Private.h` (402 lines) deleted; `BundleMenu.swift`
+plus a 13-line `BundleMenuSupport.mm`.
+
+**Consumers were not touched.** `BundleMenu.h` keeps
+`bundles::item_ptr OakShowMenuForBundleItems(std::vector<bundles::item_ptr> const&, …)`
+because its two callers (`OakTextView.mm`, `OakMainMenu.mm`) are ObjC++ that
+stays ObjC++, and `BundleMenuSupport.mm` is the single place the conversion
+happens. This is the CommitWindow recipe applied to a *free function* rather than
+a delegate: the shim is the boundary, not a rewrite of the caller.
+
+- **`OakAddBundlesToMenu` needed no shim at all** — it was internal
+  (`Private.h`) and both its callers moved to Swift with it. Worth checking
+  before writing a shim for anything.
+- **Two ObjC-clean `NSMenuItem` additions were needed upstream**:
+  `-setInactiveKeyEquivalent:` and `-setTabTrigger:`. The existing pair takes
+  `std::string`, which from Swift is not awkward but *uncallable*. `nil` now
+  carries what `NULL_STR` carried.
+- `-[BundleMenuSupport] cxxItem` is read only after a nil check.
+  `objc_msgSend` to nil does not produce a valid non-trivial C++ return value,
+  so "messaging nil gives you a null `shared_ptr`" is not a thing to rely on.
+
+**13 tests, `BundleMenuTests`.** They import **both** hand-written headers —
+`BundleMenu.h` and the internal `BMSwiftClasses.h` — because nothing else checks
+either against the Swift, and a drift is an unrecognized selector at runtime. Safe
+here for the reason `OakTabBarViewTests` recorded: there is no generated
+`BundleMenu-Swift.h` in the test target to collide with. They also cover what the
+accessibility tree cannot see: separator collapsing, a submenu's UUID title *and*
+delegate, the disabled `nop:` placeholder a dead proxy leaves, bundle headings and
+indentation, and the flat case-insensitive grammar list. Two mutations were checked
+and each failed only its own test — dropping `submenu.delegate` (the classic
+silent-menu bug), and relaxing `every item is a grammar` to `any`.
+
+**Verified in the running app**, a Debug build where `OakAssert.mm` aborts on any
+ObjC exception, so surviving it is itself the assertion: the Bundles menu lists 31
+bundles; Ruby's submenu builds 30 entries with separators; a nested submenu
+(Declarations) opens and builds its own; running *"# frozen_string_literal: true"*
+from it inserted that line into the document — the whole represented-object UUID
+round trip through `AppController Commands.mm`; and ⌘R went through the C++ shim
+into `BundleMenuPopup` and produced the *"Running sample.rb…"* output window.
+That last one matters more than it looks: `OakTextView` routes **every**
+key-equivalent match through `OakShowMenuForBundleItems`, which short-circuits
+below two items — so any bundle key press exercises the shim's selector. No crash
+reports, no unrecognized selectors, nothing from this codebase in the log (the
+only errors are WebKit sandbox noise from the HTML output window).
 
 #### Conversion-safety audit of the ported Swift (2026-07-29)
 

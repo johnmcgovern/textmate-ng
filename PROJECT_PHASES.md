@@ -104,7 +104,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**428 tests across 31 bundles** as of 2026-07-31.
+**446 tests across 32 bundles** as of 2026-08-01.
 
 > **Correction (2026-07-30).** This line, and the header above it, previously
 > read **387 tests across 29 bundles**. The bundle count was right; the test
@@ -119,8 +119,8 @@ Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
 (1.1k ✅), Preferences (1.9k ✅), **OakTabBarView (1.6k ✅, 2026-07-28)**,
 **BundleMenu (240 ✅, 2026-07-30, on the new `TMBundleModel`)**,
-**BundleEditor (1.3k ✅, 2026-07-31 — the last blocked framework)**.
-**`SoftwareUpdate`
+**BundleEditor (1.3k ✅, 2026-07-31 — the last blocked framework)**,
+**TMFileReference (274 of 761 ✅, 2026-08-01)**. **`SoftwareUpdate`
 (1.2k) is deliberately deferred** — the open Sparkle question may replace that
 framework wholesale. (It is §7 of `NOTARIZATION_HANDOFF.md`, which is kept as a
 local working note and deliberately not published — so that reference resolves
@@ -939,7 +939,7 @@ actually cost time on the three completed ports.
 | BundleMenu | 240 | shim | 0 | 1 | 0 | 0 | 0 | **1** ⚠️ ✅ |
 | SoftwareUpdate | 1243 | direct | 0 | 0 | 0 | 0 | 0 | **2** (deferred) |
 | **OakTabBarView** | **1601** | **direct** | **0** | **0** | **0** | **0** | **0** | **3** |
-| TMFileReference | 761 | shim | 1 | 1 | 0 | 0 | 0 | 11 |
+| TMFileReference | 761 | shim | 1 | 1 | 0 | 0 | 0 | 11 | ⚠️ ✅
 | HTMLOutput | 715 | shim | 1 | 3 | 0 | 0 | 0 | 12 |
 | OakCommand | 672 | shim | 1 | 5 | 0 | 0 | 0 | 14 |
 | BundlesManager | 995 | shim | 4 | 3 | 0 | 0 | 0 | 37 |
@@ -1042,6 +1042,20 @@ each accessor:
 
 Both `selected` and `modified` had it. **Grep any framework for `getter =`
 before porting its properties** — this pattern is common in this codebase.
+
+> **Refined 2026-08-01, by mutation-testing the claim during the TMFileReference
+> port.** The rule as written above is broader than the facts. The trap is
+> entirely about the **setter**: `@objc(isSelected)` renames the property, so
+> the setter becomes `setIsSelected:`. For a **readonly** property there is no
+> setter, and the two spellings are equivalent — `-valueForKey:@"closable"`
+> still resolves when the property is named `isClosable`, because KVC's search
+> order tries `-isKey` before giving up. TMFileReference's `closable` and
+> `modified` are both readonly, and the "wrong" spelling passes every test.
+>
+> Annotate the accessors anyway: it is exact, and it stays correct if the
+> property later gains a setter. But **grep for `getter =` on a *readwrite*
+> property** — that is where the crash lives, and knowing which half of the rule
+> is load-bearing is what stops it being trusted where it does not hold.
 
 Verified in the running app: three files opened into one project window render
 three correctly-titled tabs with the right one selected and its content shown;
@@ -1263,6 +1277,24 @@ still scores 1 and is still the documented trap (its public API is a C++ DSL).
 > `DocumentWindow` (3564), `OakAppKit` (4815), `OakFilterList` (2757),
 > `FileBrowser` (5600). `MenuBuilder` remains the documented C++-DSL trap, and
 > `OakTextView` stays ObjC++ permanently.
+>
+> **Updated 2026-08-01.** `TMFileReference` ✅ — its ABI trap is closed and its
+> class is ported; `KEventManager.mm` inside it is deliberately still ObjC (see
+> its section below).
+>
+> **And `OakCommand` is a trap of the same family as `MenuBuilder` and
+> `HTMLOutput` — do not take it next on score alone.** Its 14 comes from one
+> public C++-typed method, but its *implementation* is process machinery:
+> `io::create_pipe`, `my_fork`, `bundle_command_t`, `bundles::required_command_t`,
+> signal handling. Porting the class leaves all of that behind an ObjC++ shim and
+> puts very little in Swift. **The score measures the interop surface, never
+> implementation depth** — this is the fourth framework it has misjudged, after
+> `MenuBuilder`, `HTMLOutput` and `BundleMenu`, and the pattern is now clear
+> enough to state as a rule: *read the .mm before believing a low score.*
+>
+> On that reading, `CrashReporter` (262, `pubAPI: direct`) is the only
+> straightforward one left — and it carries its own documented blocker, the
+> `UNUserNotificationCenterDelegate` overlay problem that has failed five times.
 
 The lesson generalises past this tool: **a metric that silently sees only part of
 its input is worse than no metric**, because it produces confident wrong
@@ -1530,6 +1562,67 @@ Save** closes without writing anything to disk, confirmed with `find`.
 checks any of them and a drift is an unrecognized selector in a window a user
 opened. Renaming only the *ObjC selector* of `-revealItem:` — the exact shape of
 the `setSelected:` crash — fails them.
+
+### Phase 4 — TMFileReference (2026-08-01)
+
+Two commits: the ABI change that unblocked it, then the port.
+
+#### The `scm::status::type` trap, closed
+
+The blocker recorded under "deliberately not landed" was real, and the numbers
+are now measured rather than reasoned: `sizeof(scm::status::type)` is **4** (its
+largest value is 128, so the compiler picks `unsigned int`) against
+`sizeof(NSUInteger)` **8**. Any hand-written ObjC or Swift declaration of that
+property would have used the wider type, and the mismatch is neither an error
+nor a warning.
+
+Fixed at the root rather than by asserting a width: the property and
+`CreateIconImageForURL` now take `NS_OPTIONS(NSUInteger, TMSCMStatus)`, so both
+sides read the *same ObjC declaration* and cannot disagree. The C++ enum is cast
+explicitly at the three remaining call sites and the two are pinned
+value-for-value by `static_assert` — which rejects a swapped enumerator at
+**compile time**, a stronger guard than any test.
+
+`NS_OPTIONS` and not `NS_ENUM` because it is genuinely masked
+(`status & (modified|added|deleted|conflicted)`). Two Swift consequences worth
+knowing before choosing NS_OPTIONS again: the **zero member imports as `[]`**,
+not as a case, and a member named `none` **collides with `Optional.none`** at a
+leading dot — both have to be spelled out.
+
+#### The port, and what deliberately did not move
+
+Only `TMFileReference.mm` (274 lines). The other two files stay ObjC on purpose:
+
+- **`KEventManager.mm` (460)** has *one* line of C++ and an already-clean ObjC
+  header, so it was never blocked and porting it buys nothing for the interop
+  goal — while being the riskiest file in the framework: a path tree of
+  `dispatch_source` VNODE watchers with re-parenting on rename, weak parent
+  links, and file-descriptor lifetimes. Portable, and genuinely testable
+  (create/modify/rename/delete in a temp dir and drive the run loop), but it is
+  its own piece of work, not a rider on this one.
+- **`FileItemImage.mm` (27)** is a C free function by design with an ObjC++
+  caller; a Swift global cannot be `@objc`.
+
+Two things Swift could not reach:
+
+- **`kOnSystemDisk` does not import.** `GetIconRef`, `ReleaseIconRef` and
+  `-[NSImage initWithIconRef:]` all do — it is the `<CarbonCore/Files.h>`
+  constant that Swift's importer drops. Hardcoding its −32768 across the
+  boundary is the kind of magic number that rots when the SDK moves, so the call
+  stays in ObjC where the constant is in scope.
+- **An exported `NSNotificationName` constant.** A Swift
+  `NSNotification.Name` extension does not emit a C symbol, and consumers link
+  against one — so the definition stays in ObjC. Swift's importer then hands it
+  back as `.TMURLWillClose`, having stripped the `Notification` suffix, so
+  declaring one by hand *duplicates* it.
+
+#### A pre-existing sharp edge, pinned rather than fixed
+
+`-absoluteURL` does not normalise paths, so a URL carrying a `.` component is a
+**different** `TMFileReference` for the same file — two views of it would stop
+sharing state. The ObjC++ keyed the same map the same way. Changing it to
+`-standardizedFileURL` is a behaviour change and belongs in its own commit; the
+current behaviour is pinned by a test so the decision stays visible.
 
 #### Conversion-safety audit of the ported Swift (2026-07-29)
 

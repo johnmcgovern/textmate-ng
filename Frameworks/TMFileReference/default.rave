@@ -1,7 +1,7 @@
 target "${dirname}" {
 	require_headers scm
 	headers src/TMFileReference.h src/TMSCMStatus.h src/FileItemImage.h src/KEventManager.h
-	sources src/*.mm
+	sources src/*.{mm,swift}
 	tests tests/t_*.mm
 	files resources/* "Resources/DocumentTypes"
 	frameworks Cocoa

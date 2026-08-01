@@ -11,6 +11,9 @@
 //
 // Keep these declarations in step with the Swift definitions — nothing checks
 // them at build time; a mismatch is an unrecognized selector at runtime.
+// NOTE this header must never reach the Swift bridging header: it declares
+// classes Swift *defines*, and importing both spellings into the Swift
+// compilation is a redefinition. It is for this framework's ObjC++ only.
 @class OakKeyEquivalentView;
 
 // PropertiesViewController.swift — File's Owner of the 8 property xibs.

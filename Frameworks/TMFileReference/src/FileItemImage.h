@@ -1,3 +1,3 @@
-#import <scm/status.h>
+#import "TMSCMStatus.h"
 
-NSImage* CreateIconImageForURL (NSURL* url, BOOL isModified, BOOL isMissing, BOOL isDirectory, BOOL isSymbolicLink, scm::status::type scmStatus);
+NSImage* CreateIconImageForURL (NSURL* url, BOOL isModified, BOOL isMissing, BOOL isDirectory, BOOL isSymbolicLink, TMSCMStatus scmStatus);

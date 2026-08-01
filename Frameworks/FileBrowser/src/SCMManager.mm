@@ -198,14 +198,17 @@ namespace scm
 		{
 			NSString* path = [NSFileManager.defaultManager stringWithFileSystemRepresentation:pair.first.data() length:pair.first.size()];
 			TMFileReference* fileReference = [TMFileReference fileReferenceWithURL:[NSURL fileURLWithPath:path]];
-			fileReference.SCMStatus = pair.second;
+			// Widening a 4-byte C++ enum into the 8-byte ObjC one, which is
+			// the whole point of TMSCMStatus — the width now agrees on both
+			// sides of the boundary instead of being asserted by a header.
+			fileReference.SCMStatus = (TMSCMStatus)pair.second;
 			[fileReferences addObject:fileReference];
 			[_fileReferences removeObject:fileReference];
 		}
 	}
 
 	for(TMFileReference* fileReference in _fileReferences)
-		fileReference.SCMStatus = scm::status::none;
+		fileReference.SCMStatus = TMSCMStatusNone;
 	_fileReferences = fileReferences;
 
 	for(SCMRepositoryObserver* observer in [_observers copy])

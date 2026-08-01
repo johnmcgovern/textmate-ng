@@ -1169,7 +1169,7 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	{
 		self.observeSCMStatus = YES;
 		NSString* path = _virtualPath ?: _path;
-		_icon = CreateIconImageForURL(path ? [NSURL fileURLWithPath:path isDirectory:NO] : nil, self.isDocumentEdited, !self.isOnDisk, NO, NO, _scmStatus);
+		_icon = CreateIconImageForURL(path ? [NSURL fileURLWithPath:path isDirectory:NO] : nil, self.isDocumentEdited, !self.isOnDisk, NO, NO, (TMSCMStatus)_scmStatus);
 		_iconIsModified = self.isDocumentEdited;
 		_iconIsOnDisk   = self.isOnDisk;
 	}

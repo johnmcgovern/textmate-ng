@@ -1,6 +1,24 @@
 #import "TMFileReference.h"
+#import <scm/status.h>
 
 NSNotificationName const TMURLWillCloseNotification = @"TMURLWillCloseNotification";
+
+// TMSCMStatus is the ObjC spelling of scm::status::type, and the two are only
+// ever converted by a cast — so the values have to agree exactly. They are
+// pinned here rather than trusted because a divergence would compile clean and
+// then draw the wrong badge, or none.
+//
+// This file is the only place in the framework that still sees the C++ enum;
+// that is the point of the header change.
+static_assert((NSUInteger)scm::status::unknown     == TMSCMStatusUnknown,     "TMSCMStatus out of sync with scm::status::type");
+static_assert((NSUInteger)scm::status::none        == TMSCMStatusNone,        "TMSCMStatus out of sync with scm::status::type");
+static_assert((NSUInteger)scm::status::unversioned == TMSCMStatusUnversioned, "TMSCMStatus out of sync with scm::status::type");
+static_assert((NSUInteger)scm::status::modified    == TMSCMStatusModified,    "TMSCMStatus out of sync with scm::status::type");
+static_assert((NSUInteger)scm::status::added       == TMSCMStatusAdded,       "TMSCMStatus out of sync with scm::status::type");
+static_assert((NSUInteger)scm::status::deleted     == TMSCMStatusDeleted,     "TMSCMStatus out of sync with scm::status::type");
+static_assert((NSUInteger)scm::status::conflicted  == TMSCMStatusConflicted,  "TMSCMStatus out of sync with scm::status::type");
+static_assert((NSUInteger)scm::status::ignored     == TMSCMStatusIgnored,     "TMSCMStatus out of sync with scm::status::type");
+static_assert((NSUInteger)scm::status::mixed       == TMSCMStatusMixed,       "TMSCMStatus out of sync with scm::status::type");
 
 @interface TMFileReference ()
 {
@@ -131,7 +149,7 @@ NSNotificationName const TMURLWillCloseNotification = @"TMURLWillCloseNotificati
 // = Image =
 // =========
 
-- (void)setSCMStatus:(scm::status::type)newSCMStatus
+- (void)setSCMStatus:(TMSCMStatus)newSCMStatus
 {
 	if(_SCMStatus == newSCMStatus)
 		return;
@@ -180,13 +198,13 @@ static NSImage* ImageNamed (NSString* imageName)
 	if(!_image)
 	{
 		NSURL* url                  = _URL;
-		scm::status::type scmStatus = _SCMStatus;
+		TMSCMStatus scmStatus = _SCMStatus;
 
 		_image = [NSImage imageWithSize:NSMakeSize(16, 16) flipped:NO drawingHandler:^BOOL(NSRect dstRect){
 			BOOL drawLinkBadge = NO;
 
 			NSImage* image;
-			if(scmStatus == scm::status::deleted)
+			if(scmStatus == TMSCMStatusDeleted)
 			{
 				image = [NSWorkspace.sharedWorkspace iconForFileType:NSFileTypeForHFSTypeCode((OSType)kUnknownFSObjectIcon)];
 			}
@@ -235,17 +253,24 @@ static NSImage* ImageNamed (NSString* imageName)
 
 			[image drawInRect:dstRect fromRect:NSZeroRect operation:NSCompositingOperationCopy fraction:1];
 
-			if(scmStatus != scm::status::none)
+			if(scmStatus != TMSCMStatusNone)
 			{
+				// Only ever one badge, so this switches on the whole value rather
+				// than masking — a file carrying more than one status bit draws
+				// nothing. That is the existing behaviour, not a new choice, and
+				// the explicit `default:` only spells out what ARC's nil-init of
+				// `badge` already did for the two statuses with no case
+				// (`unknown` and `ignored`).
 				NSImage* badge;
 				switch(scmStatus)
 				{
-					case scm::status::conflicted:   badge = ImageNamed(@"scm-badge-conflicted");  break;
-					case scm::status::modified:     badge = ImageNamed(@"scm-badge-modified");    break;
-					case scm::status::added:        badge = ImageNamed(@"scm-badge-added");       break;
-					case scm::status::deleted:      badge = ImageNamed(@"scm-badge-deleted");     break;
-					case scm::status::unversioned:  badge = ImageNamed(@"scm-badge-unversioned"); break;
-					case scm::status::mixed:        badge = ImageNamed(@"scm-badge-mixed");       break;
+					case TMSCMStatusConflicted:   badge = ImageNamed(@"scm-badge-conflicted");  break;
+					case TMSCMStatusModified:     badge = ImageNamed(@"scm-badge-modified");    break;
+					case TMSCMStatusAdded:        badge = ImageNamed(@"scm-badge-added");       break;
+					case TMSCMStatusDeleted:      badge = ImageNamed(@"scm-badge-deleted");     break;
+					case TMSCMStatusUnversioned:  badge = ImageNamed(@"scm-badge-unversioned"); break;
+					case TMSCMStatusMixed:        badge = ImageNamed(@"scm-badge-mixed");       break;
+					default:                      badge = nil;                                  break;
 				}
 
 				if(badge)

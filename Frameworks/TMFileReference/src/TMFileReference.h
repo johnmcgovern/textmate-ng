@@ -1,4 +1,4 @@
-#import <scm/status.h>
+#import "TMSCMStatus.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -20,7 +20,7 @@ extern NSNotificationName const TMURLWillCloseNotification;
 // = These methods are for “owners”, e.g. TMDocument and SCMManager =
 // ==================================================================
 
-@property (nonatomic) scm::status::type SCMStatus;
+@property (nonatomic) TMSCMStatus SCMStatus;
 
 - (void)increaseOpenCount;
 - (void)decreaseOpenCount;

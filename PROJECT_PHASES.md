@@ -1,14 +1,14 @@
 # TextMate → Swift-native macOS: Project Phases & Progress
 
-_High-level progress tracker. Last updated: 2026-07-30 — **`TMBundleModel` exists
-and `BundleMenu` is fully ported onto it.** The shared blocker under BundleMenu
-and BundleEditor was one missing piece, not two: `bundles`' public API is C++ free
-functions over `bundles::item_ptr`. `TMBundleItem`/`TMScopeContext` wrap it once;
-BundleMenu is now Swift with a 13-line ObjC++ shim, 402 lines deleted. **396 tests
-across 31 bundles green**, Debug and Release both build, and the Bundles menu,
-nested submenus, a bundle command run from the menu, and the ⌘-key-equivalent path
-through the C++ shim were all exercised in the running Debug app. Earlier:
-2026-07-28 — **OakTabBarView is fully
+_High-level progress tracker. Last updated: 2026-07-31 — **the `bundles::item_ptr`
+blocker is gone, and both frameworks it blocked are ported.** `TMBundleModel`
+(`TMBundleItem`/`TMScopeContext`) is the ObjC-shaped model layer over the C++ free
+functions that Swift could neither call nor implement; `BundleMenu` (2026-07-30)
+and now **`BundleEditor`'s 1086-line window controller** are Swift on top of it,
+the latter via `BEEntry` over the browser tree. Between them ~1500 lines of ObjC++
+deleted for ~100 lines of interop. **428 tests across 31 bundles green**, Debug and
+Release both build, and both frameworks were driven in the running Debug app.
+Earlier: 2026-07-28 — **OakTabBarView is fully
 ported** (OakTabView + OakTabFrame + OakTabBarView in one change; both hand-written
 interop headers and the 1234-line `.mm` deleted; the dead OakTabBarViewController
 removed first as its own commit). The framework is Swift except `OakAnimatorProxy`.
@@ -104,7 +104,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**396 tests across 31 bundles** as of 2026-07-30.
+**428 tests across 31 bundles** as of 2026-07-31.
 
 > **Correction (2026-07-30).** This line, and the header above it, previously
 > read **387 tests across 29 bundles**. The bundle count was right; the test
@@ -119,7 +119,8 @@ Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
 (1.1k ✅), Preferences (1.9k ✅), **OakTabBarView (1.6k ✅, 2026-07-28)**,
 **BundleMenu (240 ✅, 2026-07-30, on the new `TMBundleModel`)**,
-BundleEditor (1.3k ⚠️ partial). **`SoftwareUpdate`
+**BundleEditor (1.3k ✅, 2026-07-31 — the last blocked framework)**.
+**`SoftwareUpdate`
 (1.2k) is deliberately deferred** — the open Sparkle question may replace that
 framework wholesale. (It is §7 of `NOTARIZATION_HANDOFF.md`, which is kept as a
 local working note and deliberately not published — so that reference resolves
@@ -808,7 +809,7 @@ MacroMates' in the meantime.
   and default-bundles provisioning are migrated to the Xcode world, then tag and
   delete. See "rave retirement policy" under the Phase 2 cutover criteria.
 
-### Phase 4 — BundleEditor (⚠️ partially done 2026-07-27)
+### Phase 4 — BundleEditor (⚠️ partially done 2026-07-27; ✅ completed 2026-07-31)
 
 **Done:** `PropertiesViewController` and `OakRot13Transformer` are Swift, plus a
 `BESupport.h` shim for `decode::rot13`. `PropertiesViewController` is the File's
@@ -836,6 +837,12 @@ count suggested:
   methods, to receive bundle-change callbacks.
 - Its **public API is C++-typed**: `-revealBundleItem:(bundles::item_ptr const&)`,
   called from two other targets (`AppController.mm`, `DocumentWindowController.mm`).
+
+> **✅ Done 2026-07-31.** The analysis below held up completely — including its
+> conclusion that the model layer had to come first. It did, as `TMBundleModel`
+> + `BEEntry`, and then the controller ported in one change. The prediction that
+> it would need "a few hundred lines of *new* ObjC++" was close: ~100 lines of
+> interop for 1086 deleted. See "BundleEditor complete" below.
 
 Porting it therefore means first writing a real ObjC model layer (`BEModel`)
 wrapping the entry tree, item operations and plist conversion — a few hundred
@@ -941,7 +948,7 @@ actually cost time on the three completed ports.
 | DocumentWindow | 3564 | shim | 4 | 11 | 0 | 0 | 0 | 50 |
 | OakFilterList | 2528 | shim | 7 | 4 | 0 | 0 | 0 | 65 |
 | FileBrowser | 4585 | shim | 4 | 9 | 3 | 0 | 0 | 65 |
-| BundleEditor | 1254 | shim | 3 | 9 | 1 | 1 | 8 | 141 |
+| BundleEditor | 1254 | shim | 3 | 9 | 1 | 1 | 8 | 141 | ✅
 | OakTextView | 6917 | shim | 16 | 53 | 0 | 4 | 1 | 595 |
 
 `state` = C++ ivars/properties, `sigs` = ObjC methods with C++ in their
@@ -1242,6 +1249,20 @@ still scores 1 and is still the documented trap (its public API is a C++ DSL).
 > `pubAPI: direct`) is now the small clean win, with `TMFileReference` (761) and
 > `OakCommand` (672) still the best mid-size picks. **`TMFileReference` carries a
 > known 4-byte `scm::status::type` ABI trap** — see "deliberately not landed".
+>
+> **Updated 2026-07-31.** `BundleEditor` ✅ is done too. At score 141 it was by
+> far the hardest port so far, and the score was right about *why* — nearly all
+> of it was the C++ state — but the score is a measure of **what has to be
+> wrapped, not of how hard the port is once it is**. With `TMBundleModel` and
+> `BEEntry` in place the controller itself was routine. So a high score should
+> now be read as "find the shared model layer first", not as "avoid".
+>
+> With both `pubAPI: shim` traps resolved, the ranking is finally usable as
+> written. Still-unported, in order: `CrashReporter` (262), `OakCommand` (672),
+> `TMFileReference` (761), `HTMLOutput` (1843, score 51), `Find` (3123),
+> `DocumentWindow` (3564), `OakAppKit` (4815), `OakFilterList` (2757),
+> `FileBrowser` (5600). `MenuBuilder` remains the documented C++-DSL trap, and
+> `OakTextView` stays ObjC++ permanently.
 
 The lesson generalises past this tool: **a metric that silently sees only part of
 its input is worse than no metric**, because it produces confident wrong
@@ -1401,6 +1422,114 @@ key-equivalent match through `OakShowMenuForBundleItems`, which short-circuits
 below two items — so any bundle key press exercises the shim's selector. No crash
 reports, no unrecognized selectors, nothing from this codebase in the log (the
 only errors are WebKit sandbox noise from the HTML output window).
+
+### Phase 4 — BundleEditor complete (2026-07-31)
+
+The last framework blocked on `bundles::item_ptr`. Landed as four independently
+verified commits, because the model layer had to exist before the controller
+could use it: `TMBundleModel` wave 2 (the mutating half), `BEEntry`, `BESupport`,
+then the controller. **`BundleEditor.mm`, 1086 lines, deleted for ~100 lines of
+`BEInterop.mm`.**
+
+**What genuinely could not move**, and the recipe each one establishes:
+
+1. **An ObjC++ *category* on a Swift class is how a C++-typed selector survives
+   a port.** `-revealBundleItem:(bundles::item_ptr const&)` is called from
+   `AppController.mm` and `DocumentWindowController.mm`, both still ObjC++. A
+   Swift class cannot implement it; a category can be added to one from ObjC, so
+   the signature is unchanged and neither consumer was touched. This is the
+   CommitWindow adapter recipe with one object fewer — there the selector arrived
+   at a *delegate*, so a stand-in could conform on the controller's behalf; here
+   it is sent to the class itself, and only a category can put it there.
+   `-updateEnvironment:forCommand:` is the same shape and additionally *has* to
+   be on the controller, because OakCommand finds it by walking the responder
+   chain.
+2. **`+load`** — the six named value transformers the property xibs bind through,
+   and the reveal-notification observer. On a plain ObjC class in the same file,
+   not a category on the Swift one: a category `+load` on a Swift class does
+   work, but see the hazard below for why this layer should not lean on subtle
+   load-time spellings.
+3. **`bundles::callback_t`** is gone from here entirely — TMBundleModel owns the
+   one process-wide subscriber and re-broadcasts as a notification.
+
+#### ⚠️ `+load` runs before the C++ static initializers of the same image
+
+Registering the `bundles::callback_t` subscriber from `+load` **crashes the
+process at launch**: `libc++abi: terminating due to uncaught exception of type
+std::__1::system_error: mutex lock failed: Invalid argument`. dyld runs ObjC
+`+load` methods *before* the C++ dynamic initializers, and `bundles::query.cc`'s
+`Callbacks` is an `oak::callbacks_t`, which has a user-provided constructor and
+so is dynamically initialized — its `std::mutex` is still raw memory when `+load`
+locks it.
+
+Not a link error, not a warning: an abort inside `lock_guard`'s constructor,
+before `main`. Registration now happens from a `dispatch_once` reached two ways,
+each covering what the other cannot — a `+load` that defers to the first
+main-queue turn (for a consumer that only ever observes the notification and
+never messages the class, which is exactly what BundleEditor is), and
+`+initialize` (for an index change before the run loop has turned at all).
+
+**The general rule: `+load` may not touch a C++ static in another translation
+unit.** This codebase uses `+load` deliberately in several places, so it will
+recur.
+
+#### `be::entry_t::has_children()` means "is not a leaf"
+
+Not "has at least one child" — and the two come apart in shipping code. The base
+`entries()` returns a one-null-element sentinel meaning *leaf*, so a subclass
+returning a genuinely **empty** vector is expandable-but-empty. A bundle with no
+Support directory is exactly that, and `NSBrowser` sets its cells' leaf flag
+straight off this value, so "simplifying" it to `children.count > 0` changes
+which rows show a disclosure triangle. The first draft of the test asserted the
+opposite and failed, which is how it was found.
+
+#### Two bugs the port fixed rather than reproduced
+
+- **`parent_for_column`'s signed/unsigned comparison.** The ObjC++ wrote
+  `for(size_t col = 0; col < aColumn; ++col)` with `aColumn` an `NSInteger`, so
+  `-selectedColumn` returning −1 converted to `SIZE_MAX` and the loop survived
+  only by bailing out on the first row lookup. Swift traps on that range, so the
+  guard is now explicit. Fourth instance of *clamp in the wide domain*.
+- **`saveDocument:` called `-save` twice per item**, because folding the path
+  lookup into the same condition re-ran it for any item that saved but reported
+  no path. Found by reading the diff; nothing else would have.
+
+#### Where the ObjC++ boundary was drawn
+
+Worth recording because the split was the design decision, not the code:
+
+| | where | why |
+|---|---|---|
+| property bag, save/trash, item creation, index queries, change notification | `TMBundleModel` | general bundle-item model; BundleEditor is only its first mutator |
+| the browser tree | `BEEntry`, in BundleEditor | this one window's model, not part of the item model |
+| ASCII plist text, the six command popups, `${var}` expansion, `fix_shebang` | `BESupport` | specific to this window's xibs and text format |
+| `+load`, C++-typed selectors | `BEInterop.mm` | Swift structurally cannot |
+
+**The command popups resolve to strings in C++ rather than handing Swift an enum
+to index a literal array with.** `parse_command`'s `output_format` has five
+values while `CommandProperties.xib` offers four; the fifth is only ever set at
+runtime, so the ObjC++ indexing could not fire — but that was incidental, resting
+on `index_of()` falling back to 0 and on the arrays matching the parser's lists.
+An out-of-range index is an `NSRangeException` in ObjC and a **hard trap** in
+Swift.
+
+#### Verification
+
+**Driven in the running Debug app**, where `OakAssert.mm` aborts on any ObjC
+exception, so surviving it is itself the assertion: the editor opens and lists 31
+bundles; navigating into Git retitles the window *"Commit… — Git"*; that item's
+pane shows all six popups resolved correctly and its scope/semantic-class fields,
+which means `CommandProperties.xib` and all six `+load`-registered transformers
+loaded; the body shows the command's real shebang. **Select Bundle Item… → Edit**
+routes through the ObjC++ category and lands on *"Reformat Document — C"* — the
+`bundles::item_ptr` round trip. Editing the body and pressing ⌘W raises the right
+alert (*"the snippet item named '#include <…>' in the 'C' bundle"*), and **Don't
+Save** closes without writing anything to disk, confirmed with `find`.
+
+6 interop tests import all three hand-written headers, because nothing else
+checks any of them and a drift is an unrecognized selector in a window a user
+opened. Renaming only the *ObjC selector* of `-revealItem:` — the exact shape of
+the `setSelected:` crash — fails them.
 
 #### Conversion-safety audit of the ported Swift (2026-07-29)
 

@@ -2,6 +2,21 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-02 (v2026.7-alpha.3)
+
+Third alpha. Mostly a bug-fix release: two of these were long-standing faults that predate the fork, and one of them made committing from a terminal impossible. The move to Swift also continued, and the bundle editor is now fully ported.
+
+* **Committing from a terminal no longer hangs.** The commit window is opened by a helper tool that waits for your message, and it looked for TextMate's *main* window to attach to. macOS reports no main window whenever an app is merely inactive — the normal state when you start a commit from a terminal — so with documents open and TextMate simply not frontmost, the tool blocked forever. It now falls back through the key window to any visible window, presents a standalone window when there is nothing to attach to, brings the app forward (you are being asked a question while a command-line tool waits on the answer), and always replies even if its window is closed.
+* **File watching could report changes for the wrong file.** The watched file descriptor was closed immediately after its event source was cancelled, but cancellation is asynchronous and the descriptor must stay open until it completes. That freed the descriptor number for anything else in the app to claim while the dying source still referred to it — and because renames are followed by asking that descriptor for its new path, a recycled number meant silently watching an unrelated file. The descriptor is now owned by the event source and closed only when cancellation finishes.
+* **The tab bar no longer over-closes tabs.** Its count of visible tabs always reported zero, so the rule that auto-closes old tabs — keep whatever is on screen, or eight, whichever is larger — always reduced to eight regardless of how many tabs were actually showing.
+* **A crash in the tab bar was fixed** for anyone who had set the `tabItemMinWidth` preference to zero: the resulting division produced infinity, and converting that to an integer terminated the app as the tab bar laid itself out.
+* **The bundle editor is now entirely Swift**, along with the bundle menu, the HTML output window, and the crash reporter. File-system change tracking is roughly a third ported. As before these are ports, not redesigns, and are intended to be invisible in use.
+* **SyntaxMate has been removed.** It was a companion service for embedding TextMate's syntax highlighting in other apps, and it had been packaged incorrectly since the move to Xcode — it could not be launched, and would have loaded no grammars if it had been. It is not a component of the editor, so it was dropped rather than repaired; the upstream code remains in this repository's history.
+* Crash-report diagnostics logged the failing file path and collector address as `<private>` because of a misspelled annotation, in exactly the four error paths where you would want to see them.
+* Automated tests now number **459 across 33 bundles**, up from 383 across 29 in alpha.2, with the newly ported frameworks each landing their own coverage.
+
+**Known limitations in this alpha:** unchanged from alpha.2 — the app is still not signed with an Apple Developer ID or notarized, so a copy that reaches another Mac carrying a quarantine flag is refused by Gatekeeper as “damaged”, which it is not; clearing the flag with `xattr -dr com.apple.quarantine` on the copy allows it to run. Software update and crash-report submission remain switched off while the fork has no server of its own, and the QuickLook generator cannot load until the app is properly signed.
+
 ## 2026-07-29 (v2026.7-alpha.2)
 
 Second alpha. The app now has its own identity separate from upstream TextMate, runs on Macs that have never seen a developer toolchain, and has begun moving its user interface to Swift.

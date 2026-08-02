@@ -104,7 +104,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**446 tests across 32 bundles** as of 2026-08-01.
+**451 tests across 32 bundles** as of 2026-08-01.
 
 > **Correction (2026-07-30).** This line, and the header above it, previously
 > read **387 tests across 29 bundles**. The bundle count was right; the test
@@ -114,6 +114,14 @@ frameworks additionally get contract tests — see "nib-contract tests" below;
 > `Test Case … passed` lines, which agrees with summing each bundle's own
 > `Executed N tests`. **Re-measure rather than incrementing the documented
 > figure**; it has been wrong by 19 for at least one session.
+>
+> **How to count, added 2026-08-01 after getting it wrong a third time.** Sum
+> each bundle's own `Executed N tests`. Do NOT use an anchored
+> `grep '^Test Case .* passed'`: xctest interleaves stderr, and a log line
+> landing mid-result silently drops a test from the count —
+> `…xctest[74191] CoreTest Case '-[…]' passed` is a real example that cost an
+> off-by-one in commit `d7ad0835` (it says 449; the figure was 450). An
+> unanchored match agrees with the per-bundle sum.
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
@@ -428,10 +436,20 @@ CxxTest, via `cxx_tests`. The other 22 are plain `void test_x ()` functions usin
   failures, not regressions — but leaving them red would make the CI signal
   worthless. Categories: missing tools (`hg`, `svn`), git no longer defaulting to
   `master`, host spellchecker dependence, two needing installed grammars, four
-  genuine behaviour mismatches, and one real **memory-safety bug** —
+  genuine behaviour mismatches, and one **out-of-bounds write** —
   `cf/tests/t_rect.cc`'s `from_str(".........")` underflows `size_t` into a huge
   `CGRect` and writes out of bounds (it crashes the process, taking the whole
   bundle with it). Fixing these is tracked separately.
+
+  > **✅ Fixed and un-skipped 2026-08-01, and this description overstated it.**
+  > The bug is in the **test's own helper**, not in `cf`: `cgrect.h` is
+  > header-only templates working in `CGFloat` throughout and never indexes
+  > anything, so no shipping code was ever affected. "One real memory-safety
+  > bug" among a list of skipped tests reads as though the framework were
+  > implicated — the seed's own comment beside the skip entry had it right.
+  > `from_str` now returns `CGRectZero` for the empty pattern, and `set()`
+  > bounds-checks each index so a future recurrence is a reported *failure*
+  > rather than an abort that takes the bundle down. **12 skips remain.**
 
 ### Stream 8 — Default-bundles provisioning (Done 2026-07-26)
 
@@ -758,6 +776,9 @@ MacroMates' in the meantime.
 
 ## Tracked but not yet scheduled
 
+- ~~**`cf/tests/t_rect.cc`'s out-of-bounds write.**~~ **Fixed 2026-08-01** — see
+  the note under Stream 7. It was in the test's helper, not in `cf`; 12 skips
+  remain, none of which crash.
 - **`SyntaxMate` is mispackaged and orphaned** (found 2026-07-26 during cutover
   verification). Its spec says `prefix "${target}.xpc/Contents"` — it is an **XPC
   service**, not a CLI tool — but the seed's `kind()` doesn't recognize `.xpc`, so

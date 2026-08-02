@@ -208,6 +208,26 @@ static bool paths_share_inode (NSString* lhs, NSString* rhs)
 					[weakSelf handleKEvent:dispatch_source_get_data(dispatchSource)];
 				});
 
+				// From here the SOURCE owns the descriptor, and closing it is the
+				// cancellation handler's job.
+				//
+				// dispatch_source_cancel() is asynchronous, and dispatch_source_create's
+				// contract for the fd-based source types is explicit: the descriptor
+				// must not be closed until the cancellation handler runs, because the
+				// source may still be delivering an event against it. -tearDownEventSource
+				// used to close it immediately after cancelling, which left the number
+				// free for any other open() in the process to claim while the dying
+				// source still referenced it.
+				//
+				// That is not merely untidy here: -handleKEvent: recovers a renamed
+				// file's new path with fcntl(F_GETPATH) on this very descriptor, so a
+				// recycled number means re-parenting the node onto an unrelated file
+				// and reporting its changes instead. The rename branch below even
+				// tears down and immediately sets up again, which is exactly the
+				// window where the number would have been reused.
+				int const fd = _fileDescriptor;
+				dispatch_source_set_cancel_handler(dispatchSource, ^{ close(fd); });
+
 				_dispatchSource = dispatchSource;
 				dispatch_resume(_dispatchSource);
 			}
@@ -225,12 +245,19 @@ static bool paths_share_inode (NSString* lhs, NSString* rhs)
 
 	if(_dispatchSource)
 	{
+		// Forget the descriptor here but do not close it — the cancellation
+		// handler installed in -setUpEventSource owns that, and will run once the
+		// source has finished draining. Clearing the ivar first means a queued
+		// event arriving in the meantime sees -1 and does nothing, rather than
+		// reading a descriptor that is on its way out.
+		_fileDescriptor = -1;
 		dispatch_source_cancel(_dispatchSource);
 		_dispatchSource = nullptr;
 	}
-
-	if(_fileDescriptor != -1)
+	else if(_fileDescriptor != -1)
 	{
+		// open() succeeded but dispatch_source_create() did not, so there is no
+		// source to hand ownership to and this is the only place that can close it.
 		close(_fileDescriptor);
 		_fileDescriptor = -1;
 	}

@@ -1184,11 +1184,6 @@ SKIPPED_TESTS = {
   # default-bundles provisioning supplies. Recheck once `bl` can reach its server.
   "file_t_typeTests/test_file_type"           => "needs installed grammars (DefaultBundles)",
   "file_t_typeTests/test_create_glob"         => "needs installed grammars (DefaultBundles)",
-  # Crashes rather than fails, which aborts the whole bundle: from_str(".........")
-  # matches no 'x', so x1 - x0 underflows size_t into a huge CGRect and set() runs
-  # off the end of the canvas (caught by libc++ hardening). A bug in the test's own
-  # helper, in cf/tests/t_rect.cc.
-  "cf_t_rectTests/test_string_rects"          => "size_t underflow on the empty rect -> OOB write",
   # Genuine behaviour mismatches in code under test — real bugs or stale fixtures.
   "file_t_saveTests/test_save_translit"       => "transliteration output differs",
   "file_t_saveTests/test_export_filter"       => "export filter did not run",

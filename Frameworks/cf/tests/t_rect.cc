@@ -3,10 +3,19 @@
 
 static void set (std::vector<std::string>& canvas, CGRect const& r, char m = 'x')
 {
+	// Bounds-checked rather than trusted. An out-of-range rect used to write
+	// straight past the canvas, and the resulting abort took every other test in
+	// this bundle down with it — which is why the whole file sat in
+	// SKIPPED_TESTS. An assertion is reported as a failure; a segfault is not,
+	// so this is what keeps a future mistake here debuggable.
 	for(size_t y = (size_t)CGRectGetMinY(r); y < (size_t)CGRectGetMaxY(r); ++y)
 	{
+		OAK_ASSERT_LT(y, canvas.size());
 		for(size_t x = (size_t)CGRectGetMinX(r); x < (size_t)CGRectGetMaxX(r); ++x)
+		{
+			OAK_ASSERT_LT(x, canvas[y].size());
 			canvas[y][x] = m;
+		}
 	}
 }
 
@@ -25,6 +34,8 @@ static std::string to_str (CGRect const& r)
 
 static CGRect from_str (std::string const& s)
 {
+	// x0/y0 start past the end and x1/y1 before it, so that the first 'x' found
+	// replaces both — which means a pattern with NO 'x' leaves them crossed.
 	size_t x0 = 3, x1 = 0;
 	size_t y0 = 3, y1 = 0;
 	for(size_t y = 0; y < 3; ++y)
@@ -40,6 +51,16 @@ static CGRect from_str (std::string const& s)
 			}
 		}
 	}
+
+	// The empty pattern, handled rather than computed. These are size_t, so the
+	// crossed sentinels make `x1 - x0` wrap to SIZE_MAX-2 instead of going
+	// negative; as a CGRect width that is astronomically large, and set() then
+	// ran off the end of the canvas. That underflow is the bug this file was
+	// skipped for, and it is entirely the helper's — cf/src/cgrect.h works in
+	// CGFloat throughout and never indexes anything.
+	if(x1 <= x0 || y1 <= y0)
+		return CGRectZero;
+
 	return CGRectMake(x0, y0, x1 - x0, y1 - y0);
 }
 

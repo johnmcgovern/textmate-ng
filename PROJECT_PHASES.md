@@ -21,9 +21,9 @@ controller deliberately is not, because its state is C++ (`be::entry_t` browser 
 `plist::dictionary_t` + boost visitors) and it needs `+load` and a `bundles::callback_t`
 subclass, neither of which Swift can express. Nib-contract tests now cover the xib
 string contracts that used to fail silently, and caught two real bugs on their first
-run. 339 tests green. Phase 2's one remaining
-item is still signing/notarization (Stream 3), in progress on the side — no phase
-depended on it)._
+run. 339 tests green. Phase 2's last
+item, signing/notarization (Stream 3), completed 2026-08-02 — see "Open
+decisions", now all resolved. **Phase 2 is fully done.**)_
 
 **End-state (decided): a Swift app + SwiftUI shell with TextMate's C++ core kept
 behind Swift/C++ interop — NOT a full Swift rewrite of the engine.** The core is a
@@ -47,7 +47,7 @@ duplicating it here goes stale within hours while the loop runs.
 | # | Phase | Status | Effort / Risk |
 |---|-------|--------|---------------|
 | 1 | **Build bring-up** (rave → ninja compiling) | ✅ Done / pre-existing | — |
-| 2 | **Xcode migration, keep ObjC++/C++** | 🔄 In progress (signing left) | Large / Med |
+| 2 | **Xcode migration, keep ObjC++/C++** | ✅ Done 2026-08-02 (signing/notarization landed last) | Large / Med |
 | 2.5 | **Cleanup & de-MacroMates** (dead code, cyclic deps, MacroMates-coupled services) | ✅ Done 2026-07-26 | Med / Low |
 | 3 | **Swift interop foundation** (Clang modules, bridging, first `.swift`) | ✅ Done 2026-07-27 | Small–Med / Med |
 | 4 | **Swift-ify the AppKit/UI shell, leaf-first** | 🔄 In progress — CommitWindow, Preferences, OakTabBarView done; BundleEditor partial (2026-07-28) | Very large / Med |
@@ -828,7 +828,24 @@ MacroMates' in the meantime.
 
 ## Open decisions (need user input eventually)
 
-- Signing identity / notarization account for Stream 3.
+- ~~Signing identity / notarization account for Stream 3.~~ **Resolved 2026-08-02
+  — Stream 3 is DONE.** Individual enrollment, `Developer ID Application: John
+  McGovern (R22V2H7QF4)`. The full pipeline works end to end: Developer ID
+  signing via `TM_CODE_SIGN_IDENTITY`/`TM_DEVELOPMENT_TEAM` (the seed hooks were
+  already in place), secure timestamps on every signature, `bin/notarize`
+  (zip → `notarytool submit --wait` → staple → verify), and a build accepted by
+  Apple (submission `426a7fc4`) that `spctl` now assesses **accepted,
+  source=Notarized Developer ID**. Two build changes were needed, both gated on
+  `TM_CODE_SIGN_IDENTITY` so plain dev builds are unaffected:
+  `OTHER_CODE_SIGN_FLAGS=--timestamp` (ad-hoc cannot be timestamped) and
+  `CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO` (a direct `xcodebuild build` injects
+  `get-task-allow`, which Apple rejects — first submission failed on exactly
+  three binaries: `PrivilegedTool`, `tm_dialog`, `tm_dialog2`; the tools the
+  nested re-sign phase covers were already clean). Portal gotcha recorded in
+  memory: a CSR-issued cert shows "0 valid identities" until Apple's G2
+  intermediate is imported. Follow-ups, not blockers: verify the QuickLook
+  generator loads now that the app is properly signed, and release CI still
+  builds ad-hoc (no secrets in CI is deliberate for now).
 
 ## Decided
 

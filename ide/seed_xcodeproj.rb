@@ -414,6 +414,12 @@ def apply_common_settings(config, extra = {})
   # Notarization rejects signatures without a secure timestamp. Only with a real
   # identity: ad-hoc signatures cannot be timestamped, and codesign would fail.
   bs["OTHER_CODE_SIGN_FLAGS"]       = "--timestamp" if ENV["TM_CODE_SIGN_IDENTITY"]
+  # Xcode injects get-task-allow (debugger attach) into everything its own
+  # CodeSign step signs during a direct `xcodebuild build` — only the unused
+  # archive/export path strips it — and notarization rejects it. First submission
+  # failed on exactly this: PrivilegedTool, tm_dialog, tm_dialog2. Same gate as
+  # the timestamp so plain dev builds keep debuggability.
+  bs["CODE_SIGN_INJECT_BASE_ENTITLEMENTS"] = "NO" if ENV["TM_CODE_SIGN_IDENTITY"]
   # Hardened Runtime is a hard prerequisite for notarization. Release-only: Debug
   # keeps the unrestricted runtime so lldb/Instruments behave normally. Verified
   # 2026-07-26 that the app launches and loads both .tmplugin bundles under it —

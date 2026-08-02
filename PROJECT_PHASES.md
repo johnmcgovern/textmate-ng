@@ -104,7 +104,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**451 tests across 32 bundles** as of 2026-08-01.
+**459 tests across 33 bundles** as of 2026-08-01.
 
 > **Correction (2026-07-30).** This line, and the header above it, previously
 > read **387 tests across 29 bundles**. The bundle count was right; the test
@@ -128,7 +128,8 @@ Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (1.1k ✅), Preferences (1.9k ✅), **OakTabBarView (1.6k ✅, 2026-07-28)**,
 **BundleMenu (240 ✅, 2026-07-30, on the new `TMBundleModel`)**,
 **BundleEditor (1.3k ✅, 2026-07-31 — the last blocked framework)**,
-**TMFileReference (274 of 761 ✅, 2026-08-01)**. **`SoftwareUpdate`
+**TMFileReference (274 of 761 ✅, 2026-08-01)**,
+**CrashReporter (262 ✅, 2026-08-01)**. **`SoftwareUpdate`
 (1.2k) is deliberately deferred** — the open Sparkle question may replace that
 framework wholesale. (It is §7 of `NOTARIZATION_HANDOFF.md`, which is kept as a
 local working note and deliberately not published — so that reference resolves
@@ -970,7 +971,7 @@ actually cost time on the three completed ports.
 | framework | loc | pubAPI | state | sigs | +load | cbk | xib | score |
 |---|---:|---|---:|---:|---:|---:|---:|---:|
 | HTMLOutputWindow | 77 | shim | 0 | 0 | 0 | 0 | 0 | **0** ✅ |
-| CrashReporter | 262 | direct | 0 | 0 | 0 | 0 | 0 | **1** |
+| CrashReporter | 262 | direct | 0 | 0 | 0 | 0 | 0 | **1** ✅ |
 | MenuBuilder | 399 | shim | 0 | 0 | 0 | 0 | 0 | **1** ⚠️ |
 | BundleMenu | 240 | shim | 0 | 1 | 0 | 0 | 0 | **1** ⚠️ ✅ |
 | SoftwareUpdate | 1243 | direct | 0 | 0 | 0 | 0 | 0 | **2** (deferred) |
@@ -1331,6 +1332,9 @@ still scores 1 and is still the documented trap (its public API is a C++ DSL).
 > On that reading, `CrashReporter` (262, `pubAPI: direct`) is the only
 > straightforward one left — and it carries its own documented blocker, the
 > `UNUserNotificationCenterDelegate` overlay problem that has failed five times.
+> **✅ Done 2026-08-01; the blocker was real and is now pinned down — see
+> "CrashReporter" below. With it, every framework the survey listed as
+> unported-and-unblocked is done.**
 
 The lesson generalises past this tool: **a metric that silently sees only part of
 its input is worse than no metric**, because it produces confident wrong
@@ -1659,6 +1663,82 @@ Two things Swift could not reach:
 sharing state. The ObjC++ keyed the same map the same way. Changing it to
 `-standardizedFileURL` is a behaviour change and belongs in its own commit; the
 current behaviour is pinned by a test so the decision stays visible.
+
+### Phase 4 — CrashReporter (2026-08-01)
+
+The last unported framework, and the one deferred five times for "the
+`UNUserNotificationCenterDelegate` overlay problem". The blocker is real. It is
+also narrower, and stranger, than recorded.
+
+#### Under `-cxx-interoperability-mode`, one delegate method cannot be written in Swift
+
+`SWIFT_OBJC_INTEROP_MODE=objcxx` puts `-cxx-interoperability-mode=default` on
+every Swift target here. Under it, **no** spelling of
+`-userNotificationCenter:willPresentNotification:withCompletionHandler:`
+satisfies the protocol:
+
+```swift
+func …(_:willPresent:withCompletionHandler:)                       // completion handler
+func …(_:willPresent:) async -> UNNotificationPresentationOptions  // async
+```
+
+Both produce the same thing:
+
+```
+warning: instance method 'userNotificationCenter(_:willPresent:)' nearly matches
+         optional requirement 'userNotificationCenter(_:willPresent:)'
+```
+
+— a method that "nearly matches" a requirement of *the same name*. Because the
+requirement is **optional**, that is a warning: it compiles, claims no selector,
+and is never called. **Drop the interop flag and both spellings work**, which is
+why it presents as a spelling mistake and is not one.
+
+The distinguishing detail is `UNNotificationPresentationOptions`, the only
+`NS_OPTIONS` type among the four delegate methods —
+`-didReceiveNotificationResponse:`, whose handler takes nothing, is satisfied
+from Swift without complaint. So that one method lives in an **ObjC++ category
+on the Swift class** (`CRSupport.mm`), the recipe `BEInterop.mm` established.
+
+**Probe with the target's real build flags.** Two wrong conclusions were reached
+here before the right one, both from a bare `swiftc` invocation that omitted the
+project's interop flag: first that the recorded blocker was bogus (the
+completion-handler spelling compiled clean and claimed the selector), then that
+a wrong argument label was the whole story (`completionHandler:` for
+`withCompletionHandler:` does reproduce the warning, but is not what was
+happening). A probe that does not match the target's flags can disprove
+something that is true.
+
+#### Other notes
+
+- **zlib is invisible to Swift** — no module map on Darwin, so `gzopen` and
+  friends are out of scope, the same shape as `kOnSystemDisk` in
+  TMFileReference. `CRWriteGZipFile` is the shim. Foundation's
+  `-compressedDataUsingAlgorithm:` is *not* a substitute: raw deflate, where the
+  collector is handed a `.gz`.
+- **Deliberately not `@MainActor`.** The URLSession completion handlers really
+  do run off-main, and a main-actor class cannot satisfy the nonisolated
+  delegate protocols at all — the wall the OakTabBarView port hit with the
+  accessibility markers.
+- **The class cannot be constructed in a test.** `-init` installs the
+  notification delegate, and `+currentNotificationCenter` raises
+  `NSInternalInconsistencyException` ("bundleProxyForCurrentProcess is nil") in
+  a process that is not a bundled app. Pre-existing; simply never noticed,
+  because the framework had no tests. The three pure helpers became class
+  methods, which is both truer and what lets tests reach them.
+- **The upload half is unreachable** (Phase 2.5 stopped AppController calling
+  `-postNewCrashReportsToURLString:`), so it is ported faithfully rather than
+  deleted — re-enabling it against a J23 collector is a recorded intention — and
+  its helpers are unit-tested so the transliteration is checked even though the
+  path cannot be exercised end to end.
+
+#### A test-authoring trap worth carrying
+
+`to_s(NSString*)` **silently binds to the preamble's generic container
+template** when `ns/ns.h` is not imported, range-iterating the string and dying
+with "unrecognized selector `countByEnumeratingWithState:`". A runtime failure
+from an overload that should never have matched, not a compile error. Use
+`-UTF8String` in a test bundle that does not depend on `ns`.
 
 #### Conversion-safety audit of the ported Swift (2026-07-29)
 

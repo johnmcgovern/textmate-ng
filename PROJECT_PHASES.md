@@ -349,6 +349,19 @@ deleted:
       exactly: the same probe fails when signed with library validation). Loading
       inside Finder/qlmanage is therefore **gated on Stream 3's real signing
       identity**, not on any build gap.
+      > **Correction (2026-08-02, tested against the notarized alpha.4 build):
+      > signing was necessary but not sufficient — the legacy API is dead for
+      > third parties on this macOS.** With the generator Developer ID-signed,
+      > timestamped and inside a notarized app, `qlmanage -m plugins` still does
+      > not list it. The decisive evidence is that it lists **zero** third-party
+      > `.qlgenerator`s from any app on the machine — all 79 loaded are Apple's
+      > own from `/System/Library/QuickLook` — and force-invoking ours via
+      > `qlmanage -t -g …` hangs rather than errors. The earlier probe proved
+      > the *plugin* works (`dlopen` + factory from a plain host); what it could
+      > not probe is that the QL host no longer accepts non-system legacy
+      > plugins at all. Shipping QuickLook previews now means writing a modern
+      > **Quick Look Preview Extension (.appex)** — a new target in the seed
+      > (`QLPreviewingController`), i.e. feature work, tracked below.
 - [x] All 11 CLI tools work (`mate`, `tm_query`, …) — verified 2026-07-26: all 11
       build in Release, all gave correct functional output, and every executable
       the app actually ships (`mate`, `tm_query`, `PrivilegedTool`, `tm_dialog`,
@@ -776,6 +789,14 @@ MacroMates' in the meantime.
 ---
 
 ## Tracked but not yet scheduled
+
+- **QuickLook needs a rewrite as a modern Preview Extension.** The shipped
+  `TextMateQL.qlgenerator` is a legacy plugin, and macOS no longer loads
+  third-party legacy generators from anyone (verified 2026-08-02 on the
+  notarized build — see the correction under the Phase 2 cutover criteria).
+  Until an `.appex` exists, the generator ships as dead weight; it is small, and
+  removing it vs. rewriting it is the same decision point, so decide when
+  someone actually misses QuickLook previews.
 
 - ~~**`cf/tests/t_rect.cc`'s out-of-bounds write.**~~ **Fixed 2026-08-01** — see
   the note under Stream 7. It was in the test's helper, not in `cf`; 12 skips

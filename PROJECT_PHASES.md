@@ -779,14 +779,29 @@ MacroMates' in the meantime.
 - ~~**`cf/tests/t_rect.cc`'s out-of-bounds write.**~~ **Fixed 2026-08-01** — see
   the note under Stream 7. It was in the test's helper, not in `cf`; 12 skips
   remain, none of which crash.
-- **`SyntaxMate` is mispackaged and orphaned** (found 2026-07-26 during cutover
-  verification). Its spec says `prefix "${target}.xpc/Contents"` — it is an **XPC
-  service**, not a CLI tool — but the seed's `kind()` doesn't recognize `.xpc`, so
-  it falls through to `:tool` and builds as a bare executable that nothing wraps.
-  Nothing in the tree references it (no `NSXPCConnection`, no spec `require`, not
-  copied into the app), so nothing is broken today; it was upstream's syntax-
-  highlighting extension host. Decide: package it properly as `.xpc` in the seed,
-  or delete it like the other orphans.
+- ~~**`SyntaxMate` is mispackaged and orphaned**~~ **Deleted 2026-08-01.** Its
+  spec said `prefix "${target}.xpc/Contents"` — an **XPC service**, not a CLI
+  tool — but the seed's `kind()` doesn't recognize `.xpc`, so it fell through to
+  `:tool` and built as a bare executable nothing wrapped.
+
+  > The 2026-07-26 note said "nothing is broken today". True but incomplete: it
+  > was not merely unwrapped, it was **non-functional**. Without the Info.plist
+  > there is no `XPCService`/`ServiceType` to launch it by, and `main.mm`
+  > resolves its grammars relative to `NSBundle.mainBundle`'s
+  > `Contents/Resources`, which for a bare executable does not exist — so it
+  > would have loaded zero grammars and highlighted nothing. It had not worked
+  > since the Xcode migration, and nobody noticed.
+  >
+  > Deleted rather than packaged because packaging was the smaller question. It
+  > is not a component of TextMate: `ServiceType=Application` means a third
+  > party embeds a *copy* in their own app, so shipping it is a product
+  > commitment this fork has not made. The one plausible internal consumer,
+  > QuickLook, already highlights through `parse`/`theme` directly. Against
+  > that, CI cloned 4.5 MB of submodule and compiled an 11 MB binary every run.
+  >
+  > Recoverable: upstream code with intact history at `21565550` (Vadim
+  > Shpakovski, 2016), and the `shpakovski/syntaxmate.tmbundle` remote is alive.
+  > Same shape as Phase 2.5's removals, `bin/CxxTest` especially.
 - **Standalone Release tools vs hardened runtime** — see the CLI-tools cutover
   criterion above. The copies in `build/Release/` can't load Homebrew's dylibs
   under library validation; the shipped, bundled copies are fine. Fix only if

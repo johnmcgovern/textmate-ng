@@ -10,12 +10,6 @@
 // failure from an overload that should never have matched.
 static std::string str (NSString* s) { return s.UTF8String ?: ""; }
 
-// -UTF8String rather than ns::to_s: this framework does not depend on `ns`, and
-// without that overload in scope `to_s(NSString*)` silently binds to the
-// preamble's GENERIC container template, which range-iterates the string and
-// dies with "unrecognized selector countByEnumeratingWithState:". A runtime
-// failure from an overload that should not have matched, not a compile error.
-
 // CrashReporter is Swift behind a hand-written ObjC header. Its *upload* half is
 // currently unreachable — Phase 2.5 stopped AppController calling
 // -postNewCrashReportsToURLString: — so it cannot be exercised end to end, and
@@ -29,18 +23,18 @@ static std::string str (NSString* s) { return s.UTF8String ?: ""; }
 // = The blocker, asserted not assumed =
 // =====================================
 
-// The framework was deferred for "the UNUserNotificationCenterDelegate overlay
-// problem": a Swift delegate method that compiles but is never called. The
-// cause was a wrong argument label — `completionHandler:` instead of Swift's
-// imported `withCompletionHandler:` — which yields only a "nearly matches
-// optional requirement" WARNING and satisfies nothing.
+// The framework was deferred five times for "the UNUserNotificationCenterDelegate
+// overlay problem": a Swift delegate method that compiles but is never called.
+// It is real, and the cause is NOT a wrong argument label — under this project's
+// -cxx-interoperability-mode, *no* Swift spelling of
+// -willPresentNotification:withCompletionHandler: satisfies the requirement.
+// Completion-handler and async forms both warn that the method "nearly matches"
+// a requirement of the same name, and because the requirement is optional that
+// is only a warning. So that one method lives in an ObjC++ category; see
+// CRSupport.mm for the full diagnosis.
 //
-// There is no SDK overlay involved: UserNotifications ships no Swift module at
-// all (a module map, no .swiftinterface), and the `async` spellings are an
-// alternative rather than a competitor for the selector.
-//
-// So this asks the ObjC runtime what the class actually claims. It is the only
-// check that distinguishes a correct implementation from one that compiles with
+// This asks the ObjC runtime what the class actually claims, which is the only
+// check that distinguishes a working implementation from one that compiles with
 // a warning and silently never runs.
 //
 // Asked of the CLASS rather than an instance, deliberately: CrashReporter

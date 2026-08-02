@@ -2,6 +2,15 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-02 (v2026.7-alpha.4)
+
+**TextMate-NG is now signed and notarized.** This release exists for one reason, and it is a big one: the app is signed with an Apple Developer ID and notarized by Apple, with the ticket stapled to the bundle. Installing a copy on another Mac is now a normal experience — unzip, drag to Applications, double-click. Gatekeeper's "damaged and can't be opened" refusal, and the `xattr` incantation needed to get past it, are gone.
+
+* Every binary in the bundle — the app, its embedded libraries, and all bundled command-line tools — carries a hardened-runtime Developer ID signature with a secure timestamp.
+* No functional changes since alpha.3, which shipped earlier today; see below for what's new in it.
+
+**Known limitations in this alpha:** software update and crash-report submission remain switched off while the fork has no server of its own. The QuickLook generator is expected to be loadable now that the app is properly signed, but this has not been verified yet.
+
 ## 2026-08-02 (v2026.7-alpha.3)
 
 Third alpha. Mostly a bug-fix release: two of these were long-standing faults that predate the fork, and one of them made committing from a terminal impossible. The move to Swift also continued, and the bundle editor is now fully ported.

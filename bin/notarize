@@ -1,0 +1,59 @@
+#!/bin/sh
+# Notarize a built TextMate.app: zip → submit → wait → staple → verify.
+#
+# Usage: bin/notarize [path/to/TextMate.app]
+#   Defaults to build/Release/TextMate.app.
+#
+# Requires, one time each:
+#   - a Developer ID-signed build with secure timestamps (the seed does this
+#     when TM_CODE_SIGN_IDENTITY is set; see ide/seed_xcodeproj.rb)
+#   - notary credentials in the keychain:
+#       xcrun notarytool store-credentials j23-notary \
+#         --apple-id <apple-id> --team-id R22V2H7QF4
+#
+# The ticket is stapled to the .app itself, so the zip made *after* stapling is
+# what should be distributed — Gatekeeper on an offline Mac can then verify it.
+set -e
+
+APP="${1:-build/Release/TextMate.app}"
+PROFILE="${TM_NOTARY_PROFILE:-j23-notary}"
+
+[ -d "$APP" ] || { echo "error: $APP not found (build Release first)" >&2; exit 1; }
+
+# Refuse early on the two states notarization would reject anyway.
+codesign --verify --deep --strict "$APP" || {
+  echo "error: $APP fails codesign verification" >&2; exit 1; }
+codesign -dvv "$APP" 2>&1 | grep -q '^Authority=Developer ID Application' || {
+  echo "error: $APP is not Developer ID-signed (ad-hoc?)" >&2; exit 1; }
+codesign -dvv "$APP" 2>&1 | grep -q '^Timestamp=' || {
+  echo "error: $APP has no secure timestamp (re-seed with TM_CODE_SIGN_IDENTITY set)" >&2; exit 1; }
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+SUBMIT_ZIP="$WORK/submit.zip"
+
+echo "==> packaging for submission"
+ditto -c -k --keepParent "$APP" "$SUBMIT_ZIP"
+
+echo "==> submitting to Apple notary service (waits for the verdict)"
+xcrun notarytool submit "$SUBMIT_ZIP" --keychain-profile "$PROFILE" --wait \
+  --output-format json | tee "$WORK/result.json"
+
+STATUS=$(sed -n 's/.*"status" *: *"\([^"]*\)".*/\1/p' "$WORK/result.json" | head -1)
+SUBMISSION_ID=$(sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' "$WORK/result.json" | head -1)
+
+if [ "$STATUS" != "Accepted" ]; then
+  echo "==> status: ${STATUS:-unknown} — fetching the log for the per-file reasons" >&2
+  xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$PROFILE" >&2 || true
+  exit 1
+fi
+
+echo "==> stapling ticket to $APP"
+xcrun stapler staple "$APP"
+
+echo "==> verifying"
+xcrun stapler validate "$APP"
+spctl --assess --type execute -vv "$APP"
+
+echo "==> notarized and stapled. Package for distribution with:"
+echo "    ditto -c -k --keepParent \"$APP\" TextMate-NG-<version>.zip"

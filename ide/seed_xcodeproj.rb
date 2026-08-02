@@ -411,6 +411,9 @@ def apply_common_settings(config, extra = {})
   #   TM_CODE_SIGN_IDENTITY="Developer ID Application: … (TEAMID)" TM_DEVELOPMENT_TEAM=TEAMID
   bs["CODE_SIGN_IDENTITY"]          = ENV.fetch("TM_CODE_SIGN_IDENTITY", "-")
   bs["DEVELOPMENT_TEAM"]            = ENV["TM_DEVELOPMENT_TEAM"] if ENV["TM_DEVELOPMENT_TEAM"]
+  # Notarization rejects signatures without a secure timestamp. Only with a real
+  # identity: ad-hoc signatures cannot be timestamped, and codesign would fail.
+  bs["OTHER_CODE_SIGN_FLAGS"]       = "--timestamp" if ENV["TM_CODE_SIGN_IDENTITY"]
   # Hardened Runtime is a hard prerequisite for notarization. Release-only: Debug
   # keeps the unrestricted runtime so lldb/Instruments behave normally. Verified
   # 2026-07-26 that the app launches and loads both .tmplugin bundles under it —
@@ -852,10 +855,15 @@ def add_embed_dylibs_phase(project, target, t)
     # load them (see NestedTool.plist). Contents/MacOS/TextMate is signed here too
     # but Xcode's own CodeSign step runs after this phase and supersedes it with the
     # app's real entitlements — that is why the app keeps its full set, not this one.
+    # Secure timestamps only with a real identity — ad-hoc can't be timestamped,
+    # and notarization requires them on every nested signature.
+    TS="--timestamp=none"
+    [ "$SIGN_ID" != "-" ] && TS="--timestamp"
+
     sign_nested() {
       case "$1" in
-        *.dylib) codesign --force --sign "$SIGN_ID" $RUNTIME --timestamp=none "$1" 2>/dev/null ;;
-        *)       codesign --force --sign "$SIGN_ID" $RUNTIME --timestamp=none \\
+        *.dylib) codesign --force --sign "$SIGN_ID" $RUNTIME $TS "$1" 2>/dev/null ;;
+        *)       codesign --force --sign "$SIGN_ID" $RUNTIME $TS \\
                    --entitlements "$NESTED_ENT" "$1" 2>/dev/null ;;
       esac
     }

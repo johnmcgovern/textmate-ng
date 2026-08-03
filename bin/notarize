@@ -1,8 +1,8 @@
 #!/bin/sh
-# Notarize a built TextMate.app: zip → submit → wait → staple → verify.
+# Notarize a built TextMate-NG.app: zip → submit → wait → staple → verify.
 #
-# Usage: bin/notarize [path/to/TextMate.app]
-#   Defaults to build/Release/TextMate.app.
+# Usage: bin/notarize [path/to/TextMate-NG.app]
+#   Defaults to build/Release/TextMate-NG.app.
 #
 # Requires, one time each:
 #   - a Developer ID-signed build with secure timestamps (the seed does this
@@ -15,7 +15,7 @@
 # what should be distributed — Gatekeeper on an offline Mac can then verify it.
 set -e
 
-APP="${1:-build/Release/TextMate.app}"
+APP="${1:-build/Release/TextMate-NG.app}"
 PROFILE="${TM_NOTARY_PROFILE:-j23-notary}"
 
 [ -d "$APP" ] || { echo "error: $APP not found (build Release first)" >&2; exit 1; }

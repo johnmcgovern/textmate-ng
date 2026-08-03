@@ -2,6 +2,15 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-02 (v2026.7-alpha.5)
+
+**The app is now named TextMate-NG.app.** Since alpha.2 the fork has had its own bundle identifier so macOS treats it as a separate app — but the bundle was still *named* `TextMate.app`, so unzipping a release next to an installed upstream TextMate asked to replace it. The file name now matches the identity: it installs as `TextMate-NG.app`, coexists with upstream TextMate in `/Applications`, and the menu bar reads **TextMate-NG**. Preferences and state are unaffected — the bundle identifier has not changed.
+
+* If you installed an earlier alpha as `/Applications/TextMate.app`, delete it after installing this one; it is the same app under the old name.
+* **Correction to alpha.4's notes:** the QuickLook generator will *not* start working, signed or otherwise. Current macOS no longer loads legacy QuickLook plug-ins from any third-party app — previews would require rewriting it as a modern Quick Look extension, which is future work.
+
+**Known limitations in this alpha:** software update and crash-report submission remain switched off while the fork has no server of its own.
+
 ## 2026-08-02 (v2026.7-alpha.4)
 
 **TextMate-NG is now signed and notarized.** This release exists for one reason, and it is a big one: the app is signed with an Apple Developer ID and notarized by Apple, with the ticket stapled to the bundle. Installing a copy on another Mac is now a normal experience — unzip, drag to Applications, double-click. Gatekeeper's "damaged and can't be opened" refusal, and the `xattr` incantation needed to get past it, are gone.

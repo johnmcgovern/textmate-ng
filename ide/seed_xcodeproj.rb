@@ -527,6 +527,13 @@ specs.each do |t|
 
   target.build_configurations.each do |config|
     extra = { "PRODUCT_NAME" => t["name"] }
+    # The app ships as TextMate-NG.app so it doesn't collide with an installed
+    # upstream TextMate.app in Finder. Product only — the *target* stays
+    # "TextMate" because CFBundleIdentifier derives from ${TARGET_NAME}, and the
+    # bundle id must not move again (alpha.2 already paid that cost once).
+    # CFBundleExecutable follows via ${EXECUTABLE_NAME}, which also renames the
+    # process and thereby the app menu title.
+    extra["PRODUCT_NAME"] = "TextMate-NG" if kind(t) == :app
     if config.name == "Release"
       extra["GCC_OPTIMIZATION_LEVEL"] = "s"
       # rave's `config release` defines NDEBUG (default.rave). This compiles out the

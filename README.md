@@ -27,7 +27,7 @@ Gatekeeper says about an app it cannot verify because it is unsigned and
 unnotarized. Clear the flag on the copy:
 
 ```
-xattr -dr com.apple.quarantine /Applications/TextMate.app
+xattr -dr com.apple.quarantine /Applications/TextMate-NG.app
 ```
 
 Copying with `scp` or `rsync` over SSH does not set the flag in the first place,
@@ -84,7 +84,7 @@ cd textmate-ng
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 RUBYOPT="-EUTF-8"
 ruby ide/extract_specs.rb > ide/gen/specs.json && ruby ide/seed_xcodeproj.rb
 xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release build
-open build/Release/TextMate.app
+open build/Release/TextMate-NG.app
 ```
 
 `TextMate.xcodeproj` is generated, not committed — regenerate it any time with

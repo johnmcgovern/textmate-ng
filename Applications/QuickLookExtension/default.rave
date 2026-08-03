@@ -1,0 +1,16 @@
+target "TextMateQL" {
+	require OakFoundation buffer bundles cf file io ns plist scope settings theme
+
+	# A Quick Look Preview Extension (.appex), not the dead .qlgenerator this
+	# replaced. Note there is no `add LN_FLAGS "-bundle"`: an app extension is a
+	# regular executable entered at _NSExtensionMain, which the seed adds for
+	# every :appex target — a bundle here loads as nothing at all.
+	prefix "${target}.appex/Contents"
+	files Info.plist "."
+
+	expand CS_ENTITLEMENTS "${dir}/Entitlements.plist"
+
+	sources src/*.mm
+	executable "MacOS/${target}"
+	frameworks Cocoa Quartz OSAKit
+}

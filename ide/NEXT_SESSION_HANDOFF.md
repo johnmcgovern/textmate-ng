@@ -16,10 +16,14 @@ git log or the docs below, trust those._
   (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.5`.
 - **459 tests across 33 bundles**, green. Re-measure by summing each bundle's own
   `Executed N tests`; do not increment the documented figure.
-- **QuickLook is dead, not blocked.** Legacy `.qlgenerator`s no longer load from
-  *any* third-party app on this macOS — verified against the notarized build.
-  The old "gated on signing" note was wrong and is corrected in
-  `PROJECT_PHASES.md`.
+- **QuickLook works again, as a Preview Extension (2026-08-03).** Legacy
+  `.qlgenerator`s no longer load from *any* third-party app on this macOS, so it
+  was rewritten as a sandboxed `TextMateQL.appex` in `Contents/PlugIns`. The
+  scary part — moving the app's storage into an app-group container — turned out
+  to be unnecessary: `temporary-exception` entitlements let the sandboxed
+  extension read the real paths. A throwaway probe extension established that in
+  one run; write one before scoping this kind of work. Full notes in
+  `PROJECT_PHASES.md` under "Phase 2.6 — QuickLook".
 - **The "About box shows 2.0.23" bug was never a bug.** That window belonged to
   the *installed upstream TextMate*, which answered the About click while both
   apps presented identically in the menu bar. The alpha.5 rename makes the
@@ -129,8 +133,22 @@ are unimportable, but the POSIX ones (`open`, `fcntl`, `ioctl`, `sem_open`) have
 hand-written non-variadic overloads in the Darwin overlay. A 10-line probe
 settled it in a minute. **Probe before believing a wall recorded in prose.**
 
-**Next: the QuickLook `.appex`-or-delete decision, then MenuBuilder** (399 lines,
-survey score 1).
+**The QuickLook `.appex`-or-delete decision is settled: rewritten, 2026-08-03.**
+
+**Next: MenuBuilder** (399 lines, survey score 1).
+
+Two loose ends the QuickLook work leaves, neither blocking:
+
+- **The extension has no automated coverage.** Nothing did before either — the
+  old generator had none — but `TMQLCreateAttributedString` is now an ordinary
+  function taking a URL and returning an attributed string, so it is testable in
+  a way the CFPlugIn entry points never were. It needs a bundle index in the test
+  environment, which is the part to think about.
+- **A thumbnail extension is a separate extension point.** The legacy generator
+  also drew Finder icon thumbnails (`GenerateThumbnailForURL`); that half was
+  dropped rather than ported, because `com.apple.quicklook.thumbnail` is its own
+  `.appex` target. Nothing depends on it, and the system draws generic icons as
+  it already has been since the generator stopped loading.
 
 **Stream 3 — DONE 2026-08-02.** Developer ID + notarization work end to end;
 see `PROJECT_PHASES.md` "Open decisions". Nothing here needs the user any more.

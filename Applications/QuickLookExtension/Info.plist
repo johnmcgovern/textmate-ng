@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>${EXECUTABLE_NAME}</string>
+	<key>CFBundleName</key>
+	<string>${PRODUCT_NAME}</string>
+	<key>CFBundleDisplayName</key>
+	<string>TextMate Quick Look Preview</string>
+	<key>CFBundleIdentifier</key>
+	<string>${PRODUCT_BUNDLE_IDENTIFIER}</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${APP_VERSION}</string>
+	<key>CFBundleVersion</key>
+	<string>${APP_BUILD}</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>${APP_MIN_OS}</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<!-- CONCRETE types only. Declaring the abstract public.source-code is
+			     silently ignored by the Quick Look host: the extension registers,
+			     and is then simply never selected for any file. That failure mode
+			     cost real time — see PROJECT_PHASES.md. Every entry below is a
+			     leaf UTI that files actually report as their own type.
+
+			     public.plain-text looks abstract and is not: it is what an
+			     unadorned .txt reports. -->
+			<key>QLSupportedContentTypes</key>
+			<array>
+				<string>public.plain-text</string>
+				<string>public.c-source</string>
+				<string>public.c-plus-plus-source</string>
+				<string>public.c-header</string>
+				<string>public.c-plus-plus-header</string>
+				<string>public.objective-c-source</string>
+				<string>public.objective-c-plus-plus-source</string>
+				<string>public.swift-source</string>
+				<string>public.shell-script</string>
+				<string>public.perl-script</string>
+				<string>public.python-script</string>
+				<string>public.ruby-script</string>
+				<string>public.php-script</string>
+				<string>com.netscape.javascript-source</string>
+				<string>public.json</string>
+				<string>public.xml</string>
+				<string>public.yaml</string>
+				<string>net.daringfireball.markdown</string>
+				<string>public.css</string>
+				<string>public.patch-file</string>
+				<string>public.make-source</string>
+				<string>com.apple.applescript.text</string>
+			</array>
+			<key>QLSupportsSearchableItems</key>
+			<false/>
+			<key>QLIsDataBasedPreview</key>
+			<false/>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.quicklook.preview</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>PreviewViewController</string>
+	</dict>
+</dict>
+</plist>

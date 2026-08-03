@@ -248,7 +248,8 @@ Rebuild check: `xcodebuild -project TextMate.xcodeproj -target AllLibs -configur
    unlinked libOakDebug.a). Bundles get `INFOPLIST_FILE` → their real template plist +
    ad-hoc `CODE_SIGN_IDENTITY="-"`. All 11 tools + Dialog/Dialog2/TextMateQL build clean.
    **START HERE →** task 3 below (the app). Product types already assigned
-   (`:command_line_tool`, `:bundle` with `WRAPPER_EXTENSION` tmplugin/qlgenerator).
+   (`:command_line_tool`, `:bundle` with `WRAPPER_EXTENSION` tmplugin,
+   `:app_extension` with `WRAPPER_EXTENSION` appex).
    Still TODO: **link wiring** — for each tool/bundle, compute `lib_closure()`
    (already implemented in the seed) and add each lib product to the target's
    Frameworks build phase + `add_dependency`, plus external libs via `LIB_LDFLAGS`
@@ -261,8 +262,11 @@ Rebuild check: `xcodebuild -project TextMate.xcodeproj -target AllLibs -configur
    - `files resources/* icons/*.icns @PrivilegedTool "Resources"`,
      `files @mate @tm_query "MacOS"`, `files about/* "Resources/About"`,
      `copy support/* "SharedSupport"`, `copy @Dialog @Dialog2 "PlugIns"`,
-     `copy @TextMateQL "Library/QuickLook"` → Copy-Files build phases; the `@refs`
+     `copy @TextMateQL "PlugIns"` → Copy-Files build phases; the `@refs`
      are built-product copies (also add as target dependencies).
+     (`TextMateQL` was `copy … "Library/QuickLook"` until 2026-08-03, when the
+     legacy `.qlgenerator` became a Quick Look `.appex` — the `:qlgen` target
+     kind went with it.)
    - `Info.plist` is a **preprocessed template** (`${APP_VERSION}` etc. via
      `PLIST_FLAGS`). Either pre-generate it or use `INFOPLIST_PREPROCESS=YES` with
      the right defines. Check `Applications/TextMate/Info.plist`.

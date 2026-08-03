@@ -135,8 +135,11 @@ BY_NAME = specs.each_with_object({}) { |t, h| h[t["name"]] = t }
 
 def kind(t)
   p = t["prefix"]; e = t["executable"]
+  # .appex BEFORE .app/: an app extension's prefix contains ".appex/Contents",
+  # which `include?(".app/")` does not match — but the order is pinned anyway so
+  # a future ".app/…" spelling cannot silently reclassify an extension as the app.
+  return :appex  if p&.include?(".appex")
   return :app    if p&.include?(".app/")
-  return :qlgen  if p&.include?(".qlgenerator")
   return :plugin if p&.include?(".tmplugin") || t["ln_flags"].include?("-bundle")
   return :tool   if e
   :lib
@@ -502,7 +505,8 @@ project = Xcodeproj::Project.new(PROJ_PATH)
 targets = {}
 
 PRODUCT_TYPE = { lib: :static_library, tool: :command_line_tool,
-                 app: :application, plugin: :bundle, qlgen: :bundle }.freeze
+                 app: :application, plugin: :bundle,
+                 appex: :app_extension }.freeze
 
 # Pass 1: create every target with its sources + compile settings.
 specs.each do |t|
@@ -560,11 +564,35 @@ specs.each do |t|
     bs["HEADER_SEARCH_PATHS"] += header_farm_dirs(t)
     bs["OTHER_CFLAGS"] += per_target_cflags unless per_target_cflags.empty?
     bs["OTHER_CPLUSPLUSFLAGS"] = ["$(inherited)"] + per_target_cxxflags unless per_target_cxxflags.empty?
-    if k == :plugin || k == :qlgen
-      bs["WRAPPER_EXTENSION"] = (k == :qlgen ? "qlgenerator" : "tmplugin")
+    if k == :plugin
+      bs["WRAPPER_EXTENSION"] = "tmplugin"
       bs["MACH_O_TYPE"] = "mh_bundle"
       ip = infoplist_for(t)
       bs["INFOPLIST_FILE"] = "$(SRCROOT)/#{ip}" if ip
+    end
+    # An app extension is NOT a loadable bundle: PlugInKit execs it as its own
+    # process, so it is mh_execute entered at _NSExtensionMain (added to the link
+    # flags in Pass 2). Building it as mh_bundle produces something that
+    # registers and then never launches.
+    if k == :appex
+      bs["WRAPPER_EXTENSION"] = "appex"
+      bs["MACH_O_TYPE"] = "mh_execute"
+      bs["SKIP_INSTALL"] = "YES"      # it ships inside the app, never on its own
+      ip = infoplist_for(t)
+      bs["INFOPLIST_FILE"] = "$(SRCROOT)/#{ip}" if ip
+      # Nested under the app's id, the convention every system extension follows.
+      # Its own id, not the app's — two bundles sharing one id confuses both
+      # LaunchServices and pluginkit.
+      bs["PRODUCT_BUNDLE_IDENTIFIER"] = "com.j23software.TextMate.QuickLook"
+      bs["APP_VERSION"] = APP_VERSION      # ${APP_VERSION} in Info.plist
+      bs["APP_BUILD"]   = APP_BUILD        # ${APP_BUILD}   in Info.plist
+      # The sandbox + its temporary exceptions. Unlike every other nested binary
+      # here, these entitlements are load-bearing at runtime rather than just for
+      # notarization: without them the extension cannot read the bundle index and
+      # previews arrive unhighlighted.
+      if t["entitlements"] && !t["entitlements"].empty?
+        bs["CODE_SIGN_ENTITLEMENTS"] = "$(SRCROOT)/#{generate_entitlements(t['name'], t['entitlements'])}"
+      end
     end
     if k == :app
       ip = infoplist_for(t)
@@ -603,7 +631,7 @@ specs.each do |t|
   puts "target #{t['name']} [#{k}] (#{t['sources'].size} src)"
 end
 
-# Pass 2: link wiring for executables & loadable bundles (tools/plugins/qlgen/app).
+# Pass 2: link wiring for executables & loadable bundles (tools/plugins/appex/app).
 # Each static lib in the link closure is added to the Frameworks build phase (so it
 # links) plus a target dependency (so it builds first). We deliberately add NO
 # lib<->lib edges (Xcode forbids cycles; ld64 resolves static-archive cycles at
@@ -666,15 +694,21 @@ specs.each do |t|
   own_swift         = t["sources"].any? { |s| s.end_with?(".swift") }
   swift_ld          = closure_has_swift && !own_swift ? swift_runtime_ldflags : []
 
+  # An app extension has no main() of its own: PlugInKit's runtime provides one,
+  # and the binary's entry point must be redirected to it. Without this the
+  # extension links (nothing references main), registers with pluginkit, and then
+  # fails to launch — with no diagnostic naming the entry point.
+  appex_ld = k == :appex ? ["-e", "_NSExtensionMain"] : []
+
   target.build_configurations.each do |config|
     bs = config.build_settings
-    bs["OTHER_LDFLAGS"] = ["$(inherited)", "-ObjC"] + ld_libs + ld_fw + ld_extra + swift_ld +
+    bs["OTHER_LDFLAGS"] = ["$(inherited)", "-ObjC"] + ld_libs + ld_fw + ld_extra + swift_ld + appex_ld +
                           (config.name == "Debug" ? debug_ld : [])
   end
   puts "linked #{t['name']} [#{k}]: #{closure.size} libs, #{ext_libs.size} ext-libs, #{fworks.size} frameworks#{swift_ld.empty? ? '' : ', +swift-runtime'}"
 end
 
-# Pass 3: bundle layout for app/plugin/qlgen targets. Each `files`/`copy` entry
+# Pass 3: bundle layout for app/plugin/appex targets. Each `files`/`copy` entry
 # becomes a Copy Files build phase. Plain inputs are copied from source; @refs are
 # built products (tools/bundles) copied in + a target dependency so they build
 # first. The Info.plist entry is skipped (handled by INFOPLIST_FILE in Pass 1).
@@ -812,6 +846,13 @@ end
 def add_embed_dylibs_phase(project, target, t)
   patterns = DEP_PREFIXES.map { |p| "#{p}/*" }.join("|")
   nested_ent = generate_nested_entitlements
+  # The Quick Look extension's own entitlements. This phase re-signs every nested
+  # binary it rewrites, and the extension IS rewritten (it links libcapnp through
+  # `plist`), so signing it with NestedTool.plist like everything else would strip
+  # its sandbox and its temporary exceptions — leaving an extension the Quick Look
+  # host refuses to run, from a build that otherwise looks completely healthy.
+  appex_spec = BY_NAME.values.find { |s| kind(s) == :appex }
+  appex_ent  = appex_spec && appex_spec["entitlements"] ? generate_entitlements(appex_spec["name"], appex_spec["entitlements"]) : nested_ent
 
   phase = target.new_shell_script_build_phase("Embed dependency dylibs")
   phase.shell_path = "/bin/sh"
@@ -828,6 +869,7 @@ def add_embed_dylibs_phase(project, target, t)
     # the nested binaries this phase rewrites are re-signed here.
     SIGN_ID="${EXPANDED_CODE_SIGN_IDENTITY:--}"
     NESTED_ENT="$SRCROOT/#{nested_ent}"
+    APPEX_ENT="$SRCROOT/#{appex_ent}"
     RUNTIME=""
     [ "${ENABLE_HARDENED_RUNTIME:-NO}" = "YES" ] && RUNTIME="--options runtime"
 
@@ -883,6 +925,14 @@ def add_embed_dylibs_phase(project, target, t)
     sign_nested() {
       case "$1" in
         *.dylib) codesign --force --sign "$SIGN_ID" $RUNTIME $TS "$1" 2>/dev/null ;;
+        # The app extension keeps ITS entitlements (sandbox + temporary
+        # exceptions), and is signed as the whole .appex wrapper rather than the
+        # bare executable — an extension's signature covers its Info.plist, which
+        # is where the extension point and principal class live.
+        */*.appex/Contents/MacOS/*)
+                 appex=$(printf '%s' "$1" | sed 's|/Contents/MacOS/[^/]*$||')
+                 codesign --force --sign "$SIGN_ID" $RUNTIME $TS \\
+                   --entitlements "$APPEX_ENT" "$appex" 2>/dev/null ;;
         *)       codesign --force --sign "$SIGN_ID" $RUNTIME $TS \\
                    --entitlements "$NESTED_ENT" "$1" 2>/dev/null ;;
       esac
@@ -949,7 +999,7 @@ end
 
 specs.each do |t|
   k = kind(t)
-  next unless [:app, :plugin, :qlgen].include?(k)
+  next unless [:app, :plugin, :appex].include?(k)
   target = targets[t["name"]]
 
   # Group by destination so the closure's many `Resources` entries collapse into

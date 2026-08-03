@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- macOS app extensions must be sandboxed; the Quick Look host will not run
+	     an unsandboxed one. Checked against every preview extension installed on
+	     a real machine, Apple's and third parties' alike (LibreOffice's is the
+	     useful comparison — Developer ID, not App Store, exactly this app's
+	     distribution): all of them carry this. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- The file being previewed. The host hands over access to that one file;
+	     this is the entitlement that lets the extension accept it. -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+
+	<!-- The whole home folder, read-only, and NOT a lazy over-request:
+	     path::home() goes through io::path's passwd_entry(), which loops on a
+	     CFUserNotification alert while getpwuid()'s pw_dir is unreadable — a
+	     2011 workaround for rdar://10261043. Granting only the two subpaths
+	     this actually reads leaves access("/Users/<you>", R_OK) denied, and the
+	     extension then puts up a modal alert on every preview instead of
+	     rendering one. Measured with a probe extension before this was written.
+
+	     The narrower grant is the ~/Library/Application Support/TextMate and
+	     ~/Library/Caches/com.j23software.TextMate pair; revisit this if
+	     passwd_entry() ever stops treating an unreadable home as retryable. -->
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+	<array>
+		<string>/</string>
+	</array>
+
+	<!-- Machine-wide bundle installs, the two non-home entries in
+	     bundles::locations(). -->
+	<key>com.apple.security.temporary-exception.files.absolute-path.read-only</key>
+	<array>
+		<string>/Library/Application Support/TextMate/</string>
+	</array>
+
+	<!-- The app's preference domain, for the theme choice. Verified to work from
+	     inside the sandbox against a key that exists — the first attempt read two
+	     keys that had never been set and "nil" was mistaken for a denial. -->
+	<key>com.apple.security.temporary-exception.shared-preference.read-only</key>
+	<array>
+		<string>com.j23software.TextMate</string>
+	</array>
+</dict>
+</plist>

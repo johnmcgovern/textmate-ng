@@ -368,6 +368,10 @@ deleted:
       > plugins at all. Shipping QuickLook previews now means writing a modern
       > **Quick Look Preview Extension (.appex)** — a new target in the seed
       > (`QLPreviewingController`), i.e. feature work, tracked below.
+      > **Written 2026-08-03** — `TextMateQL.appex`, sandboxed, in
+      > `Contents/PlugIns`; the `.qlgenerator` is deleted. Previews are verified
+      > working end to end (syntax highlighting from the app's own bundles and
+      > theme). See "Phase 2.6 — QuickLook".
 - [x] All 11 CLI tools work (`mate`, `tm_query`, …) — verified 2026-07-26: all 11
       build in Release, all gave correct functional output, and every executable
       the app actually ships (`mate`, `tm_query`, `PrivilegedTool`, `tm_dialog`,
@@ -605,6 +609,94 @@ Milestones:
 
 ---
 
+## Phase 2.6 — QuickLook, rewritten as a Preview Extension (2026-08-03)
+
+The appex-or-delete decision, taken in favour of the rewrite. `TextMateQL.appex`
+is a sandboxed Quick Look Preview Extension in `Contents/PlugIns`; the legacy
+`.qlgenerator` and its CFPlugIn factory are gone. Previews are TextMate's own
+grammars and themes — the highlighting code moved across unchanged, which was
+always the half worth keeping.
+
+### The estimate that was wrong, and why
+
+The rewrite was first scoped as *days*, on the assumption that a sandboxed
+extension cannot reach the app's data and that the bundle index, settings and
+preferences would have to move into a shared **app-group container** — dragging
+`BundlesManager`, both index readers, `settings_t`, the defaults suite and a
+migration for existing installs with them, all under a Team-ID-prefixed group
+that the eventual J23 Team ID change would break again.
+
+**None of that was needed.** A throwaway probe extension — an `.appex` that
+renders nothing and reports what it can reach — answered it in one run:
+`com.apple.security.temporary-exception.*` entitlements are honoured for
+Developer ID distribution, so the extension reads the *real* paths the app
+already writes. The app's storage did not move at all.
+
+Write the probe first. It cost far less than the migration it ruled out.
+
+### Four things the probe settled that guesswork would not have
+
+- **The sandbox is mandatory.** Every Quick Look preview extension on a real
+  machine carries `com.apple.security.app-sandbox` — Apple's and third parties'
+  alike. LibreOffice's is the useful comparison: Developer ID, not App Store,
+  exactly this app's distribution.
+- **`path::home()` will hang the extension unless the *whole* home is granted.**
+  `io::path`'s `passwd_entry()` loops on a `CFUserNotification` alert while
+  `getpwuid()`'s `pw_dir` is unreadable — a 2011 workaround for rdar://10261043.
+  Granting only the two subpaths actually read leaves `access("/Users/<you>",
+  R_OK)` denied, and every preview then puts up a modal alert instead of
+  rendering. Hence the `/` home-relative exception, which is a considered grant
+  and not a lazy one. Revisit it if `passwd_entry()` ever stops treating an
+  unreadable home as retryable.
+- **Abstract UTIs are silently ignored.** `QLSupportedContentTypes` containing
+  `public.source-code` registers fine and is then never selected for any file —
+  no error anywhere. Only concrete leaf types match, which is why `Info.plist`
+  lists them one by one.
+- **A Swift `@objc(PreviewViewController)` class is not found by PlugInKit.**
+  The extension launches, and neither `loadView` nor
+  `-preparePreviewOfFileAtURL:completionHandler:` is ever called; an identical
+  ObjC class is driven normally. So the principal class is ObjC++ — deliberately
+  against the Phase 4 grain, and recorded here so it is not "fixed" into Swift.
+
+One near-miss worth keeping: the first probe read two preference keys that had
+**never been set** on this machine, and their `nil` was briefly read as the
+shared-preference exception failing. Re-testing against a key that exists showed
+it working. When a probe reports "no data", check that the data exists.
+
+### What the seed learned
+
+`:appex` is a new target kind. An app extension is **not** a loadable bundle: it
+is `mh_execute`, entered at `_NSExtensionMain` (`-e`), with `WRAPPER_EXTENSION`
+`appex` and its own `PRODUCT_BUNDLE_IDENTIFIER` nested under the app's.
+
+The trap is in the **embed-dylibs phase**. It re-signs every nested binary it
+rewrites, and the extension is rewritten (it links `libcapnp` through `plist`),
+so the shared `NestedTool.plist` would have replaced the extension's sandbox and
+exceptions with `disable-library-validation` — leaving an extension the Quick
+Look host refuses to run, from a build that verifies, notarizes and looks
+entirely healthy. `sign_nested()` now signs the `.appex` **wrapper** with its own
+entitlements. Same shape as this project's recurring lesson: the build was never
+going to complain.
+
+### Registering it while developing
+
+A preview extension is registered through LaunchServices, from inside a
+registered app:
+
+```bash
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$PWD/build/Release/TextMate-NG.app"
+pluginkit -mv -p com.apple.quicklook.preview | grep j23      # confirm it is listed
+qlmanage -p some-file.c                                       # drive one preview
+```
+
+Two things that will waste time otherwise: registering **two** bundles with the
+same extension id (say a copy left in `build/`) makes the host pick one of them
+with no way to tell which, and the extension's `os_log_debug` output is
+memory-only — `log show` cannot retrieve it after the fact, so watch it with
+`log stream --debug` *while* the preview runs.
+
+---
+
 ## Phase 2.5 detail — Cleanup & de-MacroMates
 
 ✅ **Done 2026-07-26.** Each item needed its own remove-or-replace decision, so this
@@ -796,13 +888,11 @@ MacroMates' in the meantime.
 
 ## Tracked but not yet scheduled
 
-- **QuickLook needs a rewrite as a modern Preview Extension.** The shipped
-  `TextMateQL.qlgenerator` is a legacy plugin, and macOS no longer loads
-  third-party legacy generators from anyone (verified 2026-08-02 on the
-  notarized build — see the correction under the Phase 2 cutover criteria).
-  Until an `.appex` exists, the generator ships as dead weight; it is small, and
-  removing it vs. rewriting it is the same decision point, so decide when
-  someone actually misses QuickLook previews.
+- ~~**QuickLook needs a rewrite as a modern Preview Extension.**~~ **Done
+  2026-08-03**, decided in favour of the rewrite over deleting the dead
+  generator. `TextMateQL.appex` is a sandboxed Quick Look Preview Extension in
+  `Contents/PlugIns`; the legacy `.qlgenerator` is gone. Full write-up under
+  "Phase 2.6 — QuickLook".
 
 - ~~**`cf/tests/t_rect.cc`'s out-of-bounds write.**~~ **Fixed 2026-08-01** — see
   the note under Stream 7. It was in the test's helper, not in `cf`; 12 skips

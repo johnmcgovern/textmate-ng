@@ -92,6 +92,12 @@ Decisions that shaped it, recorded because Phase 4 will lean on all of them:
 - **C-variadic functions are invisible to Swift** — `text::format(char const*, …)`
   was the natural first call and cannot be imported; `text::pad` (non-variadic,
   `std::string` return crossing into Swift `String`) proves the same layer.
+  **This does not extend to the POSIX variadics.** `open`, `fcntl`, `ioctl` and
+  `sem_open` are C-variadic too, but the Darwin overlay ships hand-written
+  non-variadic *overloads* of each, so `fcntl(fd, F_GETPATH, &buf)` and
+  `open(path, O_EVTONLY|O_CLOEXEC, 0)` call straight from Swift. Checked with a
+  compile-and-run probe before the KEventManager port, which had been planned
+  around a shim it turned out not to need. Probe before assuming the wall.
 - Swift build settings are scoped to targets that have `.swift` sources (today:
   the app only) and the importer's `-Xcc` include paths are explicit
   (`swift_xcc_flags`) rather than trusting Xcode to forward `HEADER_SEARCH_PATHS`.
@@ -128,7 +134,7 @@ Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (1.1k ✅), Preferences (1.9k ✅), **OakTabBarView (1.6k ✅, 2026-07-28)**,
 **BundleMenu (240 ✅, 2026-07-30, on the new `TMBundleModel`)**,
 **BundleEditor (1.3k ✅, 2026-07-31 — the last blocked framework)**,
-**TMFileReference (274 of 761 ✅, 2026-08-01)**,
+**TMFileReference (734 of 761 ✅, finished 2026-08-02)**,
 **CrashReporter (262 ✅, 2026-08-01)**. **`SoftwareUpdate`
 (1.2k) is deliberately deferred** — the open Sparkle question may replace that
 framework wholesale. (It is §7 of `NOTARIZATION_HANDOFF.md`, which is kept as a
@@ -1357,6 +1363,10 @@ still scores 1 and is still the documented trap (its public API is a C++ DSL).
 > class is ported; `KEventManager.mm` inside it is deliberately still ObjC (see
 > its section below).
 >
+> **Updated 2026-08-02.** `KEventManager.mm` is ported too, so the framework is
+> finished apart from `FileItemImage.mm`'s 27-line C function, which stays by
+> design. Nothing in it is ObjC++ any more.
+>
 > **And `OakCommand` is a trap of the same family as `MenuBuilder` and
 > `HTMLOutput` — do not take it next on score alone.** Its 14 comes from one
 > public C++-typed method, but its *implementation* is process machinery:
@@ -1677,7 +1687,8 @@ Only `TMFileReference.mm` (274 lines). The other two files stay ObjC on purpose:
   `dispatch_source` VNODE watchers with re-parenting on rename, weak parent
   links, and file-descriptor lifetimes. Portable, and genuinely testable
   (create/modify/rename/delete in a temp dir and drive the run loop), but it is
-  its own piece of work, not a rider on this one.
+  its own piece of work, not a rider on this one. **Done 2026-08-02** as exactly
+  that separate piece — see below.
 - **`FileItemImage.mm` (27)** is a C free function by design with an ObjC++
   caller; a Swift global cannot be `@objc`.
 
@@ -1701,6 +1712,40 @@ Two things Swift could not reach:
 sharing state. The ObjC++ keyed the same map the same way. Changing it to
 `-standardizedFileURL` is a behaviour change and belongs in its own commit; the
 current behaviour is pinned by a test so the decision stays visible.
+
+#### `KEventManager`, ported after all (2026-08-02)
+
+The bullet above says it "buys nothing for the interop goal", which was true and
+is why it went second rather than not at all: what it buys is a **closed**
+framework. It moved unchanged in behaviour — same tree of one VNODE source per
+path component, same rename/trash/replace branches, same descriptor ownership
+(`d7ad0835`'s cancel-handler fix carried over with its reasoning intact).
+
+Four things worth not re-deriving:
+
+- **`fcntl(F_GETPATH)` needed no shim.** See the Phase 3 note above: the POSIX
+  variadics have non-variadic Darwin overloads. The port was budgeted for a
+  `TMFRSupport.mm` shim that turned out to be unnecessary.
+- **The `DISPATCH_VNODE_*` macros *are* unavailable in Swift** — marked
+  `@available(*, unavailable, renamed:)`, so they must be spelled
+  `DispatchSource.FileSystemEvent`. This matters beyond style because the public
+  callback hands those bits to ObjC++ callers (`OakDocument` masks against
+  `DISPATCH_VNODE_RENAME`): the overlay's `rawValue`s were checked against the C
+  macros, all eight, and are equal.
+- **Not `@MainActor`, despite being main-queue-only.** A node tears its own
+  watcher down from `deinit`, and a `@MainActor` class may not touch its own
+  state there — the constraint `BundleEditor` recorded. The type is
+  `nonisolated` with the contract in a comment, as `TMFileReference` did with
+  `nonisolated(unsafe)`.
+- **`setEventHandler`'s closure is not `@Sendable`**, so `[weak self]` on a
+  non-`Sendable` class captures cleanly under Swift 6. Checked rather than
+  assumed; it would otherwise have forced `@unchecked Sendable` on the node.
+
+The 4 tests from `d7ad0835` were the whole reason this was safe to move, and
+they pass unchanged — they drive the ObjC header, so they also prove the
+generated selectors still match what consumers compile against. Verified in the
+running app besides: one source per component from `/` down, `WRITE|EXTEND` on an
+external append, and a rename re-parenting the node and updating the window title.
 
 ### Phase 4 — CrashReporter (2026-08-01)
 
@@ -1865,9 +1910,12 @@ static os_log_t const kLogCommitWindow = os_log_create(OAK_LOG_SUBSYSTEM, "commi
 ```
 
 Adoption is incremental. 168 sites still use `os_log_error(OS_LOG_DEFAULT, …)`,
-which works but carries no subsystem and can only be filtered by process; a few
-older sites invented non-reverse-DNS subsystems of their own (`Pasteboard`,
-`KEventManager`) that group with nothing. Move them as they are touched.
+which works but carries no subsystem and can only be filtered by process; one
+older site still invents a non-reverse-DNS subsystem of its own (`Pasteboard`)
+that groups with nothing. Move them as they are touched — `KEventManager` moved
+in its 2026-08-02 port. In Swift the equivalent is `Logger(subsystem:category:)`,
+whose interpolations are **private by default**: every value that was `%{public}@`
+needs an explicit `privacy: .public`.
 
 #### Post-port hardening (2026-07-29)
 

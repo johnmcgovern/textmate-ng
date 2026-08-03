@@ -74,6 +74,14 @@ Two diagnostic traps that cost real time, both worth remembering:
 - `mate` addresses TextMate by bundle id, so with an upstream TextMate.app
   installed it may drive *that* one. Use `open -a <path>` to be certain which
   binary you are testing.
+- **`open -a <path>` is only as certain as the path.** The product is
+  `build/<config>/TextMate-NG.app` since alpha.5; a pre-rename
+  `build/Debug/TextMate.app` sat there for a day afterwards and launched happily,
+  running yesterday's code while `xcodebuild` reported the *current* target
+  built. It cost half an hour on 2026-08-02 and read exactly like a broken port.
+  `build/` is gitignored and disposable — when a run disagrees with a build,
+  check the product's mtime first, and delete stale bundles rather than reasoning
+  about them.
 
 ## Documentation map (read in this order)
 
@@ -94,7 +102,7 @@ export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 RUBYOPT="-EUTF-8"
 export PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH"     # xcodeproj gem
 ruby ide/extract_specs.rb > ide/gen/specs.json && ruby ide/seed_xcodeproj.rb
 xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release build
-open -a "$PWD/build/Release/TextMate.app"
+open -a "$PWD/build/Release/TextMate-NG.app"     # target TextMate, product TextMate-NG
 ```
 
 Tests (25 bundles, 275 green):
@@ -108,26 +116,21 @@ and `brew install capnp ragel ninja multimarkdown boost google-sparsehash`.
 
 ## What's next
 
-**Agreed next task: finish the TMFileReference port — `KEventManager.mm` (487
-lines), the last unported file of a framework left at 274 of 761.** Chosen over
-starting MenuBuilder because it closes a half-open framework, and because this
-is the file that got the fd-lifecycle fix in `d7ad0835` — a fix resting on
-Apple's documented contract with **no test covering it** (both mutations pass;
-the failure needs a real race). Read that commit message before touching the
-teardown path.
+**`KEventManager` is ported (2026-08-02), so TMFileReference is finished** —
+nothing in the framework is ObjC++ any more, only `FileItemImage.mm`'s 27-line C
+function, which stays by design. Details in `PROJECT_PHASES.md` under "Phase 4 —
+TMFileReference"; the short version is that behaviour is unchanged, the 4 tests
+from `d7ad0835` pass against the Swift through the untouched ObjC header, and the
+watcher was watched working in the running app.
 
-Two things already checked, so the port doesn't rediscover them:
+**One planned-for obstacle turned out not to exist, and the handoff was the thing
+that was wrong:** `fcntl(fd, F_GETPATH, &buf)` needs no shim. C-variadics really
+are unimportable, but the POSIX ones (`open`, `fcntl`, `ioctl`, `sem_open`) have
+hand-written non-variadic overloads in the Darwin overlay. A 10-line probe
+settled it in a minute. **Probe before believing a wall recorded in prose.**
 
-- **`fcntl(_fileDescriptor, F_GETPATH, buf)` is C-variadic, and Swift cannot
-  import C-variadics** — the same wall `text::format` hit in Phase 3. It needs a
-  shim in `TMFRSupport.mm`, which already exists for exactly this class of
-  problem (`kOnSystemDisk`). Budget for it rather than discovering it late.
-- **The dispatch-source lifecycle is the risk, not the line count.** Event
-  handler, cancel handler and the `weakSelf` capture have to keep their current
-  ordering; the cancel handler owning `close(fd)` is load-bearing.
-
-After that: the QuickLook `.appex`-or-delete decision, then MenuBuilder (399
-lines, survey score 1).
+**Next: the QuickLook `.appex`-or-delete decision, then MenuBuilder** (399 lines,
+survey score 1).
 
 **Stream 3 — DONE 2026-08-02.** Developer ID + notarization work end to end;
 see `PROJECT_PHASES.md` "Open decisions". Nothing here needs the user any more.

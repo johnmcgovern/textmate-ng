@@ -533,7 +533,14 @@ specs.each do |t|
     # bundle id must not move again (alpha.2 already paid that cost once).
     # CFBundleExecutable follows via ${EXECUTABLE_NAME}, which also renames the
     # process and thereby the app menu title.
-    extra["PRODUCT_NAME"] = "TextMate-NG" if kind(t) == :app
+    if kind(t) == :app
+      extra["PRODUCT_NAME"] = "TextMate-NG"
+      # PRODUCT_MODULE_NAME defaults to a sanitized PRODUCT_NAME ("TextMate_NG"),
+      # which would rename the Swift-generated header to TextMate_NG-Swift.h and
+      # break AppController.mm's `#import "TextMate-Swift.h"` on clean builds.
+      # Pin the module to the target name: the wrapper renames, the identity stays.
+      extra["PRODUCT_MODULE_NAME"] = t["name"]
+    end
     if config.name == "Release"
       extra["GCC_OPTIMIZATION_LEVEL"] = "s"
       # rave's `config release` defines NDEBUG (default.rave). This compiles out the

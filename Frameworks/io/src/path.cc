@@ -796,16 +796,41 @@ namespace path
 		return res;
 	}
 
+	// The home folder is *missing*, as opposed to merely unreadable.
+	//
+	// The distinction did not matter until this code ran inside a sandbox. A
+	// sandboxed process — the Quick Look extension — is routinely refused read
+	// access to the real home while getpwuid() still reports a perfectly valid
+	// path, and every path built from it (~/Library/Application Support/TextMate
+	// and friends) may still be readable through an entitlement. Treating that
+	// denial as a missing home put a modal alert in front of the user on every
+	// preview, in a process with no business showing one.
+	//
+	// So only ENOENT (and its relatives) count as missing; EACCES/EPERM mean the
+	// path is real and this process simply cannot look at it, which callers
+	// discover for themselves when they touch a subpath they need.
+	static bool home_is_missing (char const* dir)
+	{
+		if(access(dir, R_OK) == 0)
+			return false;
+		return errno != EACCES && errno != EPERM;
+	}
+
 	passwd* passwd_entry ()
 	{
 		passwd* entry = getpwuid(getuid());
-		while(!entry || !entry->pw_dir || access(entry->pw_dir, R_OK) != 0) // Home folder might be missing <rdar://10261043>
+		while(!entry || !entry->pw_dir || home_is_missing(entry->pw_dir)) // Home folder might be missing <rdar://10261043>
 		{
 			char* errStr = strerror(errno);
 			std::string message = text::format("Unable to obtain basic system information such as your home folder.\n\ngetpwuid(%d): %s", getuid(), errStr);
 
 			CFOptionFlags responseFlags;
-			CFUserNotificationDisplayAlert(0 /* timeout */, kCFUserNotificationStopAlertLevel, nullptr /* iconURL */, nullptr /* soundURL */, nullptr /* localizationURL */, CFSTR("Missing User Database"), cf::wrap(message), CFSTR("Retry"), CFSTR("Show Radar Entry"), nil /* otherButtonTitle */, &responseFlags);
+			// A background process (an app extension, a CLI tool) has no one to
+			// answer this, and the loop below would spin on it forever. Bail out
+			// with whatever getpwuid() gave us if the alert cannot be presented —
+			// callers already handle a bad entry better than a hang.
+			if(CFUserNotificationDisplayAlert(0 /* timeout */, kCFUserNotificationStopAlertLevel, nullptr /* iconURL */, nullptr /* soundURL */, nullptr /* localizationURL */, CFSTR("Missing User Database"), cf::wrap(message), CFSTR("Retry"), CFSTR("Show Radar Entry"), nil /* otherButtonTitle */, &responseFlags) != 0)
+				break;
 
 			if((responseFlags & 0x3) == kCFUserNotificationDefaultResponse)
 			{

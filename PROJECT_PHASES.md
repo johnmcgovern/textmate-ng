@@ -689,16 +689,30 @@ once per location, and denying it means previews in that folder stop working.
 Found by driving Finder rather than `qlmanage`, which never showed it. Worth a
 release-note line so it does not read as the app being nosy.
 
-**Whether it is avoidable is an open question, and there is a specific
-experiment for it.** Apple's own preview extensions rely solely on the sandbox
-extension the Quick Look host hands over for the one file being previewed, and
-prompt for nothing. This extension additionally carries the `/` home-relative
-read exception — needed only because `io::path`'s `passwd_entry()` alert-loops
-when the real home is unreadable — and that broad grant is the plausible reason
-it registers as a TCC subject for those folders at all. Plausible, not proven:
-nobody has tested the narrow entitlement with a `passwd_entry()` that tolerates
-an unreadable home. If that combination previews without prompting, both the
-prompt and the broad grant go away together.
+**The experiment was run on 2026-08-03, and the hypothesis was wrong.** The
+guess was that the `/` home-relative grant is what makes the extension a TCC
+subject, so `passwd_entry()` was taught to tell a missing home from an
+unreadable one and the entitlement narrowed to the two subpaths it actually
+reads. The extension works perfectly that way — but **the prompt still
+appears**, on a folder that had never been granted. The broad grant was not the
+cause, and narrowing it buys a smaller attack surface rather than a quieter
+first run.
+
+Two things that run told us instead, both more useful than the hypothesis:
+
+- **The preview rendered while the prompt was still unanswered.** So the
+  content does not depend on the TCC-gated access, and the earlier claim that a
+  denial leaves previews blank is wrong. What a denial actually costs is the
+  per-folder `.tm_properties` settings, because `settings_for_path()` walks the
+  file's ancestor directories looking for them — reading the *enclosing
+  protected folder*, which is the likeliest thing tripping TCC given the file
+  itself was readable through the host's grant. Likeliest, not proven; nobody
+  has instrumented which call raises it.
+- **Keep the narrow entitlement anyway.** It is strictly less than `/`, it
+  costs nothing, and the `passwd_entry()` fix it depended on is a real bug fix
+  in its own right: any sandboxed or background process — not just this
+  extension — used to answer an unreadable home with a modal alert nobody could
+  click, in a loop.
 
 ### Registering it while developing
 

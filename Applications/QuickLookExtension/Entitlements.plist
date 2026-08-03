@@ -15,20 +15,17 @@
 	<key>com.apple.security.files.user-selected.read-only</key>
 	<true/>
 
-	<!-- The whole home folder, read-only, and NOT a lazy over-request:
-	     path::home() goes through io::path's passwd_entry(), which loops on a
-	     CFUserNotification alert while getpwuid()'s pw_dir is unreadable — a
-	     2011 workaround for rdar://10261043. Granting only the two subpaths
-	     this actually reads leaves access("/Users/<you>", R_OK) denied, and the
-	     extension then puts up a modal alert on every preview instead of
-	     rendering one. Measured with a probe extension before this was written.
-
-	     The narrower grant is the ~/Library/Application Support/TextMate and
-	     ~/Library/Caches/com.j23software.TextMate-NG pair; revisit this if
-	     passwd_entry() ever stops treating an unreadable home as retryable. -->
+	<!-- Exactly the two trees this reads, and no more.
+	     This was `/` — the whole home folder — until passwd_entry() learned to
+	     tell a *missing* home from an unreadable one (io/src/path.cc). Until
+	     then, granting only these two left access("/Users/<you>", R_OK) denied,
+	     which passwd_entry() read as a missing home and answered with a modal
+	     alert on every preview. The broad grant was the workaround; the errno
+	     check is the fix, and this is what the fix bought. -->
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
 	<array>
-		<string>/</string>
+		<string>/Library/Application Support/TextMate/</string>
+		<string>/Library/Caches/com.j23software.TextMate-NG/</string>
 	</array>
 
 	<!-- Machine-wide bundle installs, the two non-home entries in

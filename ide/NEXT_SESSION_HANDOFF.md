@@ -152,11 +152,14 @@ and the fix is a bundle, not code.
 Three loose ends the QuickLook work leaves, none blocking:
 
 - **The first preview in a protected folder raises a privacy prompt** ("access
-  files on your Desktop", attributed to TextMate-NG). Once per location, and a
-  denial means previews there stop working. There is a concrete experiment for
-  removing it — see "Phase 2.6 — QuickLook" in `PROJECT_PHASES.md`: make
-  `passwd_entry()` tolerate an unreadable home, then narrow the entitlement from
-  `/` to the two subpaths and see whether the prompt disappears.
+  files on your Desktop", attributed to TextMate-NG), once per location. The
+  experiment for removing it was run on 2026-08-03 and **failed**: narrowing the
+  entitlement from `/` to the two real subpaths (plus the `passwd_entry()` fix
+  that allowed it) leaves the prompt exactly where it was. Both changes were
+  kept anyway — smaller grant, real bug fix — but do not expect a quiet first
+  run from that direction. What the run did establish is that the preview
+  renders whether or not the prompt is answered; a denial costs only per-folder
+  `.tm_properties` settings. Details in `PROJECT_PHASES.md`.
 
 - **The extension has no automated coverage.** Nothing did before either — the
   old generator had none — but `TMQLCreateAttributedString` is now an ordinary

@@ -678,6 +678,28 @@ entirely healthy. `sign_nested()` now signs the `.appex` **wrapper** with its ow
 entitlements. Same shape as this project's recurring lesson: the build was never
 going to complain.
 
+### The first preview asks the user for permission (2026-08-03)
+
+Previewing a file **on the Desktop** raised the standard macOS privacy prompt —
+"TextMate-NG would like to access files on your Desktop" — attributed to the
+*container app*, not the extension. Expect the same on Documents, Downloads,
+iCloud Drive and removable volumes: the usual TCC-protected locations. It is
+once per location, and denying it means previews in that folder stop working.
+
+Found by driving Finder rather than `qlmanage`, which never showed it. Worth a
+release-note line so it does not read as the app being nosy.
+
+**Whether it is avoidable is an open question, and there is a specific
+experiment for it.** Apple's own preview extensions rely solely on the sandbox
+extension the Quick Look host hands over for the one file being previewed, and
+prompt for nothing. This extension additionally carries the `/` home-relative
+read exception — needed only because `io::path`'s `passwd_entry()` alert-loops
+when the real home is unreadable — and that broad grant is the plausible reason
+it registers as a TCC subject for those folders at all. Plausible, not proven:
+nobody has tested the narrow entitlement with a `passwd_entry()` that tolerates
+an unreadable home. If that combination previews without prompting, both the
+prompt and the broad grant go away together.
+
 ### Registering it while developing
 
 A preview extension is registered through LaunchServices, from inside a

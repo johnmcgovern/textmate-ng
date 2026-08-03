@@ -142,7 +142,21 @@ settled it in a minute. **Probe before believing a wall recorded in prose.**
 
 **Next: MenuBuilder** (399 lines, survey score 1).
 
-Two loose ends the QuickLook work leaves, neither blocking:
+Verified in Finder itself on 2026-08-03 (not just `qlmanage`): the space-bar
+panel and the column-view preview both highlight C, JSON, Ruby, Markdown and
+shell files, plain text falls back correctly, and a type we do not claim is left
+to the system. Swift previews *unhighlighted* — there is no Swift bundle in the
+installed set, so no grammar matches; the editor would be equally unhighlighted,
+and the fix is a bundle, not code.
+
+Three loose ends the QuickLook work leaves, none blocking:
+
+- **The first preview in a protected folder raises a privacy prompt** ("access
+  files on your Desktop", attributed to TextMate-NG). Once per location, and a
+  denial means previews there stop working. There is a concrete experiment for
+  removing it — see "Phase 2.6 — QuickLook" in `PROJECT_PHASES.md`: make
+  `passwd_entry()` tolerate an unreadable home, then narrow the entitlement from
+  `/` to the two subpaths and see whether the prompt disappears.
 
 - **The extension has no automated coverage.** Nothing did before either — the
   old generator had none — but `TMQLCreateAttributedString` is now an ordinary

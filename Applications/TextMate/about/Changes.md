@@ -6,7 +6,8 @@ Title: Release Notes
 
 **Quick Look previews are back.** Select a source file in Finder and press space to see it syntax-highlighted, using your installed bundles and the theme TextMate-NG is set to — including whether that theme follows your Mac's light or dark appearance. This corrects alpha.5's note, which said previews would need a rewrite and left it as future work: that rewrite is what this release is. Previews are drawn by a modern Quick Look extension, since macOS no longer loads the kind of plug-in the old one used.
 
-* A file with no matching grammar still previews as plain text, as before.
+* **macOS will ask for permission the first time you preview a file on your Desktop**, and again for Documents, Downloads, iCloud Drive and external volumes. The prompt names TextMate-NG rather than Quick Look, which makes it look like the app is asking for your files out of the blue — it is macOS gating the preview. Allow it, or previews in that folder will stay blank.
+* A file with no matching grammar still previews as plain text, as before. Swift is currently one of those: no Swift grammar ships in the default bundle set, so `.swift` files preview unstyled until you install one.
 * Finder *thumbnails* — the small icon previews — are still generic. Those come from a separate extension that is not part of this release.
 
 **Your settings will reset.** The app's identifier changed to `com.j23software.TextMate-NG` so that it matches the name the app has shipped under since alpha.5. Preferences, window state and the recent-files list start fresh; nothing is carried over from an earlier alpha, and reinstalling does not bring them back. This is the last planned change of that kind — the identifier now matches the name, so there is no reason to move it again.

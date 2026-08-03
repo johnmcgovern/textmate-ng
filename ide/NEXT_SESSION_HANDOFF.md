@@ -1,9 +1,32 @@
 # Next-session handoff — TextMate-NG
 
-_Snapshot at end of session 2026-07-26. Point-in-time; when it disagrees with the
+_Snapshot at end of session 2026-08-02. Point-in-time; when it disagrees with the
 git log or the docs below, trust those._
 
-## Where things stand
+## Where things stand (updated 2026-08-02)
+
+- **Phase 2 is DONE.** Stream 3 (signing & notarization) landed: Developer ID
+  `John McGovern (R22V2H7QF4)`, `bin/notarize` drives `notarytool`, and shipped
+  builds are notarized and stapled. Build a release with
+  `TM_CODE_SIGN_IDENTITY`/`TM_DEVELOPMENT_TEAM` set, then run `bin/notarize`.
+- **The app ships as `TextMate-NG.app`** (alpha.5). The *target* is still named
+  `TextMate` on purpose — `CFBundleIdentifier` derives from `${TARGET_NAME}` and
+  must not move again. Only `PRODUCT_NAME` changed.
+- **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
+  (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.5`.
+- **459 tests across 33 bundles**, green. Re-measure by summing each bundle's own
+  `Executed N tests`; do not increment the documented figure.
+- **QuickLook is dead, not blocked.** Legacy `.qlgenerator`s no longer load from
+  *any* third-party app on this macOS — verified against the notarized build.
+  The old "gated on signing" note was wrong and is corrected in
+  `PROJECT_PHASES.md`.
+- **The "About box shows 2.0.23" bug was never a bug.** That window belonged to
+  the *installed upstream TextMate*, which answered the About click while both
+  apps presented identically in the menu bar. The alpha.5 rename makes the
+  mixup impossible. Beware generally: with upstream installed, confirm *which*
+  app you are looking at before believing a UI screenshot.
+
+## Where things stood at 2026-07-26
 
 - **Branching: trunk-based, single branch.** Everything lives on `master`, which
   is in sync with `GH-johnmcgovern/master`. The old `claude/xcode-stream1-seed`
@@ -85,13 +108,29 @@ and `brew install capnp ragel ninja multimarkdown boost google-sparsehash`.
 
 ## What's next
 
-**Needs the user:**
-- **Stream 3 — signing & notarization.** Real certificates. Also requires moving
-  `CFBundleIdentifier` off `com.macromates.*`, which will orphan existing
-  preferences and window state, so pick the moment deliberately. Held
-  deliberately: the identity is being designed for J23 Technologies as a whole,
-  not just this repo. Note rave's notarize flow used the retired `altool` —
-  build Stream 3 on `notarytool` from scratch.
+**Agreed next task: finish the TMFileReference port — `KEventManager.mm` (487
+lines), the last unported file of a framework left at 274 of 761.** Chosen over
+starting MenuBuilder because it closes a half-open framework, and because this
+is the file that got the fd-lifecycle fix in `d7ad0835` — a fix resting on
+Apple's documented contract with **no test covering it** (both mutations pass;
+the failure needs a real race). Read that commit message before touching the
+teardown path.
+
+Two things already checked, so the port doesn't rediscover them:
+
+- **`fcntl(_fileDescriptor, F_GETPATH, buf)` is C-variadic, and Swift cannot
+  import C-variadics** — the same wall `text::format` hit in Phase 3. It needs a
+  shim in `TMFRSupport.mm`, which already exists for exactly this class of
+  problem (`kOnSystemDisk`). Budget for it rather than discovering it late.
+- **The dispatch-source lifecycle is the risk, not the line count.** Event
+  handler, cancel handler and the `weakSelf` capture have to keep their current
+  ordering; the cancel handler owning `close(fd)` is load-bearing.
+
+After that: the QuickLook `.appex`-or-delete decision, then MenuBuilder (399
+lines, survey score 1).
+
+**Stream 3 — DONE 2026-08-02.** Developer ID + notarization work end to end;
+see `PROJECT_PHASES.md` "Open decisions". Nothing here needs the user any more.
 
 **Decided 2026-07-26: arm64-only**, not universal2 — rationale in
 `PROJECT_PHASES.md` under "Decided". Release now pins `ONLY_ACTIVE_ARCH=NO` so a

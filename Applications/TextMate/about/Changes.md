@@ -2,6 +2,17 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-03 (v2026.7-alpha.6)
+
+**Quick Look previews are back.** Select a source file in Finder and press space to see it syntax-highlighted, using your installed bundles and the theme TextMate-NG is set to — including whether that theme follows your Mac's light or dark appearance. This corrects alpha.5's note, which said previews would need a rewrite and left it as future work: that rewrite is what this release is. Previews are drawn by a modern Quick Look extension, since macOS no longer loads the kind of plug-in the old one used.
+
+* A file with no matching grammar still previews as plain text, as before.
+* Finder *thumbnails* — the small icon previews — are still generic. Those come from a separate extension that is not part of this release.
+
+**Your settings will reset.** The app's identifier changed to `com.j23software.TextMate-NG` so that it matches the name the app has shipped under since alpha.5. Preferences, window state and the recent-files list start fresh; nothing is carried over from an earlier alpha, and reinstalling does not bring them back. This is the last planned change of that kind — the identifier now matches the name, so there is no reason to move it again.
+
+**Known limitations in this alpha:** software update and crash-report submission remain switched off while the fork has no server of its own.
+
 ## 2026-08-02 (v2026.7-alpha.5)
 
 **The app is now named TextMate-NG.app.** Since alpha.2 the fork has had its own bundle identifier so macOS treats it as a separate app — but the bundle was still *named* `TextMate.app`, so unzipping a release next to an installed upstream TextMate asked to replace it. The file name now matches the identity: it installs as `TextMate-NG.app`, coexists with upstream TextMate in `/Applications`, and the menu bar reads **TextMate-NG**. Preferences and state are unaffected — the bundle identifier has not changed.

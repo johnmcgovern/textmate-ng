@@ -253,7 +253,7 @@ final class CrashReporter: NSObject {
 		return String(decoding: buf.prefix(while: { $0 != 0 }), as: UTF8.self)
 	}
 
-	private static let log = OSLog(subsystem: "com.j23software.TextMate", category: "crash-reporter")
+	private static let log = OSLog(subsystem: "com.j23software.TextMate-NG", category: "crash-reporter")
 	private static func log(_ message: String)      { os_log("%{public}@", log: log, type: .default, message) }
 	private static func logError(_ message: String) { os_log("%{public}@", log: log, type: .error, message) }
 }

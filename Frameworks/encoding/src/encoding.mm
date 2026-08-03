@@ -267,7 +267,7 @@ namespace encoding
 {
 	if(self = [super init])
 	{
-		_path = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"com.j23software.TextMate/EncodingFrequencies.binary"];
+		_path = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"com.j23software.TextMate-NG/EncodingFrequencies.binary"];
 		_database.load(_path.fileSystemRepresentation);
 
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationWillTerminate:) name:NSApplicationWillTerminateNotification object:NSApp];

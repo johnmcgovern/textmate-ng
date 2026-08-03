@@ -1,7 +1,7 @@
 import AppKit
 import os
 
-private let log = Logger(subsystem: "com.j23software.TextMate", category: "Preferences")
+private let log = Logger(subsystem: "com.j23software.TextMate-NG", category: "Preferences")
 
 @objc(ProjectsPreferences) final class ProjectsPreferences: PreferencesPane {
 	private var fileBrowserPathPopUp: NSPopUpButton?

@@ -9,9 +9,14 @@ git log or the docs below, trust those._
   `John McGovern (R22V2H7QF4)`, `bin/notarize` drives `notarytool`, and shipped
   builds are notarized and stapled. Build a release with
   `TM_CODE_SIGN_IDENTITY`/`TM_DEVELOPMENT_TEAM` set, then run `bin/notarize`.
-- **The app ships as `TextMate-NG.app`** (alpha.5). The *target* is still named
-  `TextMate` on purpose — `CFBundleIdentifier` derives from `${TARGET_NAME}` and
-  must not move again. Only `PRODUCT_NAME` changed.
+- **The app ships as `TextMate-NG.app`, id `com.j23software.TextMate-NG`**
+  (id moved 2026-08-03, for alpha.6). The *target* is still named `TextMate` and
+  must stay that way — renaming it drags `PRODUCT_MODULE_NAME` to `TextMate_NG`
+  and breaks `#import "TextMate-Swift.h"` (`102162ec`) — so the id is now a
+  **literal** in the seed rather than derived from `${TARGET_NAME}`.
+  The old note here said the id "must not move again"; it moved once more, on
+  purpose, to match the product name while the audience was still alpha-only.
+  Now it does match, so there is no third move worth making.
 - **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
   (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.5`.
 - **459 tests across 33 bundles**, green. Re-measure by summing each bundle's own

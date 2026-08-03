@@ -68,7 +68,7 @@ calls a C++ core API (`text::pad`, via a Clang module) and an ObjC API
 (`OakNotEmptyString`, via the bridging header), and is itself called from ObjC++
 (`AppController.mm` through the generated `TextMate-Swift.h`) — the full
 Swift↔ObjC↔C++ round trip, logged once at launch (`os_log` subsystem
-`com.j23software.TextMate`, category `swift-interop`) with zero behavior change.
+`com.j23software.TextMate-NG`, category `swift-interop`) with zero behavior change.
 Verified in the running Release app; Debug and Release both build; 311 tests green.
 
 Decisions that shaped it, recorded because Phase 4 will lean on all of them:
@@ -966,6 +966,35 @@ MacroMates' in the meantime.
 
 ## Decided
 
+- **Bundle id is `com.j23software.TextMate-NG` (2026-08-03, for alpha.6).** A
+  clean cut so the identity matches the product name the app has shipped under
+  since alpha.5, taken together with the caches directory, the
+  `OAK_LOG_SUBSYSTEM` string, the tab-drag pasteboard type and the Touch Bar /
+  OakTextView customization identifiers — everything that spelled the old id.
+
+  **This is the second move of the id, and the previous rule said there would not
+  be one.** `com.macromates.*` → `com.j23software.TextMate` was timed for alpha.2
+  precisely so that orphaning preferences and saved state cost nothing, and the
+  note left behind said the id must not move again. That rule was aimed at a
+  *late* move; with an alpha-only audience this was the cheapest moment still
+  available, and every release after it is dearer. Existing installs start from
+  defaults — release-noted, not migrated. Now the id matches the product, so
+  there is no third move worth making.
+
+  Three things deliberately did **not** move:
+  - `com.j23software.auth_server` and `com.j23software.textmate.openfile`
+    (`Frameworks/authorization/src/constants.h`) — a LaunchDaemon installed at an
+    absolute path under `/Library` plus an authorization right. Renaming orphans
+    an installed helper and forces re-authorization with admin rights.
+  - The `com.macromates.textmate.*` **file-format UTIs**, for the reason already
+    recorded: they name the tmbundle ecosystem's on-disk formats, not this app.
+  - `com.j23software.JavaScript` in `AboutWindowController.mm` — a separate log
+    subsystem, the same untidiness as `Pasteboard`, and not this app's id.
+
+  Implementation note: `PRODUCT_BUNDLE_IDENTIFIER` is now a **literal** in
+  `ide/seed_xcodeproj.rb`, not `com.j23software.$(TARGET_NAME)`. The target must
+  stay named `TextMate` — renaming it drags `PRODUCT_MODULE_NAME` to
+  `TextMate_NG` and breaks `#import "TextMate-Swift.h"` (`102162ec`).
 - **arm64-only, not universal2 (2026-07-26).** TextMate-NG ships Apple Silicon
   only. The macOS 15 floor already excludes every pre-2018 Intel Mac; Rosetta is
   winding down, so investing in x86_64 now means building for a platform Apple is
@@ -1973,7 +2002,7 @@ wrong. **Always spell it `/usr/bin/log`**, and never redirect its stderr while
 you are still establishing whether a query works:
 
 ```
-/usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate"'
+/usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate-NG"'
 /usr/bin/log show --last 30m --predicate 'process == "TextMate" AND messageType == error' --style compact
 ```
 
@@ -1992,7 +2021,7 @@ this codebase, no unrecognized selectors, no exceptions. The conclusion stands;
 the evidence for it is now real.
 
 **New convention: [`Shared/include/oak/log.h`](Shared/include/oak/log.h)** defines
-`OAK_LOG_SUBSYSTEM` (`com.j23software.TextMate`) so one predicate finds
+`OAK_LOG_SUBSYSTEM` (`com.j23software.TextMate-NG`) so one predicate finds
 everything the app emits, with a category per area:
 
 ```objc

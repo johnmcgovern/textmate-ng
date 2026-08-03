@@ -14,7 +14,7 @@
 #import <oak/oak.h>
 
 // Read with:
-//   /usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate"'
+//   /usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate-NG"'
 // (`/usr/bin/log`, not `log` — zsh has a builtin of that name.)
 static os_log_t const kLogCommitWindow = os_log_create(OAK_LOG_SUBSYSTEM, "commit-window");
 

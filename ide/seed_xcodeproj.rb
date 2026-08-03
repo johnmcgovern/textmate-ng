@@ -583,7 +583,7 @@ specs.each do |t|
       # Nested under the app's id, the convention every system extension follows.
       # Its own id, not the app's — two bundles sharing one id confuses both
       # LaunchServices and pluginkit.
-      bs["PRODUCT_BUNDLE_IDENTIFIER"] = "com.j23software.TextMate.QuickLook"
+      bs["PRODUCT_BUNDLE_IDENTIFIER"] = "com.j23software.TextMate-NG.QuickLook"
       bs["APP_VERSION"] = APP_VERSION      # ${APP_VERSION} in Info.plist
       bs["APP_BUILD"]   = APP_BUILD        # ${APP_BUILD}   in Info.plist
       # The sandbox + its temporary exceptions. Unlike every other nested binary
@@ -597,18 +597,31 @@ specs.each do |t|
     if k == :app
       ip = infoplist_for(t)
       bs["INFOPLIST_FILE"] = "$(SRCROOT)/#{ip}" if ip
-      # Mirror the Info.plist's CFBundleIdentifier (com.j23software.${TARGET_NAME})
-      # so Xcode stops warning that the plist id differs from an empty
-      # PRODUCT_BUNDLE_IDENTIFIER. Moved off MacroMates' `com.macromates.*`
-      # 2026-07-26 — deliberately *before* the first public build, because the move
-      # orphans existing prefs and saved window state, and doing it later (e.g. at
-      # the eventual individual→J23 Software Team ID migration) would break users a
-      # second time for no reason. Keep this and the app Info.plist in step.
+      # Mirror the Info.plist's CFBundleIdentifier so Xcode stops warning that the
+      # plist id differs from an empty PRODUCT_BUNDLE_IDENTIFIER. Keep this and the
+      # app Info.plist in step.
+      #
+      # A LITERAL, not "com.j23software.$(TARGET_NAME)" as it was until alpha.6.
+      # The target is still called TextMate and must stay that way — renaming it
+      # would drag PRODUCT_MODULE_NAME to TextMate_NG and break
+      # `#import "TextMate-Swift.h"` all over again (102162ec) — so the id can no
+      # longer be derived from it and is spelled out instead.
+      #
+      # History, because the previous comment here said the id "must not move
+      # again" and this is that move: it left MacroMates' `com.macromates.*` on
+      # 2026-07-26 and became `com.j23software.TextMate` for alpha.2, timed before
+      # the first public build so that orphaning prefs and saved state cost
+      # nothing. It moved once more on 2026-08-03, to match the product name the
+      # app has shipped under since alpha.5. That second move spends exactly what
+      # the old rule was protecting, and was taken deliberately: with an alpha-only
+      # audience this was the cheapest remaining moment, and every release after it
+      # is dearer. **Now the rule really does apply** — the name matches the
+      # product, so there is no third move worth making.
       #
       # Note the *file-format* UTIs (com.macromates.textmate.bundle/.theme/.snippet…)
       # were deliberately NOT renamed: they name the tmbundle ecosystem's on-disk
       # formats, not this app. See NOTARIZATION_HANDOFF.md.
-      bs["PRODUCT_BUNDLE_IDENTIFIER"] = "com.j23software.$(TARGET_NAME)"
+      bs["PRODUCT_BUNDLE_IDENTIFIER"] = "com.j23software.TextMate-NG"
       bs["APP_VERSION"] = APP_VERSION                 # ${APP_VERSION} in Info.plist
       bs["APP_BUILD"]   = APP_BUILD                   # ${APP_BUILD}   in Info.plist
       # Pinned, not left to the default: the default-bundles script phase runs `bl`,

@@ -9,7 +9,7 @@
 	<key>CFBundleVersion</key>
 	<string>${APP_BUILD}</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.j23software.${TARGET_NAME}</string>
+	<string>com.j23software.TextMate-NG</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>

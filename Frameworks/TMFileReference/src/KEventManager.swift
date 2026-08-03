@@ -13,13 +13,13 @@ import os
 // Subsystem moved from the invented "KEventManager" to the app's own, as
 // Shared/include/oak/log.h asks of these sites when they are touched:
 //
-//     /usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate"'
+//     /usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate-NG"'
 //
 // now catches this file's output along with everything else. Every interpolation
 // below is `privacy: .public` because the ObjC++ spelled every one %{public}@ —
 // Swift's Logger defaults to private, so leaving it off would silently turn the
 // log into <private> placeholders.
-private let log = Logger(subsystem: "com.j23software.TextMate", category: "kevent-manager")
+private let log = Logger(subsystem: "com.j23software.TextMate-NG", category: "kevent-manager")
 
 private func describe(_ mask: DispatchSource.FileSystemEvent) -> String {
 	// The C spellings, not Swift's, because these strings go into a log a reader

@@ -5,8 +5,8 @@
 
 // One logging subsystem for the whole app, so that
 //
-//     /usr/bin/log show --predicate 'subsystem == "com.j23software.TextMate"'
-//     /usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate"'
+//     /usr/bin/log show --predicate 'subsystem == "com.j23software.TextMate-NG"'
+//     /usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate-NG"'
 //
 // finds everything the app emits, and a category narrows it to one area. Declare
 // a file-static logger per area next to the code that uses it:
@@ -22,7 +22,7 @@
 //
 // The Swift spelling of the same thing, since there is no os_log_create there:
 //
-//     private let log = Logger(subsystem: "com.j23software.TextMate", category: "kevent-manager")
+//     private let log = Logger(subsystem: "com.j23software.TextMate-NG", category: "kevent-manager")
 //
 // with one catch — Logger interpolations are **private by default**, so every
 // value that was %{public}@ in ObjC needs an explicit `privacy: .public` or the
@@ -38,6 +38,6 @@
 // `os_log` (default) are persisted to the log store and show up in `log show`.
 // `os_log_info` and `os_log_debug` are memory-only and need `--info` / `--debug`
 // on the command line, so they are not useful for after-the-fact diagnosis.
-#define OAK_LOG_SUBSYSTEM "com.j23software.TextMate"
+#define OAK_LOG_SUBSYSTEM "com.j23software.TextMate-NG"
 
 #endif /* include guard */

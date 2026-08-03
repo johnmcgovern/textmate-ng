@@ -194,7 +194,7 @@ final class TMFileReference: NSObject {
 	// Icons loaded from the app bundle, cached by name. Reached from the drawing
 	// handler, which AppKit may run off the main thread, so the cache is locked
 	// rather than assumed main-thread — matching the ObjC++'s @synchronized.
-	private static let log = Logger(subsystem: "com.j23software.TextMate", category: "file-reference")
+	private static let log = Logger(subsystem: "com.j23software.TextMate-NG", category: "file-reference")
 
 	nonisolated(unsafe) private static var imageCache: [String: NSImage] = [:]
 	private static let imageCacheLock = NSLock()

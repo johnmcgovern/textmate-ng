@@ -24,7 +24,7 @@
 	     rendering one. Measured with a probe extension before this was written.
 
 	     The narrower grant is the ~/Library/Application Support/TextMate and
-	     ~/Library/Caches/com.j23software.TextMate pair; revisit this if
+	     ~/Library/Caches/com.j23software.TextMate-NG pair; revisit this if
 	     passwd_entry() ever stops treating an unreadable home as retryable. -->
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
 	<array>
@@ -43,7 +43,7 @@
 	     keys that had never been set and "nil" was mistaken for a denial. -->
 	<key>com.apple.security.temporary-exception.shared-preference.read-only</key>
 	<array>
-		<string>com.j23software.TextMate</string>
+		<string>com.j23software.TextMate-NG</string>
 	</array>
 </dict>
 </plist>

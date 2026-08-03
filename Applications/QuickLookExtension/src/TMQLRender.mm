@@ -20,7 +20,7 @@ static os_log_t const kLogQuickLook = os_log_create(OAK_LOG_SUBSYSTEM, "quickloo
 
 // The app's own preference domain, reached through the sandbox with a
 // shared-preference temporary exception (see Entitlements.plist).
-static NSString* const kTextMateDefaultsSuite = @"com.j23software.TextMate";
+static NSString* const kTextMateDefaultsSuite = @"com.j23software.TextMate-NG";
 
 // =================
 // = Bootstrapping =
@@ -75,7 +75,7 @@ static void initialize ()
 		// missing or stale, create_bundle_index() parses the bundles directly —
 		// slower, and still correct.
 		plist::cache_t cache;
-		cache.load_capnp(path::join(path::home(), "Library/Caches/com.j23software.TextMate/BundlesIndex.binary"));
+		cache.load_capnp(path::join(path::home(), "Library/Caches/com.j23software.TextMate-NG/BundlesIndex.binary"));
 
 		auto index = create_bundle_index(paths, cache);
 		bundles::set_index(index.first, index.second);

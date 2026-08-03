@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 	/// Wire format. Changing this breaks drags from an older build of the app
 	/// into a newer one; it also carries the bundle id, which moved to
 	/// com.j23software during Stream 3.
-	@objc static let pasteboardType = NSPasteboard.PasteboardType("com.j23software.TextMate.tabItem")
+	@objc static let pasteboardType = NSPasteboard.PasteboardType("com.j23software.TextMate-NG.tabItem")
 
 	@objc private(set) var identifier: String?
 

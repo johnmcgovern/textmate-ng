@@ -444,7 +444,7 @@ namespace bundles_db
 
 	bool update (bundle_ptr bundle, std::string const& installDir, double* progress, double min, double max)
 	{
-		std::string const folder = path::join(path::home(), "Library/Caches/com.j23software.TextMate/Bundles");
+		std::string const folder = path::join(path::home(), "Library/Caches/com.j23software.TextMate-NG/Bundles");
 		std::string const name   = decode::url_part(path::name(bundle->url()));
 		std::string const suffix = to_s(bundle->url_updated(), " (%F)");
 		std::string const path   = path::join(folder, safe_basename(path::strip_extension(name)) + suffix + path::extension(name));

@@ -517,7 +517,7 @@ namespace
 
 	for(auto path : bundles::locations())
 		bundlesPaths.push_back(path::join(path, "Bundles"));
-	bundlesIndexPath = path::join(path::home(), "Library/Caches/com.j23software.TextMate/BundlesIndex.binary");
+	bundlesIndexPath = path::join(path::home(), "Library/Caches/com.j23software.TextMate-NG/BundlesIndex.binary");
 	cache.set_content_filter(&prune_dictionary);
 
 	// The migration that used to live here — reading the pre-2.0-alpha.9467 plist

@@ -447,7 +447,7 @@ final class OakTabItemTests: XCTestCase {
 	// crosses application versions: a tab dragged from an older build into a
 	// newer one is matched on this string.
 	func testPasteboardTypeIsTheDocumentedWireFormat() {
-		XCTAssertEqual(OakTabItem.pasteboardType.rawValue, "com.j23software.TextMate.tabItem")
+		XCTAssertEqual(OakTabItem.pasteboardType.rawValue, "com.j23software.TextMate-NG.tabItem")
 	}
 
 	func testTabItemRoundTripsThroughThePasteboard() throws {

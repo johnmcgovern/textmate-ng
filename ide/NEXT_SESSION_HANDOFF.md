@@ -1,9 +1,9 @@
 # Next-session handoff — TextMate-NG
 
-_Snapshot at end of session 2026-08-02. Point-in-time; when it disagrees with the
+_Snapshot at end of session 2026-08-04. Point-in-time; when it disagrees with the
 git log or the docs below, trust those._
 
-## Where things stand (updated 2026-08-02)
+## Where things stand (updated 2026-08-04)
 
 - **Phase 2 is DONE.** Stream 3 (signing & notarization) landed: Developer ID
   `John McGovern (R22V2H7QF4)`, `bin/notarize` drives `notarytool`, and shipped
@@ -19,8 +19,14 @@ git log or the docs below, trust those._
   Now it does match, so there is no third move worth making.
 - **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
   (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.5`.
-- **459 tests across 33 bundles**, green. Re-measure by summing each bundle's own
-  `Executed N tests`; do not increment the documented figure.
+- **484 tests across 34 bundles**, green (2026-08-04; Find's first 25 are the
+  new bundle). Re-measure by summing each bundle's own `Executed N tests`; do not
+  increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
+  `s` optional.** xctest prints `Executed 1 test` for single-test suites, and a
+  plural-only pattern skips those lines and then mis-attributes the next
+  bundle's total, which reads as 500 instead of 484. Cross-check that
+  `Test Case … started` and `… passed` counts are equal. Full note in
+  `PROJECT_PHASES.md` under the test-count corrections.
 - **QuickLook works again, as a Preview Extension (2026-08-03).** Legacy
   `.qlgenerator`s no longer load from *any* third-party app on this macOS, so it
   was rewritten as a sandboxed `TextMateQL.appex` in `Contents/PlugIns`. The
@@ -114,7 +120,7 @@ xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release b
 open -a "$PWD/build/Release/TextMate-NG.app"     # target TextMate, product TextMate-NG
 ```
 
-Tests (25 bundles, 275 green):
+Tests (34 bundles, 484 green):
 
 ```bash
 xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
@@ -140,7 +146,35 @@ settled it in a minute. **Probe before believing a wall recorded in prose.**
 
 **The QuickLook `.appex`-or-delete decision is settled: rewritten, 2026-08-03.**
 
-**Next: MenuBuilder** (399 lines, survey score 1).
+**Next: Find** (3123 lines, survey score 43) — **not** MenuBuilder, which the
+2026-08-02 handoff named. Reading the call sites changed the order:
+
+- **MenuBuilder goes last.** All eight `MBCreateMenu` call sites are ObjC++, in
+  frameworks that are not ported, and one of them is `OTVStatusBar` inside
+  OakTextView, which stays ObjC++ by decision. A Swift API would ship with zero
+  Swift callers while the C++ DSL stays alive for eight ObjC++ ones, so the
+  project would carry both — permanently. Preferences already demonstrates the
+  point: it is Swift, imports `MenuBuilder.h`, and hand-rolls its menus anyway.
+  Also check before scheduling it: 254 of its 439 lines are `DumpMenu.mm`, whose
+  `MBDumpMenu` has **no callers anywhere** — likely a deletion, not a port.
+- **Find is the better bite.** Smallest of the remaining real UI frameworks, and
+  **no C++ in any of its eight public headers** — its two external consumers
+  (`OakTextView`, `AppController`) import a pure ObjC `Find.h`, so the boundary
+  holds still while the inside moves, the shape that made BundleEditor routine.
+  File sizes cooperate: `Find.mm` 1402, `FFResultsViewController` 709, then a
+  tail under 350, so it splits across commits.
+
+**Its tests are already written (2026-08-04, `eecca6b5`)** — 25 green, covering
+`CommonAncestor` and `FFResultNode`. Read `PROJECT_PHASES.md` under "Phase 4 —
+Find, tests first" before porting; the one thing not to re-derive is that
+**`FFResultNode`'s leaf→branch conversion depends on `NSUInteger` wraparound
+(`0 - 1`), and Swift's `UInt` traps on it** — the naive port compiles clean and
+crashes on the second match in a file.
+
+After Find: **DocumentWindow** (3564, score 50) — more central, but 2885 of those
+lines are one window controller with no tests, so it is the bigger bite and goes
+second. `HTMLOutput` needs the CommitWindow treatment for its `std::map` public
+API before it is portable at all.
 
 Verified in Finder itself on 2026-08-03 (not just `qlmanage`): the space-bar
 panel and the column-view preview both highlight C, JSON, Ruby, Markdown and

@@ -110,7 +110,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**459 tests across 33 bundles** as of 2026-08-01.
+**484 tests across 34 bundles** as of 2026-08-04.
 
 > **Correction (2026-07-30).** This line, and the header above it, previously
 > read **387 tests across 29 bundles**. The bundle count was right; the test
@@ -128,6 +128,20 @@ frameworks additionally get contract tests — see "nib-contract tests" below;
 > `…xctest[74191] CoreTest Case '-[…]' passed` is a real example that cost an
 > off-by-one in commit `d7ad0835` (it says 449; the figure was 450). An
 > unanchored match agrees with the per-bundle sum.
+>
+> **A fourth way to get it wrong, found 2026-08-04.** The instruction above is
+> right and is still not sufficient, because **xctest prints `Executed 1 test`,
+> singular**, for any suite with exactly one test. A pattern anchored on
+> `Executed ([0-9]+) tests,` skips those lines — and then, if it is scanning for
+> the *next* `Executed` line after a bundle's summary, silently attributes some
+> other bundle's total to it. That produced **500 against an actual 484**, an
+> over-count of 16 spread across four single-test bundles (`HTMLOutput`,
+> `authorization`, `network`, `theme`). Match `tests?` and the two methods agree
+> per-bundle, exactly, on every one of the 34.
+>
+> Belt and braces: check that `Test Case … started` and `Test Case … passed`
+> line counts are **equal**. That catches a bundle running twice, which neither
+> total would show, and it is one `grep -c` each.
 
 Measured migration surface: **~30k lines of ObjC++ across ~15 frameworks**
 (37k total minus OakTextView's 6.9k, which stays). Done so far: CommitWindow
@@ -1222,6 +1236,29 @@ Corrections this survey makes to the old ordering:
   means redesigning that API for Swift callers, which is a design decision, not
   a mechanical port. The score is low because the C++ is a typedef rather than
   state — a known blind spot of the metric.
+
+  > **Port it last, not next (decided 2026-08-04).** The 2026-08-02 handoff
+  > named MenuBuilder as the next pick. Reading the call sites overturns that,
+  > and for a reason the "it is a redesign" objection does not capture: **all
+  > eight `MBCreateMenu` call sites are ObjC++**, in frameworks that are not
+  > ported — `OTVStatusBar` (OakTextView), `DocumentWindowController`,
+  > `FileBrowserViewController`, `Find` (×2) and `AppController` (×3). A Swift
+  > API would therefore ship with **zero Swift callers** while the C++ DSL stays
+  > alive for eight ObjC++ ones, so the project carries both indefinitely — and
+  > one of those callers is inside OakTextView, which stays ObjC++ by decision,
+  > so the DSL can never be fully retired at any point.
+  >
+  > The tell was already in the tree and was not read: Preferences is Swift,
+  > imports `<MenuBuilder/MenuBuilder.h>` in its bridging header, and hand-rolls
+  > its menus anyway (`FilesPreferences.swift`, `ProjectsPreferences.swift`,
+  > `SoftwareUpdatePreferences.swift` each say so in a comment). The one Swift
+  > consumer that exists already declined the API.
+  >
+  > Do it when the callers are gone, at which point the redesign costs nothing.
+  > One thing to check first: **254 of the framework's 439 lines are
+  > `DumpMenu.mm`**, and its `MBDumpMenu` has no callers anywhere in the tree —
+  > only its own declaration in the header. Over half of it is likely a deletion
+  > rather than a port.
 - **`HTMLOutputWindow` (77 lines) is trivial but coupled**: it scores 0 only
   because it is nearly empty, and it imports `<HTMLOutput/HTMLOutput.h>`, so it
   is best done together with HTMLOutput (715).
@@ -2113,3 +2150,80 @@ needs an explicit `privacy: .public`.
    the code under test never runs. The test passed against the *buggy* build and
    was only exposed by mutation testing. Hold test doubles in a local — and treat
    a regression test that passes under mutation as broken, not as good news.
+
+### Phase 4 — Find, tests first (2026-08-04)
+
+Find is the next port and had **zero** automated coverage. TMFileReference and
+BundleEditor were safe to move because tests already drove their ObjC headers;
+this is that, written *before* the port instead of alongside it. 25 tests in two
+files, and the framework's first `tests` line in `default.rave`.
+
+Two units, chosen because they are the two a port breaks *silently* rather than
+loudly.
+
+#### `CommonAncestor` — a pure function whose obvious rewrite is a different function
+
+It reduces the folder search's path list to the directory results are shown
+relative to (`Find.mm:1137` hands it straight to
+`-resultNodeWithMatch:baseDirectory:`). The scan is **character-wise over the raw
+strings**, carrying a running index of the last `/` seen — not component-wise
+over path segments. A Swift rewrite reaches for `pathComponents` and a
+common-prefix reduce, which is the obvious spelling and is **not** the same
+function. The tests are what tell the two apart.
+
+**A defect pinned rather than fixed:** when one path is a prefix of another
+(`/a/b` with `/a/b/c`) the loop runs to the shorter one's end without ever
+mismatching, so the answer is the last separator *inside* that prefix — the
+grandparent, not the directory the two actually share. Searching a folder
+together with a file inside it produces exactly that pair. Pinned as current
+behaviour so the port reproduces or changes it deliberately; same treatment as
+TMFileReference's `-absoluteURL` normalisation, and a behaviour change belongs in
+its own commit.
+
+#### `FFResultNode` — four counters maintained incrementally
+
+Root, one branch per file, one leaf per match. Every setter pushes its own delta
+into the parent and nothing is ever recomputed, so an error is permanent and
+silent — the same shape as the tab bar's "count of visible tabs always reported
+zero" that this project already shipped once.
+
+Two things the header does not show, both of which the port has to get right:
+
+- **The leaf→branch conversion is an unsigned wraparound.** Adding the first
+  child to a leaf subtracts the node's own count through
+  `_parent.countOfLeafs += count - _countOfLeafs` on `NSUInteger`, i.e. `0 - 1`,
+  and it is correct *only because unsigned wraps back*. **Swift's `UInt` traps
+  on exactly that** — so the naive port is compile-clean and crashes on the
+  second match in a file. This is the single most valuable thing writing these
+  tests turned up.
+- **`excluded` and `isReadOnly` are derived, not stored**, and derived
+  *differently* for leaves and branches (`_countOfExcluded == (_children ?
+  _countOfLeafs : 1)`). A consequence worth knowing: a branch whose children have
+  all been removed compares `0 == 0` and reports itself **excluded**. Nothing
+  renders it today, but it is the difference between `children != nil` and
+  `children.count`, and a port using an empty array instead of an optional lands
+  there by default rather than by choice.
+
+#### One test asserted a bug that does not exist
+
+It claimed marking a node read-only *before* excluding it would miss
+`countOfExcludedReadOnly`, on the strength of reading `-setReadOnly:` alone.
+`-setExcluded:` recomputes the pair from `_countOfReadOnly` just as
+`-setReadOnly:` recomputes it from `self.excluded` — the two are **symmetric**
+and order does not matter. Replaced with a test that pins the symmetry, which is
+the better property to own: the two setters reach the pair by different routes,
+and a port that keeps one and drops the other passes every other test in the
+file.
+
+Worth stating as a rule, since this is the second time in two sessions a
+confidently-written claim about this codebase was wrong in the same direction:
+**a test written to document a suspected bug is a hypothesis, and a red test is
+as likely to mean the hypothesis was wrong as the code is.** Read the failure
+before "fixing" the code.
+
+#### Coverage this does not give
+
+`Find.mm` itself (1402 lines) and `FFResultsViewController` (709) are untouched —
+they are `NSWindowController`/`NSOutlineView` code, and the GUI-suite problem
+recorded under Stream 7 applies. What is covered is the model and the one pure
+function, which is where a port's silent damage would land.

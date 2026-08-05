@@ -2227,3 +2227,56 @@ before "fixing" the code.
 they are `NSWindowController`/`NSOutlineView` code, and the GUI-suite problem
 recorded under Stream 7 applies. What is covered is the model and the one pure
 function, which is where a port's silent damage would land.
+
+#### The port itself (2026-08-04)
+
+`FFResultNode.mm` (345) → `FFResultNode.swift` + `FFResultNodeSupport.mm`.
+`FFResultNode.h` is unchanged, so no consumer moved; the Swift declares the
+class and `Find-Bridging-Header.h` deliberately omits that header — the
+TMFileReference arrangement, for the same reason.
+
+**The wraparound predicted above is real, and `&+`/`&-` are the fix.** Written
+with the plain operators, Swift traps the moment a file gets its second match.
+The test written before the port is what would have caught it; as it happens the
+prediction was already in the file's header comment, so it never got the chance.
+
+**What the tests did catch: the class had no `-init`.** The root is built with
+`[FFResultNode new]` (`Find.mm:1096`), and Swift stops inheriting `-init` once
+another initializer exists — so the first run died at "unimplemented
+initializer", on *every* search rather than in some corner. Add `@objc override
+init()` whenever an ObjC caller uses `+new` or `-init` on a ported class; the
+header gives no hint, because in ObjC the inheritance is free.
+
+**`readOnly` is readwrite with `getter = isReadOnly`** — the OakTabItem crash
+case exactly. Both accessors are annotated (`@objc(isReadOnly) get`,
+`@objc(setReadOnly:) set`) rather than the property.
+
+##### Moving C++ by hand is where the mistakes are
+
+`FFResultNodeSupport.mm` takes `string_builder_t`, the path and excerpt
+builders, and `lineSpan`'s `text::pos_t` arithmetic. That region is **moved
+verbatim, assembled from the old file rather than retyped** — the first attempt
+at this commit silently dropped the em-space from `dst.append(" ")`, which
+would have surfaced only as tabs rendering wrong in a result row, with no test
+and no warning. Rebuild moved regions from `git show` and assert the old text is
+a substring of the new file; it costs a minute and it is the only check that
+actually works on a block of code nothing exercises.
+
+##### Verified in the app, and one non-regression worth recording
+
+A folder search over a three-file fixture renders both file rows with the right
+relative paths (`sub ‣ two.txt`, parent components dimmed, name bold), the right
+line numbers, and the matches highlighted — `displayPath`, the excerpt builder
+and `lineSpan` are all app-only paths that no test touches.
+
+**The file-row checkbox shows a mixed state and does not update when its
+children are toggled — and that is pre-existing.** It looked exactly like a
+KVO regression from `@objc` without `dynamic`. Rather than reason about it, the
+port was stashed, the ObjC++ rebuilt, and the identical sequence run: same
+behaviour. Nothing declares `countOfExcluded` as affecting `excluded` in either
+version, so the binding on `objectValue.excluded` never hears about a child's
+change. A real if minor bug in Find, and not this port's.
+
+Remaining in Find after this: 2778 lines — `Find.mm` (1402),
+`FFResultsViewController` (709), `FFResultNodeSupport` (~250),
+`FFDocumentSearch` (151), and the smaller files.

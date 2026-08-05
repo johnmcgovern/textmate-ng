@@ -164,12 +164,32 @@ settled it in a minute. **Probe before believing a wall recorded in prose.**
   File sizes cooperate: `Find.mm` 1402, `FFResultsViewController` 709, then a
   tail under 350, so it splits across commits.
 
-**Its tests are already written (2026-08-04, `eecca6b5`)** — 25 green, covering
-`CommonAncestor` and `FFResultNode`. Read `PROJECT_PHASES.md` under "Phase 4 —
-Find, tests first" before porting; the one thing not to re-derive is that
-**`FFResultNode`'s leaf→branch conversion depends on `NSUInteger` wraparound
-(`0 - 1`), and Swift's `UInt` traps on it** — the naive port compiles clean and
-crashes on the second match in a file.
+**Its tests came first (2026-08-04, `eecca6b5`)** — 25 green, covering
+`CommonAncestor` and `FFResultNode` — and **`FFResultNode` is now ported**
+(`fcdebd1e`). Read `PROJECT_PHASES.md` under "Phase 4 — Find, tests first"
+before continuing. Three things from that port not to re-derive:
+
+- **`&+`/`&-`, not `+`/`-`, on the counters.** The leaf→branch conversion is an
+  `NSUInteger` `0 - 1` wraparound; Swift's `UInt` traps on it, and the naive
+  spelling compiles clean and crashes on the second match in a file.
+- **Spell out `@objc override init()`** whenever an ObjC caller uses `+new` or
+  `-init` on a ported class. Swift stops inheriting `-init` once another
+  initializer exists; `Find.mm:1096` builds the root with `[FFResultNode new]`,
+  so the first run died on every search.
+- **Move C++ verbatim, assembled from `git show`, not retyped.** The first pass
+  dropped an em-space out of `dst.append(" ")`, which nothing would have
+  caught — that block has no tests and never will.
+
+**Find is now 2778 lines of ObjC++.** Next in it: `FFDocumentSearch` (151, the
+async search driver) with tests written first, then `FFResultsViewController`
+(709), leaving `Find.mm` (1402) last since it is the window controller the rest
+hangs off. `FFResultNodeSupport.mm` (~250) is C++ by design and stays.
+
+A minor pre-existing bug found while verifying, not worth blocking on: the
+file-row checkbox in the results list shows a mixed state and never updates when
+its children are toggled, because nothing declares `countOfExcluded` as
+affecting `excluded`. Confirmed against a rebuilt pre-port binary, so it is not
+the port's doing.
 
 After Find: **DocumentWindow** (3564, score 50) — more central, but 2885 of those
 lines are one window controller with no tests, so it is the bigger bite and goes

@@ -110,7 +110,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**484 tests across 34 bundles** as of 2026-08-04.
+**497 tests across 34 bundles** as of 2026-08-05.
 
 > **Correction (2026-07-30).** This line, and the header above it, previously
 > read **387 tests across 29 bundles**. The bundle count was right; the test
@@ -2280,3 +2280,55 @@ change. A real if minor bug in Find, and not this port's.
 Remaining in Find after this: 2778 lines — `Find.mm` (1402),
 `FFResultsViewController` (709), `FFResultNodeSupport` (~250),
 `FFDocumentSearch` (151), and the smaller files.
+
+#### FFDocumentSearch, and the C++ enum in its public header (2026-08-05)
+
+Tests first again (`75ca55ed`), then the port. The 151 lines were never the
+size of the job: the public header declared `@property find::options_t options`,
+a **C++ unscoped enum**, which Swift cannot name — so this is the
+`scm::status::type` trap a second time, and it is closed the same way.
+
+`FFFindOptions.h` declares `NS_OPTIONS(NSUInteger, FFFindOptions)`; both sides
+read one ObjC declaration; the conversion to C++ happens at a single call in
+`FFDocumentSearchSupport.mm`. The enum's largest value is `1<<10`, so
+`find::options_t` is **4 bytes** against `NSUInteger`'s 8, and the mismatch is
+neither an error nor a warning. Blast radius was one assignment (`Find.mm:931`),
+which still compiles because enum→NSUInteger is implicit.
+
+##### A compile-time guard is not permanent if it lives in a portable file
+
+The two are pinned by `static_assert` **and** by a runtime table
+(`t_find_options.mm`), which is deliberate rather than belt-and-braces fussiness.
+`TMSCMStatus.h` claimed until today that its values were "pinned by static_assert
+in TMFileReference.mm" — a file ported to Swift in `8601c693`, taking the
+assertions with it, unnoticed, because `t_scm_status.mm`'s table kept passing.
+Swift has no `static_assert` over an imported C++ enum. **Where a C++/ObjC value
+pairing matters, write the test as well as the assertion**; the assertion lives
+in a file that may itself be ported.
+
+##### Three costs of the port, all now in the code
+
+- **`currentPath` had to be `@objc dynamic`, not merely `@objc`.** Nothing reads
+  it — `Find.mm:1120` *observes* it — so its contract is KVO compliance rather
+  than a value, and a plain `@objc` property emits no notifications. The
+  "searching <folder>" status would simply stop updating, in the app only, with
+  nothing logged anywhere. Guarded by `test_current_path_notifies_observers`,
+  which was **mutation-tested**: removing `dynamic` fails it.
+- **A `const` object at namespace scope has internal linkage in C++.** The two
+  exported `NSNotificationName` constants moved to the support file and every
+  consumer stopped linking, because nothing had declared them `extern` first.
+  `FFDocumentSearch.mm` got that for free by importing its own header; splitting
+  the file lost it. Import the class header from the support `.mm`.
+- **`matches` stays an `NSMutableArray`.** `-updateMatches:` posts that object
+  and then empties it, so a Swift array — bridging to a fresh `NSArray` — would
+  quietly change what observers see. Exactly the behaviour the tests pinned one
+  commit earlier.
+
+The unsynchronised access the ObjC++ had (the enumeration block reads the search
+token and writes the scanned counters from a global queue, with only `matches`
+guarded) is **preserved and labelled** rather than quietly fixed:
+`@unchecked Sendable` says so out loud. Fixing it is a behaviour change and
+belongs in its own commit.
+
+Find is now 2627 lines of ObjC++. Next: `FFResultsViewController` (709), then
+`Find.mm` (1402) last.

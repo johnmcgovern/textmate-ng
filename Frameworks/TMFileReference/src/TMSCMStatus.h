@@ -11,8 +11,15 @@
 // Declaring it NS_OPTIONS(NSUInteger, …) removes the trap at its root: both
 // sides now agree on the width because both sides are reading the same ObjC
 // declaration. The conversion to and from the C++ enum happens explicitly, at
-// the handful of places that still speak C++, and the two are pinned to each
-// other by static_assert in TMFileReference.mm.
+// the handful of places that still speak C++.
+//
+// **The two are pinned to each other by t_scm_status.mm, and nothing else.**
+// This said "by static_assert in TMFileReference.mm" until 2026-08-05; that file
+// was ported to Swift in 8601c693 and the assertions went with it, unnoticed,
+// because the runtime table kept passing. Swift has no static_assert over an
+// imported C++ enum, so the test *is* the guarantee here — the lesson being that
+// a compile-time guard living in a file that may be ported is not permanent.
+// Find's equivalent (FFFindOptions) carries both, for exactly this reason.
 //
 // NS_OPTIONS and not NS_ENUM: this is genuinely a bitmask. Callers test it with
 // `status & (modified|added|deleted|conflicted)` (FileItemSCMStatus.mm,

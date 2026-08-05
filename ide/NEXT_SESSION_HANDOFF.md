@@ -1,9 +1,9 @@
 # Next-session handoff — TextMate-NG
 
-_Snapshot at end of session 2026-08-04. Point-in-time; when it disagrees with the
+_Snapshot at end of session 2026-08-05. Point-in-time; when it disagrees with the
 git log or the docs below, trust those._
 
-## Where things stand (updated 2026-08-04)
+## Where things stand (updated 2026-08-05)
 
 - **Phase 2 is DONE.** Stream 3 (signing & notarization) landed: Developer ID
   `John McGovern (R22V2H7QF4)`, `bin/notarize` drives `notarytool`, and shipped
@@ -19,8 +19,8 @@ git log or the docs below, trust those._
   Now it does match, so there is no third move worth making.
 - **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
   (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.5`.
-- **484 tests across 34 bundles**, green (2026-08-04; Find's first 25 are the
-  new bundle). Re-measure by summing each bundle's own `Executed N tests`; do not
+- **497 tests across 34 bundles**, green (2026-08-05; 38 of them Find's, a
+  bundle that did not exist three days ago). Re-measure by summing each bundle's own `Executed N tests`; do not
   increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
   `s` optional.** xctest prints `Executed 1 test` for single-test suites, and a
   plural-only pattern skips those lines and then mis-attributes the next
@@ -120,7 +120,7 @@ xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release b
 open -a "$PWD/build/Release/TextMate-NG.app"     # target TextMate, product TextMate-NG
 ```
 
-Tests (34 bundles, 484 green):
+Tests (34 bundles, 497 green):
 
 ```bash
 xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
@@ -180,10 +180,23 @@ before continuing. Three things from that port not to re-derive:
   dropped an em-space out of `dst.append(" ")`, which nothing would have
   caught — that block has no tests and never will.
 
-**Find is now 2778 lines of ObjC++.** Next in it: `FFDocumentSearch` (151, the
-async search driver) with tests written first, then `FFResultsViewController`
-(709), leaving `Find.mm` (1402) last since it is the window controller the rest
-hangs off. `FFResultNodeSupport.mm` (~250) is C++ by design and stays.
+**Find is now 2627 lines of ObjC++** — `FFResultNode` and `FFDocumentSearch` are
+both ported (`fcdebd1e`, `01d60a36`), each with its tests written first. Next in
+it: `FFResultsViewController` (709), leaving `Find.mm` (1402) last since it is
+the window controller the rest hangs off. `FFResultNodeSupport.mm` and
+`FFDocumentSearchSupport.mm` are C++ by design and stay.
+
+Two more rules from the FFDocumentSearch port, on top of the three above:
+
+- **`@objc dynamic`, not just `@objc`, for any property an ObjC caller
+  *observes*.** A plain `@objc` property emits no KVO notifications, so the
+  observer silently stops hearing about changes — in the app only, with nothing
+  logged. Grep for `addObserver:forKeyPath:` naming the class before porting it.
+- **A C++ enum in a public header means an NS_OPTIONS change, not a port.**
+  `find::options_t` became `FFFindOptions`, the second instance of the
+  `scm::status::type` trap. And pin such pairings with a **test as well as** a
+  `static_assert`: the assertion lives in a file that may itself be ported, which
+  is exactly how TMSCMStatus.h quietly lost its guard in `8601c693`.
 
 A minor pre-existing bug found while verifying, not worth blocking on: the
 file-row checkbox in the results list shows a mixed state and never updates when

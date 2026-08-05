@@ -1,4 +1,5 @@
 #import "../src/FFDocumentSearch.h"
+#import "FFKVORecorder.h"
 #import <document/OakDocument.h>
 #import <test/jail.h>
 #import <ns/ns.h>
@@ -150,6 +151,42 @@ void test_the_delivered_array_is_emptied_after_posting ()
 
 	[delivered release];
 	[NSNotificationCenter.defaultCenter removeObserver:r];
+	[NSNotificationCenter.defaultCenter removeObserver:f];
+}
+
+// ==========================================
+// = currentPath is observed, not just read =
+// ==========================================
+
+// Find.mm watches this key path (Find.mm:1120) to show which folder is being
+// scanned; nothing ever reads the property directly. That makes it the one
+// piece of this class whose contract is *KVO compliance* rather than a value,
+// and the one a Swift port silently breaks: an `@objc` property that is not
+// also `dynamic` emits no notifications, so the status line simply stops
+// updating, in the app only, with no error anywhere.
+//
+// This test is the guard on that `dynamic` keyword.
+void test_current_path_notifies_observers ()
+{
+	test::jail_t jail;
+	populate(jail);
+
+	__block BOOL finished = NO;
+	FFDocumentSearch* search = SearchFor(@"NEEDLE", jail);
+	FFKVORecorder* recorder = [FFKVORecorder new];
+	[search addObserver:recorder forKeyPath:@"currentPath" options:NSKeyValueObservingOptionNew context:NULL];
+
+	id f = [NSNotificationCenter.defaultCenter addObserverForName:FFDocumentSearchDidFinishNotification object:search queue:nil usingBlock:^(NSNotification* note){
+		finished = YES;
+	}];
+
+	[search start];
+	OAK_ASSERT(wait_until(^{ return finished; }));
+
+	OAK_ASSERT([recorder sawKeyPath:@"currentPath"]);
+	OAK_ASSERT([search.currentPath length] != 0);
+
+	[search removeObserver:recorder forKeyPath:@"currentPath"];
 	[NSNotificationCenter.defaultCenter removeObserver:f];
 }
 

@@ -4,12 +4,21 @@
 // CommitWindow-Bridging-Header.h), because the Swift Clang importer compiles
 // this standalone with no GCC_PREFIX_HEADER.
 //
-// Deliberately absent: FFResultNode.h and FFDocumentSearch.h. Each declares a
-// class the Swift defines itself (@objc(FFResultNode), @objc(FFDocumentSearch));
-// importing them would give those classes two declarations and collide with the
-// generated Find-Swift.h. Same arrangement as TMFileReference.
+// Deliberately absent: FFResultNode.h, FFDocumentSearch.h and
+// FFResultsViewController.h. Each declares a class the Swift defines itself
+// (@objc(FFResultNode) and friends); importing them would give those classes two
+// declarations and collide with the generated Find-Swift.h. Same arrangement as
+// TMFileReference.
 #include "../../../Shared/PCH/prelude.cc"
 #import <Cocoa/Cocoa.h>
+
+// OakCreateLabel / OakCreateCheckBox / OakCreateNSBoxSeparator /
+// OakAddAutoLayoutViewsToSuperview / OakSetupKeyViewLoop, and
+// OakIsAlternateKeyOrMouseEvent. Four other frameworks already bridge these; none
+// of the three is C++.
+#import <OakAppKit/OakAppKit.h>
+#import <OakAppKit/OakUIConstructionFunctions.h>
+#import <OakAppKit/NSColor Additions.h>
 
 // OakDocumentMatch and OakDocument. The header carries C++ members
 // (`text::range_t range`, `std::map captures`) that the importer drops; the

@@ -21,8 +21,8 @@ final class FFResultNode: NSObject {
 
 	@objc private(set) var match: OakDocumentMatch?
 
-	@objc var replaceString: String?
-	@objc var displayPath: NSAttributedString?
+	@objc dynamic var replaceString: String?
+	@objc dynamic var displayPath: NSAttributedString?
 
 	private var storedChildren: NSMutableArray?
 	private var cachedExcerpt: NSAttributedString?
@@ -181,7 +181,7 @@ final class FFResultNode: NSObject {
 	// A branch whose children have all been removed therefore compares 0 to 0
 	// and reports itself excluded — pinned by test, and the reason `children` is
 	// an optional here rather than an always-present empty array.
-	@objc var excluded: Bool {
+	@objc dynamic var excluded: Bool {
 		get { excluded_ == (storedChildren != nil ? leafs : 1) }
 		set {
 			if let children = storedChildren {
@@ -201,7 +201,7 @@ final class FFResultNode: NSObject {
 	// annotated individually because `@objc(isReadOnly)` on the property itself
 	// renames the setter to `setIsReadOnly:`, which is the OakTabItem crash
 	// recorded in PROJECT_PHASES.md.
-	@objc var readOnly: Bool {
+	@objc dynamic var readOnly: Bool {
 		@objc(isReadOnly) get { readOnly_ == (storedChildren != nil ? leafs : 1) }
 		@objc(setReadOnly:) set {
 			if let children = storedChildren {

@@ -1,4 +1,5 @@
 #import "../src/FFResultNode.h"
+#import "FFKVORecorder.h"
 
 // FFResultNode is the model behind the find results outline view: a root, one
 // branch per file, one leaf per match. What makes it worth testing before the
@@ -289,4 +290,51 @@ void test_a_child_knows_its_parent ()
 	OAK_ASSERT(file.parent == root);
 	OAK_ASSERT(file.firstResultNode.parent == file);
 	OAK_ASSERT(root.parent == nil);
+}
+
+// ==================================================
+// = KVO, which is how the results view sees changes =
+// ==================================================
+
+// The cell views bind to objectValue.excluded / .readOnly / .replaceString and
+// recompute from them (FFResultsViewController.mm:60-61, :115), so these
+// properties' contract is KVO compliance, not just a value.
+//
+// The dangerous case is a *branch*: -setExcluded: on a file row loops over its
+// children setting theirs. In ObjC++ that loop goes through objc_msgSend and
+// therefore through KVO's swizzled setter, so every child checkbox updates. A
+// Swift property that is `@objc` but not `dynamic` is called directly from
+// within Swift, bypassing the swizzle — the parent updates and the children
+// silently do not.
+void test_excluding_a_branch_notifies_its_children ()
+{
+	FFResultNode* root = nil; FFResultNode* file = nil;
+	TreeWithRoot(&root, &file, 2);
+
+	FFResultNode* child = file.firstResultNode;
+	FFKVORecorder* recorder = [FFKVORecorder new];
+	[child addObserver:recorder forKeyPath:@"excluded" options:NSKeyValueObservingOptionNew context:NULL];
+
+	file.excluded = YES;
+
+	OAK_ASSERT(child.excluded);
+	OAK_ASSERT([recorder sawKeyPath:@"excluded"]);
+
+	[child removeObserver:recorder forKeyPath:@"excluded"];
+}
+
+void test_replace_string_notifies_observers ()
+{
+	FFResultNode* root = nil; FFResultNode* file = nil;
+	TreeWithRoot(&root, &file, 1);
+
+	FFResultNode* leaf = file.firstResultNode;
+	FFKVORecorder* recorder = [FFKVORecorder new];
+	[leaf addObserver:recorder forKeyPath:@"replaceString" options:NSKeyValueObservingOptionNew context:NULL];
+
+	leaf.replaceString = @"replacement";
+
+	OAK_ASSERT([recorder sawKeyPath:@"replaceString"]);
+
+	[leaf removeObserver:recorder forKeyPath:@"replaceString"];
 }

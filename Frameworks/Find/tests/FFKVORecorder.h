@@ -1,16 +1,20 @@
 // A KVO observer that records which key paths fired.
 //
-// A near-copy of TMFileReference's TMFRKVORecorder rather than a shared one, and
-// deliberately: that header *defines* its class, so two test files including one
-// copy would collide at link time — its own comment says so. Duplicating twelve
-// lines is cheaper than inventing a shared test-support target for them.
+// A near-copy of TMFileReference's TMFRKVORecorder rather than a shared one:
+// duplicating twelve lines is cheaper than inventing a shared test-support
+// target, and `tests tests/*.mm` would try to make a suite out of one anyway.
 //
 // In its own header, and defined rather than merely declared, because
 // ide/gen_xctest.rb wraps each test file's body in `namespace <basename>` and
 // ObjC declarations may only appear at global scope — but it hoists every
 // #import to the top, so anything reached through one is fine.
 //
-// Only one test file in this framework may include this.
+// **Two test files in this framework include it, and that is safe** —
+// contradicting TMFRKVORecorder.h's warning that a second includer would collide
+// at link. gen_xctest.rb emits every file's bodies into a *single* _impl.mm, and
+// `#import` is idempotent within a translation unit, so there is only ever one
+// copy of the @implementation. Checked by doing it, not by reasoning: the second
+// includer was added on 2026-08-05 and the bundle links.
 #import <Foundation/Foundation.h>
 
 @interface FFKVORecorder : NSObject

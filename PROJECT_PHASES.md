@@ -2277,9 +2277,12 @@ behaviour. Nothing declares `countOfExcluded` as affecting `excluded` in either
 version, so the binding on `objectValue.excluded` never hears about a child's
 change. A real if minor bug in Find, and not this port's.
 
-Remaining in Find after this: 2778 lines — `Find.mm` (1402),
-`FFResultsViewController` (709), `FFResultNodeSupport` (~250),
-`FFDocumentSearch` (151), and the smaller files.
+Remaining in Find after this: **3022 lines, measured** — `Find.mm` (1402),
+`FFResultsViewController` (709), `FFResultNodeSupport` (244), `FFDocumentSearch`
+(151), and the smaller files. Note it did not fall by the 345 lines ported: the
+C++ half moved to a support file rather than disappearing, so the directory
+dropped by 101. **Measure the directory after a port; do not subtract the file.**
+A first pass at this note said 2778, arrived at by subtraction.
 
 #### FFDocumentSearch, and the C++ enum in its public header (2026-08-05)
 
@@ -2330,5 +2333,7 @@ guarded) is **preserved and labelled** rather than quietly fixed:
 `@unchecked Sendable` says so out loud. Fixing it is a behaviour change and
 belongs in its own commit.
 
-Find is now 2627 lines of ObjC++. Next: `FFResultsViewController` (709), then
-`Find.mm` (1402) last.
+Find is now **2947 lines of ObjC++, measured** (3123 at `cbaa5894`; two files
+totalling 496 lines ported, and the count fell by 176 because 320 lines of C++
+relocated into the two support files). Next: `FFResultsViewController` (709),
+then `Find.mm` (1402) last. Detail in `ide/FIND_PORT_HANDOFF.md`.

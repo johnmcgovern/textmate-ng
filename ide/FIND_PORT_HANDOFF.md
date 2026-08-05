@@ -1,0 +1,230 @@
+# Finishing the Find port — FFResultsViewController, then Find.mm
+
+_Written 2026-08-05, after `FFResultNode` and `FFDocumentSearch` landed. Read
+`PROJECT_PHASES.md` under "Phase 4 — Find, tests first" for what those two cost;
+this covers only what is left._
+
+Find is **2947 lines of ObjC++** (measured, `.mm` outside `tests/`), in two files
+that matter and a tail that does not.
+
+Note what that number did *not* do: the baseline at `cbaa5894` was 3123, and two
+files totalling 496 lines have been ported — but the count only fell by 176,
+because each port left a C++ support file behind (244 + 76). **Porting relocates
+C++ as often as it removes it.** Measure the directory; do not subtract the file
+you ported.
+
+| file | lines | state |
+|---|---:|---|
+| `Find.mm` | 1402 | the window controller — last |
+| `FFResultsViewController.mm` | 709 | **next** |
+| `FFResultNodeSupport.mm` | 244 | C++ by design, stays |
+| `FFTextFieldViewController.mm` | 216 | small, unsurveyed |
+| `FFStatusBarViewController.mm` | 156 | small, unsurveyed |
+| `FFFolderMenu.mm` | 108 | small, unsurveyed |
+| `FFDocumentSearchSupport.mm` | 76 | C++ by design, stays |
+| `CommonAncestor.mm` | 36 | a Swift global cannot be `@objc` — see TMFileReference's `FileItemImage.mm` |
+
+---
+
+## Read this first: the trap that has now bitten twice
+
+**A Swift property that ObjC observes must be `@objc dynamic`, not `@objc`.**
+`@objc` exposes the accessors to the runtime; it does not force message dispatch.
+KVO works by swizzling the setter, so a call that Swift makes *directly* — which
+is any call from Swift code — bypasses the notification entirely.
+
+It has now caused two defects in three days:
+
+- `FFDocumentSearch.currentPath` — caught before shipping, because the property
+  exists solely to be observed and that was obvious on inspection.
+- `FFResultNode.excluded` — **shipped**, and fixed in `9d560946`. Toggling a file
+  row's checkbox stopped updating its children's checkboxes, because
+  `-setExcluded:` on a branch loops over children *from Swift*.
+
+The second one is the instructive one, because every cheap check passed:
+
+- setting the property **from ObjC** worked all along (objc_msgSend hits the
+  swizzle), so a test that set it from the test file passed;
+- clicking a *leaf* checkbox in the app worked, because the binding writes
+  through ObjC;
+- only a property that **Swift itself writes** could expose it, and only via an
+  observer on the object Swift wrote to.
+
+**So, before porting either remaining file:**
+
+```bash
+grep -rn 'bind:\|addObserver:.*forKeyPath:\|keyPathsForValuesAffecting\|setValue:.*forKey:' Frameworks/Find/src
+```
+
+Every key path that lands on a class you are porting is a `dynamic` requirement.
+Write the observer test *first*, watch it fail, then add `dynamic`.
+
+---
+
+## Next: `FFResultsViewController.mm` (709 lines)
+
+### Why it is the right next bite
+
+- **Almost no C++.** Two uses of `std::max` on `CGFloat` (lines 308, 317), both
+  of which are Swift's `max`. No support file needed — the first Find file where
+  that is true.
+- **A clean header.** `FFResultsViewController.h` is pure ObjC: `SEL` properties,
+  a `FFResultNode*`, `BOOL`s, and IBActions. Its only consumer is `Find.mm`, which
+  stays ObjC++ for now, so the boundary holds still while the inside moves — the
+  shape that made BundleEditor routine.
+- **No nib.** Views are built in code (`OakCreateLabel`, visual-format
+  constraints), so the nib-contract tests do not apply.
+
+### What is actually in the file
+
+Five classes, not one:
+
+| class | role |
+|---|---|
+| `FFResultsViewController` | the outline view's data source + delegate |
+| `OakTableCellView` | base cell; owns the `observeKeyPaths` mechanism |
+| `OakSearchResultsCheckboxView` | the exclude checkbox |
+| `OakSearchResultsMatchCellView` | a match row, with the excerpt |
+| `OakSearchResultsHeaderCellView` | a file row, with icon + display path |
+
+Port them as a group. `OakTableCellView` is the base of the other two and carries
+the shared observation logic, so splitting the file across commits means the
+subclasses cannot compile until the base moves.
+
+### The specific hazards
+
+1. **`+keyPathsForValuesAffectingExcerptString`** (line 115) is a KVO dependency
+   declaration listing `objectValue.readOnly`, `objectValue.excluded`,
+   `objectValue.replaceString` and three of its own properties. In Swift this is
+   `class var keyPathsForValuesAffectingExcerptString: Set<String>` — and the
+   properties it *names on this class* (`replaceString`,
+   `showReplacementPreviews`, `backgroundStyle`) must themselves be `dynamic`, or
+   the dependency never fires. This is the same trap one level up.
+
+2. **`OakTableCellView.observeKeyPaths`** (lines 85, 100) is a hand-rolled
+   observation bridge: the cell registers on its view controller for a list of
+   key paths with `NSKeyValueObservingOptionInitial`, then mirrors each value
+   onto itself with `setValue:forKey:`. That is KVC-by-string in both directions.
+   Swift will compile it happily and it will fail at runtime if any property name
+   changes spelling — the `getter=` class of bug. Keep the names byte-identical,
+   and prefer porting this class last within the file so the others are known
+   good.
+
+3. **Bindings are established in `init`, on views.** `[textField bind:…]`
+   requires the *binding target* to be KVO compliant, which is the controller and
+   the cell, not just the node. Everything the cells bind to is listed above;
+   `objectValue` itself comes from `NSTableCellView` and is already fine.
+
+4. **`NextNode`/`PreviousNode`** (lines 11–17) are free functions doing tree
+   traversal. A Swift global cannot be `@objc`, but nothing outside the file
+   calls them — make them private statics or methods, no shim needed.
+
+5. **`setResults:`** (line 395) replaces the whole tree. Check what it does with
+   the outline view's selection state; the results view is the only thing that
+   remembers `_lastSelectedResult` across a re-search.
+
+### Coverage to write first
+
+The framework has 40 tests but **none touch this file**. It is a view controller,
+so the GUI-suite problem in Stream 7 applies to driving the outline view — but
+three things are testable without one:
+
+- `NextNode`/`PreviousNode` traversal over a hand-built `FFResultNode` tree
+  (currently unreachable — make them internal rather than static as part of the
+  port, or test through `selectNextResultWrapAround:`).
+- `excerptString`'s decision table: the ternary at line 145 picks between
+  `item.replaceString`, `self.replaceString` and `@""` based on
+  `isReadOnly`/`excluded`/`showReplacementPreviews`. Eight combinations, all pure.
+- **A KVO test per bound key path**, per the section above. These are the ones
+  that would have caught `9d560946`.
+
+---
+
+## Then: `Find.mm` (1402 lines)
+
+### Why last
+
+It is the window controller everything else hangs off, it owns the
+`OakFindProtocol` conformance, and it is the only file in the framework that is
+genuinely C++-heavy. Doing it last means every class it talks to is already Swift
+and already tested.
+
+### The blocker to decide before starting
+
+**`Find.mm` calls `MBCreateMenu` twice** (lines 356, 578), and MenuBuilder's
+public API is a C++ DSL — `std::vector<MBMenuItem>` with designated-initializer
+aggregates — that **Swift cannot construct**. This is the MenuBuilder trap
+arriving from the other direction, and it is the reason MenuBuilder is scheduled
+*last* (see `PROJECT_PHASES.md`, Phase 4 coupling survey).
+
+Three ways out, in order of preference:
+
+1. **Hand-roll the two menus in Swift**, as `CommitWindow` and `Preferences`
+   already do — their `.swift` files say so in comments
+   (`FilesPreferences.swift:45` and siblings). Proven, local, no new API.
+2. **A narrow ObjC++ shim** in a `FindSupport.mm`: one function per menu that
+   builds the `MBMenu` and returns the `NSMenu*`. Cheap, but adds a file whose
+   only purpose is to outlive MenuBuilder's C++ API.
+3. **Port MenuBuilder first.** Rejected — it would ship a Swift menu API with
+   zero Swift callers while the DSL stays alive for the six remaining ObjC++
+   ones, one of which (`OTVStatusBar`, inside OakTextView) is permanent.
+
+Take (1) unless the menus turn out to be large.
+
+### The rest of the C++ surface
+
+- **`find::options_t _findOptions`** (line 139) is a class-extension property,
+  not public, and is built with `|` from `find::` constants (line 881) and tested
+  with `&` (line 1030). `FFFindOptions` already exists for exactly this type —
+  reuse it rather than inventing a second spelling.
+- **`format_string::expand`** (lines 961, 1030, 1320) and `to_s`/`to_ns` are the
+  usual suspects; they belong in a support file with the menu shim if one is
+  written.
+- **`std::multimap<std::pair<size_t,size_t>, std::string> replacements`** (line
+  961) is handed to `-performReplacements:checksum:`. That signature is C++ in
+  `OakDocument.h` and is not moving, so the replace path stays ObjC++ — probably
+  the largest single piece that cannot be ported without an ABI decision like
+  `FFFindOptions`. **Survey this before committing to a whole-file port**; it may
+  be a `FindReplaceSupport.mm` rather than a Swift method.
+- **`Find.mm:974`** does `[parent.children setValue:nil forKey:@"replaceString"]`
+  — KVC on an array, which fans out to every element. It works against the Swift
+  `FFResultNode` today because `replaceString` is `dynamic`. Do not remove that
+  keyword.
+
+### Coverage to write first
+
+`Find.mm` is a window controller, so most of it needs the GUI-suite treatment.
+The parts that are testable in isolation and worth pinning before the port:
+
+- **`-acceptMatches:`** (line 1126) — the tree assembly. Feed it a hand-built
+  `NSArray<OakDocumentMatch*>` and assert the shape of `_results`: one branch per
+  distinct document, leaves in order, `CommonAncestor` applied once. This is the
+  single most valuable test in the file and it needs no window.
+- **The find-options assembly** (line 881) — five booleans in, one mask out.
+- **The status-string formatting** (lines 1188, 1272) — pluralisation and number
+  formatting, pure given a count.
+
+---
+
+## Rules earned so far, in one place
+
+1. **`@objc dynamic`** for anything ObjC observes. Grep for `bind:`,
+   `addObserver:forKeyPath:`, `keyPathsForValuesAffecting`, `setValue:forKey:`.
+2. **Spell out `@objc override init()`** when an ObjC caller uses `+new`/`-init`.
+   Swift stops inheriting `-init` once another initializer exists.
+3. **`&+`/`&-`** wherever the ObjC++ relied on `NSUInteger` wraparound.
+4. **Annotate accessors, not the property**, for `getter=` — `@objc(isFoo) get`
+   plus `@objc(setFoo:) set`.
+5. **A C++ enum in a public header is an NS_OPTIONS decision**, not a port.
+   Pin it with a `static_assert` *and* a test.
+6. **Move C++ verbatim**, assembled from `git show`, never retyped; assert the
+   old text is a substring of the new file.
+7. **`const` at namespace scope has internal linkage in C++** — an exported
+   constant needs its `extern` declaration in scope at the definition.
+8. **Run the app.** `displayPath`, the excerpt builder and `lineSpan` have no
+   test coverage and never will; they only execute in the running app.
+9. **Measure, never subtract.** Both the suite total and Find's line count have
+   been reported wrong in this project by arithmetic rather than by
+   measurement — the suite twice in one session, and Find's remaining ObjC++
+   twice more, each time because a ported file's C++ half was subtracted without
+   adding back the support file it moved into. Re-run the command.

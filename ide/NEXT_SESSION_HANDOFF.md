@@ -180,7 +180,7 @@ before continuing. Three things from that port not to re-derive:
   dropped an em-space out of `dst.append(" ")`, which nothing would have
   caught — that block has no tests and never will.
 
-**Find is now 2627 lines of ObjC++** — `FFResultNode` and `FFDocumentSearch` are
+**Find is now 2947 lines of ObjC++** (measured; see `ide/FIND_PORT_HANDOFF.md`) — `FFResultNode` and `FFDocumentSearch` are
 both ported (`fcdebd1e`, `01d60a36`), each with its tests written first. Next in
 it: `FFResultsViewController` (709), leaving `Find.mm` (1402) last since it is
 the window controller the rest hangs off. `FFResultNodeSupport.mm` and

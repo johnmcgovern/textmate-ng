@@ -37,16 +37,18 @@ It has now caused two defects in three days:
 
 - `FFDocumentSearch.currentPath` — caught before shipping, because the property
   exists solely to be observed and that was obvious on inspection.
-- `FFResultNode.excluded` — **shipped**, and fixed in `9d560946`. Toggling a file
-  row's checkbox stopped updating its children's checkboxes, because
-  `-setExcluded:` on a branch loops over children *from Swift*.
+- `FFResultNode.excluded` — **shipped**, and fixed in `9d560946`.
+  Option-clicking a match checkbox (which excludes the whole file, via
+  `item.parent.excluded = item.excluded`) stopped updating the file's other
+  matches, because `-setExcluded:` on a branch loops over children *from Swift*.
 
 The second one is the instructive one, because every cheap check passed:
 
 - setting the property **from ObjC** worked all along (objc_msgSend hits the
   swizzle), so a test that set it from the test file passed;
-- clicking a *leaf* checkbox in the app worked, because the binding writes
-  through ObjC;
+- plain-clicking a match checkbox in the app worked, because the binding writes
+  through ObjC — and that is what was clicked when the port was called verified;
+  only the option-click path goes through Swift;
 - only a property that **Swift itself writes** could expose it, and only via an
   observer on the object Swift wrote to.
 
@@ -136,7 +138,12 @@ three things are testable without one:
   `item.replaceString`, `self.replaceString` and `@""` based on
   `isReadOnly`/`excluded`/`showReplacementPreviews`. Eight combinations, all pure.
 - **A KVO test per bound key path**, per the section above. These are the ones
-  that would have caught `9d560946`.
+  that would have caught `9d560946`. **Written 2026-08-05** —
+  `t_results_view_controller.mm`, 6 tests, green against the ObjC++. They cover
+  `replaceString`, `showReplacementPreviews` and `showKeyEquivalent`, which the
+  cells observe *on the controller* through `OakTableCellView`'s bridge, plus
+  readability-by-name since that bridge mirrors values with `-setValue:forKey:`.
+  The controller is constructible in a test process — checked, not assumed.
 
 ---
 

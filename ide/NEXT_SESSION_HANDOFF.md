@@ -19,7 +19,7 @@ git log or the docs below, trust those._
   Now it does match, so there is no third move worth making.
 - **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
   (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.5`.
-- **497 tests across 34 bundles**, green (2026-08-05; 38 of them Find's, a
+- **499 tests across 34 bundles**, green (2026-08-05; 40 of them Find's, a
   bundle that did not exist three days ago). Re-measure by summing each bundle's own `Executed N tests`; do not
   increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
   `s` optional.** xctest prints `Executed 1 test` for single-test suites, and a
@@ -120,7 +120,7 @@ xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release b
 open -a "$PWD/build/Release/TextMate-NG.app"     # target TextMate, product TextMate-NG
 ```
 
-Tests (34 bundles, 497 green):
+Tests (34 bundles, 499 green):
 
 ```bash
 xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
@@ -198,11 +198,14 @@ Two more rules from the FFDocumentSearch port, on top of the three above:
   `static_assert`: the assertion lives in a file that may itself be ported, which
   is exactly how TMSCMStatus.h quietly lost its guard in `8601c693`.
 
-A minor pre-existing bug found while verifying, not worth blocking on: the
-file-row checkbox in the results list shows a mixed state and never updates when
-its children are toggled, because nothing declares `countOfExcluded` as
-affecting `excluded`. Confirmed against a rebuilt pre-port binary, so it is not
-the port's doing.
+**Struck 2026-08-05 — there is no file-row checkbox.** An earlier note here
+called one a pre-existing bug. The dash on a file row is that cell's **remove
+button** (`OakSearchResultsHeaderCellView`, an 8×8 bar drawn in code, wired to
+`-takeSearchResultToRemoveFrom:`); it does not track its children because it is
+not a checkbox, and clicking it removes the row. Only match rows have an exclude
+checkbox. A whole file is excluded by **option-clicking a match checkbox** —
+`-toggleExcludedCheckbox:` then does `item.parent.excluded = item.excluded`.
+Read the control out of the source before describing it from a screenshot.
 
 After Find: **DocumentWindow** (3564, score 50) — more central, but 2885 of those
 lines are one window controller with no tests, so it is the bigger bite and goes

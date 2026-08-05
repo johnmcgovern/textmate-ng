@@ -110,7 +110,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**497 tests across 34 bundles** as of 2026-08-05.
+**499 tests across 34 bundles** as of 2026-08-05.
 
 > **Correction (2026-07-30).** This line, and the header above it, previously
 > read **387 tests across 29 bundles**. The bundle count was right; the test
@@ -2269,13 +2269,25 @@ relative paths (`sub ‣ two.txt`, parent components dimmed, name bold), the rig
 line numbers, and the matches highlighted — `displayPath`, the excerpt builder
 and `lineSpan` are all app-only paths that no test touches.
 
-**The file-row checkbox shows a mixed state and does not update when its
-children are toggled — and that is pre-existing.** It looked exactly like a
-KVO regression from `@objc` without `dynamic`. Rather than reason about it, the
-port was stashed, the ObjC++ rebuilt, and the identical sequence run: same
-behaviour. Nothing declares `countOfExcluded` as affecting `excluded` in either
-version, so the binding on `objectValue.excluded` never hears about a child's
-change. A real if minor bug in Find, and not this port's.
+~~**The file-row checkbox shows a mixed state and does not update when its
+children are toggled — and that is pre-existing.**~~ **Struck 2026-08-05: there
+is no file-row checkbox.** The control that renders as a dash on a file row is
+`OakSearchResultsHeaderCellView`'s **remove button** — an 8×8 template image
+drawn in code as a horizontal bar, wired to
+`-takeSearchResultToRemoveFrom:`. It never changed state with its children
+because it is not a checkbox, and clicking it removes the row, which is exactly
+what it is for. Only match rows carry an exclude checkbox.
+
+The comparison against a rebuilt ObjC++ binary was sound and its result was
+real — both builds behave identically. The *interpretation* was wrong, and it
+was wrong because a dash-shaped control was read as a mixed-state checkbox from
+a screenshot rather than from the code. **Identify a control in the source
+before describing what it does.**
+
+A whole file is excluded by **option-clicking one of its match checkboxes**:
+`-toggleExcludedCheckbox:` calls `OakIsAlternateKeyOrMouseEvent()` and, if set,
+does `item.parent.excluded = item.excluded`. That is the branch path — and it is
+precisely the path the KVO regression below broke.
 
 Remaining in Find after this: **3022 lines, measured** — `Find.mm` (1402),
 `FFResultsViewController` (709), `FFResultNodeSupport` (244), `FFDocumentSearch`

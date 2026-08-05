@@ -1,4 +1,4 @@
-#import "FFResultNode.h"
+#import "FFResultNodeSupport.h"
 #import <OakFoundation/NSString Additions.h>
 #import <OakAppKit/NSColor Additions.h>
 #import <document/OakDocument.h>
@@ -7,6 +7,16 @@
 #import <text/format.h>
 #import <text/utf8.h>
 #import <regexp/format_string.h>
+
+// The C++ half of FFResultNode, split out when the class became Swift (Phase 4).
+// Everything between here and the "Exported" divider is moved *verbatim* from
+// FFResultNode.mm — assembled from the file rather than retyped, because the
+// attributed-string layout is the half of this framework with no test coverage
+// and a transcription slip would be invisible until someone looked at a result
+// row. Same shape as BEInterop.mm and CRSupport.mm.
+//
+// The decisions stay in the Swift: which string to display, when to recompute
+// an excerpt. These functions only build.
 
 namespace
 {
@@ -192,132 +202,17 @@ static NSAttributedString* AttributedStringForMatch (std::string const& text, si
 	return builder.attributed_string();
 }
 
-@interface FFResultNode ()
-{
-	NSAttributedString* _excerpt;
-	NSString* _cachedReplaceString;
-}
-@property (nonatomic, readwrite) OakDocumentMatch* match;
-@property (nonatomic, readwrite) NSUInteger countOfLeafs;
-@property (nonatomic, readwrite) NSUInteger countOfExcluded;
-@property (nonatomic, readwrite) NSUInteger countOfReadOnly;
-@property (nonatomic, readwrite) NSUInteger countOfExcludedReadOnly;
-@end
+// = Exported =
 
-@implementation FFResultNode
-- (instancetype)initWithMatch:(OakDocumentMatch*)aMatch
+NSAttributedString* FFPathComponentString (NSString* path, NSString* base, NSFont* font)
 {
-	if(self = [super init])
-		_match = aMatch;
-	return self;
+	return PathComponentString(to_s(path), to_s(base), font);
 }
 
-+ (FFResultNode*)resultNodeWithMatch:(OakDocumentMatch*)aMatch baseDirectory:(NSString*)base
+// The body of -excerptWithReplacement:font:, less the caching, which stays with
+// the object in Swift.
+NSAttributedString* FFExcerptForMatch (OakDocumentMatch* m, NSString* replacementString, NSFont* font)
 {
-	FFResultNode* res = [[FFResultNode alloc] initWithMatch:aMatch];
-	res.children    = [NSMutableArray array];
-	res.displayPath = PathComponentString(to_s(base && aMatch.document.path ? aMatch.document.path : aMatch.document.displayName), to_s(base), [NSFont controlContentFontOfSize:0]);
-	return res;
-}
-
-+ (FFResultNode*)resultNodeWithMatch:(OakDocumentMatch*)aMatch
-{
-	FFResultNode* res = [[FFResultNode alloc] initWithMatch:aMatch];
-	res.countOfLeafs = 1;
-	return res;
-}
-
-- (void)setCountOfLeafs:(NSUInteger)count             { if(_countOfLeafs            != count) { _parent.countOfLeafs            += count - _countOfLeafs;            _countOfLeafs            = count; } }
-- (void)setCountOfExcluded:(NSUInteger)count          { if(_countOfExcluded         != count) { _parent.countOfExcluded         += count - _countOfExcluded;         _countOfExcluded         = count; } }
-- (void)setCountOfReadOnly:(NSUInteger)count          { if(_countOfReadOnly         != count) { _parent.countOfReadOnly         += count - _countOfReadOnly;         _countOfReadOnly         = count; } }
-- (void)setCountOfExcludedReadOnly:(NSUInteger)count  { if(_countOfExcludedReadOnly != count) { _parent.countOfExcludedReadOnly += count - _countOfExcludedReadOnly; _countOfExcludedReadOnly = count; } }
-
-- (void)addResultNode:(FFResultNode*)aMatch
-{
-	if(!_children)
-	{
-		_children = [NSMutableArray array];
-		if(_countOfLeafs)
-			self.countOfLeafs -= 1;
-	}
-
-	aMatch.parent = self;
-
-	[(NSMutableArray*)_children addObject:aMatch];
-	self.countOfLeafs            += aMatch.countOfLeafs;
-	self.countOfExcluded         += aMatch.countOfExcluded;
-	self.countOfReadOnly         += aMatch.countOfReadOnly;
-	self.countOfExcludedReadOnly += aMatch.countOfExcludedReadOnly;
-}
-
-- (void)removeFromParent
-{
-	[(NSMutableArray*)_parent.children removeObject:self];
-	_parent.countOfExcludedReadOnly -= _countOfExcludedReadOnly;
-	_parent.countOfReadOnly         -= _countOfReadOnly;
-	_parent.countOfExcluded         -= _countOfExcluded;
-	_parent.countOfLeafs            -= _countOfLeafs;
-}
-
-- (void)setExcluded:(BOOL)flag
-{
-	if(_children)
-	{
-		for(FFResultNode* child in _children)
-		{
-			if(!child.isReadOnly)
-				child.excluded = flag;
-		}
-	}
-	else
-	{
-		self.countOfExcluded         = flag ? 1 : 0;
-		self.countOfExcludedReadOnly = flag && _countOfReadOnly ? 1 : 0;
-	}
-}
-
-- (BOOL)excluded
-{
-	return _countOfExcluded == (_children ? _countOfLeafs : 1);
-}
-
-- (void)setReadOnly:(BOOL)flag
-{
-	if(_children)
-	{
-		for(FFResultNode* child in _children)
-			child.readOnly = flag;
-	}
-	else
-	{
-		self.countOfReadOnly         = flag ? 1 : 0;
-		self.countOfExcludedReadOnly = flag && self.excluded ? 1 : 0;
-	}
-}
-
-- (BOOL)isReadOnly
-{
-	return _countOfReadOnly == (_children ? _countOfLeafs : 1);
-}
-
-- (FFResultNode*)firstResultNode   { return [_children firstObject]; }
-- (FFResultNode*)lastResultNode    { return [_children lastObject]; }
-- (OakDocument*)document           { return _match.document; }
-- (NSString*)path                  { return _match.document.path; }
-
-- (NSUInteger)lineSpan
-{
-	text::pos_t const from = _match.range.from;
-	text::pos_t const to   = _match.range.to;
-	return to.line - from.line + (from == to || to.column != 0 ? 1 : 0);
-}
-
-- (NSAttributedString*)excerptWithReplacement:(NSString*)replacementString font:(NSFont*)font
-{
-	if(_excerpt && (replacementString == _cachedReplaceString || (replacementString && [replacementString isEqualToString:_cachedReplaceString])))
-		return _excerpt;
-
-	OakDocumentMatch* m = _match;
 	size_t from = m.first - m.excerptOffset;
 	size_t to   = m.last  - m.excerptOffset;
 
@@ -331,15 +226,19 @@ static NSAttributedString* AttributedStringForMatch (std::string const& text, si
 	std::string suffix = excerpt.substr(to);
 
 	if(m.headTruncated)
-		prefix.insert(0, "…");
+		prefix.insert(0, "\u2026");
 	if(m.tailTruncated)
-		suffix.insert(suffix.size(), "…");
+		suffix.insert(suffix.size(), "\u2026");
 
 	if(replacementString)
 		middle = m.captures.empty() ? to_s(replacementString) : format_string::expand(to_s(replacementString), m.captures);
 
-	_excerpt = AttributedStringForMatch(prefix + middle + suffix, prefix.size(), prefix.size() + middle.size(), m.lineNumber, to_s(m.newlines), font);
-	_cachedReplaceString = replacementString;
-	return _excerpt;
+	return AttributedStringForMatch(prefix + middle + suffix, prefix.size(), prefix.size() + middle.size(), m.lineNumber, to_s(m.newlines), font);
 }
-@end
+
+NSUInteger FFLineSpanForMatch (OakDocumentMatch* match)
+{
+	text::pos_t const from = match.range.from;
+	text::pos_t const to   = match.range.to;
+	return to.line - from.line + (from == to || to.column != 0 ? 1 : 0);
+}

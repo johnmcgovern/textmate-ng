@@ -2,6 +2,17 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-06 (v2026.7-alpha.7)
+
+**Swift files are syntax-highlighted now.** A Swift grammar ships in the default bundle set, so `.swift` files are coloured in the editor and in Quick Look previews. Alpha.6's notes said you had to install one yourself; that is no longer true, and this is the release that makes it so. It applies to **fresh installs only** — the default set is unpacked the first time the app runs, so if you already have an alpha installed, add Swift from Preferences ▸ Bundles instead.
+
+**The find results list has been rebuilt in Swift.** The window that lists search matches — file rows, the match excerpts, the exclude checkboxes and the live replacement preview — is now Swift rather than Objective-C++. This is a port, not a redesign: nothing about it should look or behave differently. It is mentioned because it is a large change to code you use every time you search a folder, and because one bug did escape during it and was fixed before this release: option-clicking a match's checkbox, which excludes every match in that file, briefly stopped updating the other checkboxes in that file.
+
+* A rare hang is fixed. If your home directory was unreadable — which happens to sandboxed helpers more than to people — TextMate-NG could put up an alert that could not be dismissed, in a loop. It now treats an unreadable home as unreadable rather than retrying forever.
+* The Quick Look extension asks for a narrower slice of your files than it did in alpha.6. This does not change the permission prompt macOS shows you the first time you preview a file in a protected folder; that prompt was investigated and it is not caused by the size of the request.
+
+**Known limitations in this alpha:** unchanged from alpha.6 — software update and crash-report submission remain switched off while the fork has no server of its own, and Finder thumbnails are still generic.
+
 ## 2026-08-03 (v2026.7-alpha.6)
 
 **Quick Look previews are back.** Select a source file in Finder and press space to see it syntax-highlighted, using your installed bundles and the theme TextMate-NG is set to — including whether that theme follows your Mac's light or dark appearance. This corrects alpha.5's note, which said previews would need a rewrite and left it as future work: that rewrite is what this release is. Previews are drawn by a modern Quick Look extension, since macOS no longer loads the kind of plug-in the old one used.

@@ -19,7 +19,7 @@ git log or the docs below, trust those._
   Now it does match, so there is no third move worth making.
 - **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
   (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.5`.
-- **499 tests across 34 bundles**, green (2026-08-05; 40 of them Find's, a
+- **505 tests across 34 bundles**, green (2026-08-05; 46 of them Find's, a
   bundle that did not exist three days ago). Re-measure by summing each bundle's own `Executed N tests`; do not
   increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
   `s` optional.** xctest prints `Executed 1 test` for single-test suites, and a
@@ -120,7 +120,7 @@ xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release b
 open -a "$PWD/build/Release/TextMate-NG.app"     # target TextMate, product TextMate-NG
 ```
 
-Tests (34 bundles, 499 green):
+Tests (34 bundles, 505 green):
 
 ```bash
 xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
@@ -180,14 +180,20 @@ before continuing. Three things from that port not to re-derive:
   dropped an em-space out of `dst.append(" ")`, which nothing would have
   caught — that block has no tests and never will.
 
-**Find is now 2947 lines of ObjC++** (measured; see `ide/FIND_PORT_HANDOFF.md`) — `FFResultNode` and `FFDocumentSearch` are
-both ported (`fcdebd1e`, `01d60a36`), each with its tests written first. Next in
-it: `FFResultsViewController` (709), leaving `Find.mm` (1402) last since it is
-the window controller the rest hangs off. `FFResultNodeSupport.mm` and
-`FFDocumentSearchSupport.mm` are C++ by design and stay.
+**Find is now 2238 lines of ObjC++** (measured; see `ide/FIND_PORT_HANDOFF.md`).
+`FFResultNode`, `FFDocumentSearch` and `FFResultsViewController` are all ported
+(`fcdebd1e`, `01d60a36`, `58383f19`), each with its tests written first. Next and
+last of the big ones: `Find.mm` (1402), the window controller the rest hangs off
+— and the one file with decisions to settle before starting, both listed in the
+Find handoff. `FFResultNodeSupport.mm` and `FFDocumentSearchSupport.mm` are C++
+by design and stay.
 
 Two more rules from the FFDocumentSearch port, on top of the three above:
 
+- **An ObjC ivar is not an implicitly-unwrapped Swift property.** Messages to a
+  nil ivar were harmless and returned 0/nil/NO; Swift's `!` traps. Make it an
+  `Optional` and reproduce what nil-messaging returned. Cost one crash in the
+  FFResultsViewController port, caught by a test.
 - **`@objc dynamic`, not just `@objc`, for any property an ObjC caller
   *observes*.** A plain `@objc` property emits no KVO notifications, so the
   observer silently stops hearing about changes — in the app only, with nothing

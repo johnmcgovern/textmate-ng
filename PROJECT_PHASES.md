@@ -110,7 +110,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**499 tests across 34 bundles** as of 2026-08-05.
+**505 tests across 34 bundles** as of 2026-08-05.
 
 > **Correction (2026-07-30).** This line, and the header above it, previously
 > read **387 tests across 29 bundles**. The bundle count was right; the test
@@ -2345,7 +2345,56 @@ guarded) is **preserved and labelled** rather than quietly fixed:
 `@unchecked Sendable` says so out loud. Fixing it is a behaviour change and
 belongs in its own commit.
 
-Find is now **2947 lines of ObjC++, measured** (3123 at `cbaa5894`; two files
-totalling 496 lines ported, and the count fell by 176 because 320 lines of C++
-relocated into the two support files). Next: `FFResultsViewController` (709),
-then `Find.mm` (1402) last. Detail in `ide/FIND_PORT_HANDOFF.md`.
+Find is now **2238 lines of ObjC++, measured** (3123 at `cbaa5894`). Next and
+last of the big ones: `Find.mm` (1402). Detail in `ide/FIND_PORT_HANDOFF.md`.
+
+#### FFResultsViewController, five classes at once (2026-08-05)
+
+Tests first again (`a39f7fb9`), then the port (`58383f19`). **709 lines out and
+none back** — the first file in Find needing no C++ support file; its only C++
+was two `std::max` on `CGFloat`. Find is **2238 lines** of ObjC++, measured.
+
+All five classes moved in one commit because `OakTableCellView` is the base of
+two of the others, so a split leaves the subclasses uncompilable.
+
+##### Six `dynamic` annotations across three classes
+
+`OakTableCellView` observes key paths **on the view controller** and mirrors each
+value onto itself with `setValue:forKey:`. So `replaceString` and
+`showReplacementPreviews` exist on both sides under identical names, and
+`showKeyEquivalent` likewise on the header cell; `Find.mm:194-195` binds two of
+the controller's. Every one is a property Swift itself writes — exactly the case
+`@objc` alone does not notify.
+
+This is the first port where that requirement was *known in advance* rather than
+discovered afterwards, and the tests written one commit earlier are why. They
+would have failed against a careless port; they passed against this one.
+
+##### An ObjC ivar is not an implicitly-unwrapped Swift property
+
+`_outlineView` was a plain ivar, so every use before `-loadView` ran was a message
+to nil: harmless, returning 0/nil/NO. Swift's `!` traps instead, and
+`-selectedResults` is reachable that early — `test_a_fresh_controller_has_no_selection`
+caught it on the first run.
+
+It is now an `Optional`, with each use reproducing what nil-messaging returned.
+`-isCollapsed` is the one that needs thought rather than a `guard`: with a nil
+outline view `isItemExpanded` answered NO, so `expanded` stayed 0 and the result
+reduced to "there are children" — which the Swift has to compute the same way.
+
+**Add this to the checklist beside the `UInt` wraparound.** Both are C-level
+behaviours the ObjC relied on silently and Swift converts into a crash.
+
+##### Verified in the app, because none of this file has drawing tests
+
+Option-clicking a match checkbox toggles every match in that file and leaves the
+other file alone; typing in the replace field updates all three previews live —
+the whole chain, Find.mm's binding through the controller, the KVC bridge, the
+cell, `excerptString`, the text field; and excluding a file reverts its previews
+to the original text while the other file stays replaced, which walks
+`excerptString`'s decision table and the reload-on-toggle path together.
+
+Find's remaining substantial file is `Find.mm` (1402). See
+`ide/FIND_PORT_HANDOFF.md` for the two decisions it needs before starting: the
+two `MBCreateMenu` calls Swift cannot construct, and `-performReplacements:`
+taking a `std::multimap` that is not moving.

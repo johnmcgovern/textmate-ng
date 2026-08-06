@@ -1,22 +1,21 @@
-# Finishing the Find port — FFResultsViewController, then Find.mm
+# Finishing the Find port — Find.mm, and the tail
 
-_Written 2026-08-05, after `FFResultNode` and `FFDocumentSearch` landed. Read
-`PROJECT_PHASES.md` under "Phase 4 — Find, tests first" for what those two cost;
-this covers only what is left._
+_Written 2026-08-05; revised the same day when `FFResultsViewController` landed.
+Three of Find's four substantial files are Swift. Read `PROJECT_PHASES.md` under
+"Phase 4 — Find, tests first" for what they cost; this covers what is left._
 
-Find is **2947 lines of ObjC++** (measured, `.mm` outside `tests/`), in two files
-that matter and a tail that does not.
+Find is **2238 lines of ObjC++** (measured, `.mm` outside `tests/`), against 3123
+at `cbaa5894`.
 
-Note what that number did *not* do: the baseline at `cbaa5894` was 3123, and two
-files totalling 496 lines have been ported — but the count only fell by 176,
-because each port left a C++ support file behind (244 + 76). **Porting relocates
-C++ as often as it removes it.** Measure the directory; do not subtract the file
-you ported.
+Watch how that number moves. Three files totalling 1205 lines are ported and the
+directory fell by 885, because `FFResultNode` and `FFDocumentSearch` each left a
+C++ support file behind (244 + 76) while `FFResultsViewController` left nothing.
+**Porting relocates C++ as often as it removes it.** Measure the directory; never
+subtract the file you ported — that error has been made twice here already.
 
 | file | lines | state |
 |---|---:|---|
-| `Find.mm` | 1402 | the window controller — last |
-| `FFResultsViewController.mm` | 709 | **next** |
+| `Find.mm` | 1402 | the window controller — **next, and last of the big ones** |
 | `FFResultNodeSupport.mm` | 244 | C++ by design, stays |
 | `FFTextFieldViewController.mm` | 216 | small, unsurveyed |
 | `FFStatusBarViewController.mm` | 156 | small, unsurveyed |
@@ -33,7 +32,7 @@ you ported.
 KVO works by swizzling the setter, so a call that Swift makes *directly* — which
 is any call from Swift code — bypasses the notification entirely.
 
-It has now caused two defects in three days:
+It has now caused two defects in three days, and shaped a third port:
 
 - `FFDocumentSearch.currentPath` — caught before shipping, because the property
   exists solely to be observed and that was obvious on inspection.
@@ -61,11 +60,24 @@ grep -rn 'bind:\|addObserver:.*forKeyPath:\|keyPathsForValuesAffecting\|setValue
 Every key path that lands on a class you are porting is a `dynamic` requirement.
 Write the observer test *first*, watch it fail, then add `dynamic`.
 
+`FFResultsViewController` needed **six** of them across three classes, and its
+tests (`t_results_view_controller.mm`) were written before the port precisely so
+that requirement was checkable rather than hoped for. It worked: the port was
+right first time on that axis.
+
+**A second hazard of the same family, found by those tests:** an ObjC ivar that
+Swift turns into an implicitly-unwrapped property. `_outlineView` was a plain
+ivar, so every use before `-loadView` was a message to nil — harmless, returning
+0/nil/NO. Swift traps instead, and `-selectedResults` is reachable that early.
+Make such a property an `Optional` and reproduce what nil-messaging returned;
+`-isCollapsed` is the subtle one, where `isItemExpanded` answering NO for nil is
+what makes the result "there are children".
+
 ---
 
-## Next: `FFResultsViewController.mm` (709 lines)
+## Done: `FFResultsViewController` (709 lines → Swift, 2026-08-05, `58383f19`)
 
-### Why it is the right next bite
+### Why it went second, and what it cost
 
 - **Almost no C++.** Two uses of `std::max` on `CGFloat` (lines 308, 317), both
   of which are Swift's `max`. No support file needed — the first Find file where
@@ -125,9 +137,9 @@ subclasses cannot compile until the base moves.
    the outline view's selection state; the results view is the only thing that
    remembers `_lastSelectedResult` across a re-search.
 
-### Coverage to write first
+### Coverage, written first (2026-08-05)
 
-The framework has 40 tests but **none touch this file**. It is a view controller,
+The framework had 40 tests and **none touched this file**. It is a view controller,
 so the GUI-suite problem in Stream 7 applies to driving the outline view — but
 three things are testable without one:
 
@@ -145,11 +157,26 @@ three things are testable without one:
   readability-by-name since that bridge mirrors values with `-setValue:forKey:`.
   The controller is constructible in a test process — checked, not assumed.
 
+**Outcome.** Of the three, only the KVO tests were written, and they were the
+right call: they carried the port. The `excerptString` decision table stayed
+untested because the cell classes have no header and exposing them would have
+been a redesign — it was verified in the app instead (excluding a row reverts its
+preview while the others stay replaced, which walks the whole table). The
+traversal helpers stayed `private`: nothing outside the file calls them, and
+making them internal purely to test them would have been the tail wagging the
+dog.
+
+Two importer renames also turned up, the shape TMFileReference recorded for
+`TMURLWillCloseNotification`: `+tmMatchedTextSelectedBackgroundColor` arrives as
+`tmMatchedTextSelectedBackground()`, suffix stripped, likewise the underline
+twin. And `validateMenuItem:` is `NSMenuItemValidation`, not an
+`NSViewController` override.
+
 ---
 
-## Then: `Find.mm` (1402 lines)
+## Next: `Find.mm` (1402 lines)
 
-### Why last
+### Why it was left until last
 
 It is the window controller everything else hangs off, it owns the
 `OakFindProtocol` conformance, and it is the only file in the framework that is

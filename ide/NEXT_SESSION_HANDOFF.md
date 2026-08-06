@@ -19,8 +19,11 @@ git log or the docs below, trust those._
   Now it does match, so there is no third move worth making.
 - **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
   (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.6`
-  (2026-08-03), and **HEAD is 5 commits past it** — nothing since alpha.6 has
-  shipped to anyone.
+  (2026-08-03), and **HEAD is 21 commits past it** — nothing since alpha.6 has
+  shipped to anyone. Two of those are user-visible: the Swift grammar now ships
+  in the default bundle set (`cbaa5894`), so `.swift` files highlight in the
+  editor and in Quick Look, and `passwd_entry()` no longer answers an unreadable
+  home with an unclickable modal (`7fbd4a07`).
 - **Phase 4 is in Find, and Find is nearly done (2026-08-04/05).** Three of its
   four substantial files are Swift — `FFResultNode`, `FFDocumentSearch`,
   `FFResultsViewController` — each with its tests written *before* the port.
@@ -167,10 +170,14 @@ with no tests), then the heavy set — `OakAppKit`, `FileBrowser`, `OakFilterLis
 `MenuBuilder` goes **last**, once its ObjC++ callers are gone. `HTMLOutput` needs
 a `std::map` API redesign before it is portable at all.
 
-**Not urgent, but nothing has shipped since alpha.6.** Five commits of Find work
-sit unreleased. A release is a heading in `Applications/TextMate/about/Changes.md`
-plus `bin/notarize`; there is no user-visible change in those five commits, so
-there is no particular reason to cut one yet.
+**Nothing has shipped since alpha.6, and 21 commits are waiting.** A release is a
+heading in `Applications/TextMate/about/Changes.md` plus `bin/notarize`. There
+*is* user-visible content: the Swift grammar (`cbaa5894`) and the
+`passwd_entry()` fix (`7fbd4a07`). The Find ports are invisible by design.
+
+An earlier note here said "five commits, nothing user-visible" — wrong on both
+counts, and wrong the same way as the other counting errors: asserted rather than
+counted.
 
 ~~**Then Phase 3** (Swift interop foundation)~~ — **done long ago**; this line
 survived from the session that wrote it. Modules, C++ interop mode, bridging

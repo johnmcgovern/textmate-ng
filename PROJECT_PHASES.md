@@ -110,7 +110,7 @@ the old interactive harnesses into 36 real tests, the first automated coverage
 `layout` and `OakAppKit` ever had; the remaining Phase 4 frameworks are still
 uncovered, so each port should land its own tests (the pilot added 14). Nib-backed
 frameworks additionally get contract tests — see "nib-contract tests" below;
-**505 tests across 34 bundles** as of 2026-08-05.
+**509 tests across 34 bundles** as of 2026-08-05.
 
 > **Correction (2026-07-30).** This line, and the header above it, previously
 > read **387 tests across 29 bundles**. The bundle count was right; the test
@@ -2398,3 +2398,39 @@ Find's remaining substantial file is `Find.mm` (1402). See
 `ide/FIND_PORT_HANDOFF.md` for the two decisions it needs before starting: the
 two `MBCreateMenu` calls Swift cannot construct, and `-performReplacements:`
 taking a `std::multimap` that is not moving.
+
+#### Find.mm — coverage, and a survey claim that was false (2026-08-05)
+
+`-acceptMatches:` (`Find.mm:1126`) assembles the results tree and had no tests;
+it now has four (`b1595405`), covering the grouping, accumulation across the
+batches the search delivers, and the fact that a **recurring document starts a
+new branch** rather than rejoining its earlier one — the grouping compares
+against the previous match only. `Find` is constructible outside a bundled app
+(its nib name is the placeholder `@"UNUSED"`), which is asserted rather than
+assumed because CrashReporter is the counterexample.
+
+`FindTesting.h` declares the two class-extension members the tests drive, and has
+to be a header: `gen_xctest.rb` wraps each test body in a namespace and ObjC
+declarations may only appear at global scope — the constraint `FFKVORecorder.h`
+records. It doubles as the pin: the port must keep `-acceptMatches:` and
+`results` reachable from ObjC under those spellings.
+
+##### The claim that was false, and the habit that produced it
+
+This document and the status page both said Find had **"no C++ in any of its
+eight public headers"**, and that was the headline reason for choosing Find over
+MenuBuilder. It is wrong. `Find.h` imports `<text/types.h>` and exposes
+`text::range_t` in two `FindMatch` properties, in `FindMatch`'s initialiser, and
+in `FindDelegate`'s `-selectRange:inDocument:`.
+
+The grep behind it searched for `std::|namespace|#include <`. `Find.h` uses
+`#import <…>`, not `#include <…>`, and spells its C++ `text::`, not `std::`. The
+pattern could not have matched, and its silence was read as evidence.
+
+**When a survey returns "nothing found", test the pattern against a line that
+should match before reporting the result.** A negative result from an unverified
+pattern is not a finding; it is an absence of one.
+
+The damage is contained — three files ported cleanly and the pick was sound on
+other grounds — but it changes the shape of the remaining work, which is recorded
+in `ide/FIND_PORT_HANDOFF.md`.

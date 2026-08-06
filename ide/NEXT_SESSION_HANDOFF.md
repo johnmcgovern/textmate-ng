@@ -19,7 +19,7 @@ git log or the docs below, trust those._
   Now it does match, so there is no third move worth making.
 - **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
   (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.5`.
-- **505 tests across 34 bundles**, green (2026-08-05; 46 of them Find's, a
+- **509 tests across 34 bundles**, green (2026-08-05; 50 of them Find's, a
   bundle that did not exist three days ago). Re-measure by summing each bundle's own `Executed N tests`; do not
   increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
   `s` optional.** xctest prints `Executed 1 test` for single-test suites, and a
@@ -120,7 +120,7 @@ xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release b
 open -a "$PWD/build/Release/TextMate-NG.app"     # target TextMate, product TextMate-NG
 ```
 
-Tests (34 bundles, 505 green):
+Tests (34 bundles, 509 green):
 
 ```bash
 xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
@@ -158,11 +158,20 @@ settled it in a minute. **Probe before believing a wall recorded in prose.**
   Also check before scheduling it: 254 of its 439 lines are `DumpMenu.mm`, whose
   `MBDumpMenu` has **no callers anywhere** — likely a deletion, not a port.
 - **Find is the better bite.** Smallest of the remaining real UI frameworks, and
-  **no C++ in any of its eight public headers** — its two external consumers
-  (`OakTextView`, `AppController`) import a pure ObjC `Find.h`, so the boundary
-  holds still while the inside moves, the shape that made BundleEditor routine.
-  File sizes cooperate: `Find.mm` 1402, `FFResultsViewController` 709, then a
-  tail under 350, so it splits across commits.
+  it splits across commits: `Find.mm` 1402, `FFResultsViewController` 709, then a
+  tail under 350.
+
+  > ~~**No C++ in any of its eight public headers.**~~ **Struck 2026-08-05: this
+  > was false, and it was the headline reason for the pick.** `Find.h` imports
+  > `<text/types.h>` and puts `text::range_t` in two `FindMatch` properties, in
+  > `FindMatch`'s initialiser, and in `FindDelegate`'s `-selectRange:inDocument:`.
+  > The grep behind the claim searched for `std::|namespace|#include <`, which
+  > matches neither `#import <…>` nor `text::`, and returned nothing.
+  >
+  > The consequence lands only on the file still unported, and the pick was sound
+  > anyway — three files went across cleanly. But **when a survey's answer is
+  > "nothing found", check the pattern against a line you know should match**
+  > before reporting it as a clean bill of health.
 
 **Its tests came first (2026-08-04, `eecca6b5`)** — 25 green, covering
 `CommonAncestor` and `FFResultNode` — and **`FFResultNode` is now ported**

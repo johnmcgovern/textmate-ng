@@ -5,7 +5,7 @@ Three of Find's four substantial files are Swift. Read `PROJECT_PHASES.md` under
 "Phase 4 — Find, tests first" for what they cost; this covers what is left._
 
 Find is **2238 lines of ObjC++** (measured, `.mm` outside `tests/`), against 3123
-at `cbaa5894`.
+at `cbaa5894`. Tests: **50**, from zero on 2026-08-04.
 
 Watch how that number moves. Three files totalling 1205 lines are ported and the
 directory fell by 885, because `FFResultNode` and `FFDocumentSearch` each left a
@@ -183,6 +183,50 @@ It is the window controller everything else hangs off, it owns the
 genuinely C++-heavy. Doing it last means every class it talks to is already Swift
 and already tested.
 
+### `Find.h` has C++ in it — the survey said otherwise and was wrong
+
+**Read this before planning the port.** The framework was picked partly because a
+survey reported "no C++ in any of its eight public headers". That was false: the
+grep searched `std::|namespace|#include <`, and `Find.h` uses `#import <…>` and
+spells its C++ `text::`.
+
+```objc
+#import <text/types.h>
+
+@interface FindMatch : NSObject
+@property (nonatomic, readonly) text::range_t firstRange;   // Swift cannot hold this
+@property (nonatomic, readonly) text::range_t lastRange;
+- (instancetype)initWithUUID:(NSUUID*)uuid firstRange:(text::range_t const&)f lastRange:(text::range_t const&)l;
+@end
+
+@protocol FindDelegate <NSObject>
+- (void)selectRange:(text::range_t const&)range inDocument:(OakDocument*)aDocument;
+```
+
+So `Find.mm` is the **`FFResultNode` shape** — a real C++ half needing a support
+file — not the `FFResultsViewController` shape that needed none. Budget for that
+from the start.
+
+### What has to stay ObjC++
+
+| piece | where | why |
+|---|---|---|
+| `FindMatch` (12 lines, `Find.mm:50-61`) | move to `FindSupport.mm` | two `text::range_t` properties; stays declared in `Find.h` |
+| the `-selectRange:` call | `Find.mm:1239` | passes `item.match.range`, a `text::range_t const&`, through the delegate protocol |
+| `-setUpFindMatches:` | `Find.mm:1149` | builds `FindMatch` from `match.range` |
+| the replace path | `Find.mm:~960` | `std::multimap<std::pair<size_t,size_t>, std::string>` handed to `-performReplacements:checksum:`, whose signature is C++ in `OakDocument.h` and is not moving |
+| `format_string::expand`, `path::relative_to`, `text::format`, `std::to_string` | scattered | the usual suspects |
+
+Everything else — the window, the bindings, the search-target switch, the status
+strings — is ordinary AppKit.
+
+### `_findOptions` already has its ObjC spelling
+
+`Find.mm:139` declares it `find::options_t` in the class extension and builds it
+with `|` from `find::` constants (`:881`), testing it with `&` (`:1030`).
+**`FFFindOptions` already exists for exactly this type** (`FFFindOptions.h`, from
+the FFDocumentSearch port). Reuse it; do not invent a second spelling.
+
 ### The blocker to decide before starting
 
 **`Find.mm` calls `MBCreateMenu` twice** (lines 356, 578), and MenuBuilder's
@@ -225,18 +269,24 @@ Take (1) unless the menus turn out to be large.
   `FFResultNode` today because `replaceString` is `dynamic`. Do not remove that
   keyword.
 
-### Coverage to write first
+### Coverage — partly written (2026-08-05, `b1595405`)
 
 `Find.mm` is a window controller, so most of it needs the GUI-suite treatment.
-The parts that are testable in isolation and worth pinning before the port:
 
-- **`-acceptMatches:`** (line 1126) — the tree assembly. Feed it a hand-built
-  `NSArray<OakDocumentMatch*>` and assert the shape of `_results`: one branch per
-  distinct document, leaves in order, `CommonAncestor` applied once. This is the
-  single most valuable test in the file and it needs no window.
-- **The find-options assembly** (line 881) — five booleans in, one mask out.
-- **The status-string formatting** (lines 1188, 1272) — pluralisation and number
-  formatting, pure given a count.
+- **`-acceptMatches:`** (line 1126) — **done**, 4 tests in `t_find_matches.mm`.
+  The tree assembly, accumulation across batches, and the fact that a *recurring*
+  document starts a new branch rather than rejoining its earlier one. Reached
+  through `FindTesting.h`, which declares the class-extension members and thereby
+  pins them for the port.
+- **`Find` is constructible in a test** — asserted, not assumed. Its `-init`
+  passes `@"UNUSED"` as a nib name; the window is built in code.
+- **The find-options assembly** (line 881) — still to write. Five booleans in,
+  one mask out; pure, and it should assert against `FFFindOptions` so the port has
+  no room to invent a second spelling.
+- **The status-string formatting** (lines 1188, 1272) — still to write.
+  Pluralisation and number formatting, pure given a count. `:1188` picks between
+  "searched one file" and "searched N files", which is the kind of thing a port
+  quietly gets wrong at N=1.
 
 ---
 
@@ -257,7 +307,12 @@ The parts that are testable in isolation and worth pinning before the port:
    constant needs its `extern` declaration in scope at the definition.
 8. **Run the app.** `displayPath`, the excerpt builder and `lineSpan` have no
    test coverage and never will; they only execute in the running app.
-9. **Measure, never subtract.** Both the suite total and Find's line count have
+9. **A negative grep result is not a finding.** When a survey answers "nothing
+   found", check the pattern against a line you know should match before
+   reporting it. `no C++ in any of its eight public headers` was published from a
+   pattern that could not have matched `Find.h` — `#import <…>` rather than
+   `#include <…>`, `text::` rather than `std::`.
+10. **Measure, never subtract.** Both the suite total and Find's line count have
    been reported wrong in this project by arithmetic rather than by
    measurement — the suite twice in one session, and Find's remaining ObjC++
    twice more, each time because a ported file's C++ half was subtracted without

@@ -18,7 +18,15 @@ git log or the docs below, trust those._
   purpose, to match the product name while the audience was still alpha-only.
   Now it does match, so there is no third move worth making.
 - **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
-  (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.5`.
+  (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.6`
+  (2026-08-03), and **HEAD is 5 commits past it** — nothing since alpha.6 has
+  shipped to anyone.
+- **Phase 4 is in Find, and Find is nearly done (2026-08-04/05).** Three of its
+  four substantial files are Swift — `FFResultNode`, `FFDocumentSearch`,
+  `FFResultsViewController` — each with its tests written *before* the port.
+  Only `Find.mm` (1402) is left. The framework went from **zero tests to 50** and
+  from 3123 lines of ObjC++ to **2238**. Everything about finishing it is in
+  `ide/FIND_PORT_HANDOFF.md`; read that before touching `Find.mm`.
 - **509 tests across 34 bundles**, green (2026-08-05; 50 of them Find's, a
   bundle that did not exist three days ago). Re-measure by summing each bundle's own `Executed N tests`; do not
   increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
@@ -131,175 +139,59 @@ and `brew install capnp ragel ninja multimarkdown boost google-sparsehash`.
 
 ## What's next
 
-**`KEventManager` is ported (2026-08-02), so TMFileReference is finished** —
-nothing in the framework is ObjC++ any more, only `FileItemImage.mm`'s 27-line C
-function, which stays by design. Details in `PROJECT_PHASES.md` under "Phase 4 —
-TMFileReference"; the short version is that behaviour is unchanged, the 4 tests
-from `d7ad0835` pass against the Swift through the untouched ObjC header, and the
-watcher was watched working in the running app.
+**Finish Find: port `Find.mm` (1402 lines), the last substantial file in the
+framework.** Read `ide/FIND_PORT_HANDOFF.md` first — it is written for exactly
+this task and carries the two decisions to settle before writing any Swift:
 
-**One planned-for obstacle turned out not to exist, and the handoff was the thing
-that was wrong:** `fcntl(fd, F_GETPATH, &buf)` needs no shim. C-variadics really
-are unimportable, but the POSIX ones (`open`, `fcntl`, `ioctl`, `sem_open`) have
-hand-written non-variadic overloads in the Darwin overlay. A 10-line probe
-settled it in a minute. **Probe before believing a wall recorded in prose.**
+1. **`Find.h` contains C++.** `text::range_t` in two `FindMatch` properties, in
+   its initialiser, and in `FindDelegate`'s `-selectRange:inDocument:`. So
+   `FindMatch` stays ObjC++ and the port needs a `FindSupport.mm` — the
+   FFResultNode shape, not the FFResultsViewController shape. An earlier survey
+   said the opposite; see the struck note above.
+2. **`MBCreateMenu` is called twice** (`Find.mm:356`, `:578`) and Swift cannot
+   construct its C++ DSL. Hand-roll the two menus, as CommitWindow and
+   Preferences already do; do not port MenuBuilder first.
 
-**The QuickLook `.appex`-or-delete decision is settled: rewritten, 2026-08-03.**
+Coverage is partly written: `-acceptMatches:` has 4 tests (`b1595405`). The
+find-options assembly (`:881`) and the status-string pluralisation (`:1188`) are
+still worth pinning before the port, and both are pure.
 
-**Next: Find** (3123 lines, survey score 43) — **not** MenuBuilder, which the
-2026-08-02 handoff named. Reading the call sites changed the order:
+**After Find:** `DocumentWindow` (3564, of which 2885 is one window controller
+with no tests), then the heavy set — `OakAppKit`, `FileBrowser`, `OakFilterList`.
+`MenuBuilder` goes **last**, once its ObjC++ callers are gone. `HTMLOutput` needs
+a `std::map` API redesign before it is portable at all.
 
-- **MenuBuilder goes last.** All eight `MBCreateMenu` call sites are ObjC++, in
-  frameworks that are not ported, and one of them is `OTVStatusBar` inside
-  OakTextView, which stays ObjC++ by decision. A Swift API would ship with zero
-  Swift callers while the C++ DSL stays alive for eight ObjC++ ones, so the
-  project would carry both — permanently. Preferences already demonstrates the
-  point: it is Swift, imports `MenuBuilder.h`, and hand-rolls its menus anyway.
-  Also check before scheduling it: 254 of its 439 lines are `DumpMenu.mm`, whose
-  `MBDumpMenu` has **no callers anywhere** — likely a deletion, not a port.
-- **Find is the better bite.** Smallest of the remaining real UI frameworks, and
-  it splits across commits: `Find.mm` 1402, `FFResultsViewController` 709, then a
-  tail under 350.
+**Not urgent, but nothing has shipped since alpha.6.** Five commits of Find work
+sit unreleased. A release is a heading in `Applications/TextMate/about/Changes.md`
+plus `bin/notarize`; there is no user-visible change in those five commits, so
+there is no particular reason to cut one yet.
 
-  > ~~**No C++ in any of its eight public headers.**~~ **Struck 2026-08-05: this
-  > was false, and it was the headline reason for the pick.** `Find.h` imports
-  > `<text/types.h>` and puts `text::range_t` in two `FindMatch` properties, in
-  > `FindMatch`'s initialiser, and in `FindDelegate`'s `-selectRange:inDocument:`.
-  > The grep behind the claim searched for `std::|namespace|#include <`, which
-  > matches neither `#import <…>` nor `text::`, and returned nothing.
-  >
-  > The consequence lands only on the file still unported, and the pick was sound
-  > anyway — three files went across cleanly. But **when a survey's answer is
-  > "nothing found", check the pattern against a line you know should match**
-  > before reporting it as a clean bill of health.
-
-**Its tests came first (2026-08-04, `eecca6b5`)** — 25 green, covering
-`CommonAncestor` and `FFResultNode` — and **`FFResultNode` is now ported**
-(`fcdebd1e`). Read `PROJECT_PHASES.md` under "Phase 4 — Find, tests first"
-before continuing. Three things from that port not to re-derive:
-
-- **`&+`/`&-`, not `+`/`-`, on the counters.** The leaf→branch conversion is an
-  `NSUInteger` `0 - 1` wraparound; Swift's `UInt` traps on it, and the naive
-  spelling compiles clean and crashes on the second match in a file.
-- **Spell out `@objc override init()`** whenever an ObjC caller uses `+new` or
-  `-init` on a ported class. Swift stops inheriting `-init` once another
-  initializer exists; `Find.mm:1096` builds the root with `[FFResultNode new]`,
-  so the first run died on every search.
-- **Move C++ verbatim, assembled from `git show`, not retyped.** The first pass
-  dropped an em-space out of `dst.append(" ")`, which nothing would have
-  caught — that block has no tests and never will.
-
-**Find is now 2238 lines of ObjC++** (measured; see `ide/FIND_PORT_HANDOFF.md`).
-`FFResultNode`, `FFDocumentSearch` and `FFResultsViewController` are all ported
-(`fcdebd1e`, `01d60a36`, `58383f19`), each with its tests written first. Next and
-last of the big ones: `Find.mm` (1402), the window controller the rest hangs off
-— and the one file with decisions to settle before starting, both listed in the
-Find handoff. `FFResultNodeSupport.mm` and `FFDocumentSearchSupport.mm` are C++
-by design and stay.
-
-Two more rules from the FFDocumentSearch port, on top of the three above:
-
-- **An ObjC ivar is not an implicitly-unwrapped Swift property.** Messages to a
-  nil ivar were harmless and returned 0/nil/NO; Swift's `!` traps. Make it an
-  `Optional` and reproduce what nil-messaging returned. Cost one crash in the
-  FFResultsViewController port, caught by a test.
-- **`@objc dynamic`, not just `@objc`, for any property an ObjC caller
-  *observes*.** A plain `@objc` property emits no KVO notifications, so the
-  observer silently stops hearing about changes — in the app only, with nothing
-  logged. Grep for `addObserver:forKeyPath:` naming the class before porting it.
-- **A C++ enum in a public header means an NS_OPTIONS change, not a port.**
-  `find::options_t` became `FFFindOptions`, the second instance of the
-  `scm::status::type` trap. And pin such pairings with a **test as well as** a
-  `static_assert`: the assertion lives in a file that may itself be ported, which
-  is exactly how TMSCMStatus.h quietly lost its guard in `8601c693`.
-
-**Struck 2026-08-05 — there is no file-row checkbox.** An earlier note here
-called one a pre-existing bug. The dash on a file row is that cell's **remove
-button** (`OakSearchResultsHeaderCellView`, an 8×8 bar drawn in code, wired to
-`-takeSearchResultToRemoveFrom:`); it does not track its children because it is
-not a checkbox, and clicking it removes the row. Only match rows have an exclude
-checkbox. A whole file is excluded by **option-clicking a match checkbox** —
-`-toggleExcludedCheckbox:` then does `item.parent.excluded = item.excluded`.
-Read the control out of the source before describing it from a screenshot.
-
-After Find: **DocumentWindow** (3564, score 50) — more central, but 2885 of those
-lines are one window controller with no tests, so it is the bigger bite and goes
-second. `HTMLOutput` needs the CommitWindow treatment for its `std::map` public
-API before it is portable at all.
-
-Verified in Finder itself on 2026-08-03 (not just `qlmanage`): the space-bar
-panel and the column-view preview both highlight C, JSON, Ruby, Markdown and
-shell files, plain text falls back correctly, and a type we do not claim is left
-to the system. Swift previews *unhighlighted* — there is no Swift bundle in the
-installed set, so no grammar matches; the editor would be equally unhighlighted,
-and the fix is a bundle, not code.
-
-Three loose ends the QuickLook work leaves, none blocking:
-
-- **The first preview in a protected folder raises a privacy prompt** ("access
-  files on your Desktop", attributed to TextMate-NG), once per location. The
-  experiment for removing it was run on 2026-08-03 and **failed**: narrowing the
-  entitlement from `/` to the two real subpaths (plus the `passwd_entry()` fix
-  that allowed it) leaves the prompt exactly where it was. Both changes were
-  kept anyway — smaller grant, real bug fix — but do not expect a quiet first
-  run from that direction. What the run did establish is that the preview
-  renders whether or not the prompt is answered; a denial costs only per-folder
-  `.tm_properties` settings. Details in `PROJECT_PHASES.md`.
-
-- **The extension has no automated coverage.** Nothing did before either — the
-  old generator had none — but `TMQLCreateAttributedString` is now an ordinary
-  function taking a URL and returning an attributed string, so it is testable in
-  a way the CFPlugIn entry points never were. It needs a bundle index in the test
-  environment, which is the part to think about.
-- **A thumbnail extension is a separate extension point.** The legacy generator
-  also drew Finder icon thumbnails (`GenerateThumbnailForURL`); that half was
-  dropped rather than ported, because `com.apple.quicklook.thumbnail` is its own
-  `.appex` target. Nothing depends on it, and the system draws generic icons as
-  it already has been since the generator stopped loading.
-
-**Stream 3 — DONE 2026-08-02.** Developer ID + notarization work end to end;
-see `PROJECT_PHASES.md` "Open decisions". Nothing here needs the user any more.
-
-**Decided 2026-07-26: arm64-only**, not universal2 — rationale in
-`PROJECT_PHASES.md` under "Decided". Release now pins `ONLY_ACTIVE_ARCH=NO` so a
-shipped build is arm64 regardless of the build host.
-
-**rave/ninja is retired (2026-07-26, tag `rave-final`)** — both blockers cleared
-(Streams 7 & 8), the parity audit found no functional gap, and the build tooling
-(`bin/rave`, `bin/gen_build`, `bin/gen_test`, `bin/notarize_await`,
-`bin/expand_variables`, `bin/extract_changes`, `bin/update_changes`, `configure`,
-`.travis.yml`, `local-orig.rave`, the ninja CI job) is deleted. **Not** deleted:
-the `.rave` spec files (`ide/extract_specs.rb`'s live input — see "Stage B" in
-`PROJECT_PHASES.md`) and `bin/gen_html` (the About-pages build phase needs it now).
-`bin/CxxTest` was kept at the time but has since been deleted in Phase 2.5, once the
-4 GUI suites that needed it became real tests.
-
-- **Editor support for this repo's own code:** `.tm_properties`' `TM_FRAMEWORK_INCLUDE`
-  now points at `ide/gen/include/<fw>/<fw>` (the Xcode seed's farm) instead of
-  rave's `_Include/<fw>/include`. Run the two `ruby` seed commands once to
-  populate it before relying on in-editor diagnostics for this project's own
-  C++/ObjC++ code.
-- **Not attempted:** rebuilding TextMate's own ⌘B-to-build integration against
-  Xcode. `.tm_properties`' dead `TM_NINJA_TARGET` bindings were removed rather than
-  replaced — that's new feature work, not cleanup, and nobody asked for it yet.
-
-Two follow-ups fell out of that work, neither blocking:
-- **13 skipped tests.** Listed with reasons in `SKIPPED_TESTS`
-  (`ide/seed_xcodeproj.rb`). Mostly environmental or stale fixtures, but one is a
-  real memory-safety bug: `cf/tests/t_rect.cc`'s `from_str(".........")` underflows
-  `size_t` into a huge `CGRect` and writes off the end of its canvas.
-- **The 3 GUI suites don't assert.** They compile but XCTest can't run them, and
-  they'd hang if it could. Rewriting them into real tests would be the only
-  automated coverage the ObjC++ UI layer has before Phase 4.
-
-**Then Phase 3** (Swift interop foundation): enable Clang modules — Phase 2 sets
-`CLANG_ENABLE_MODULES=NO` and Swift needs them — module maps, C++ interop mode,
-bridging header, and the first `.swift` file.
+~~**Then Phase 3** (Swift interop foundation)~~ — **done long ago**; this line
+survived from the session that wrote it. Modules, C++ interop mode, bridging
+headers and the first `.swift` file all landed, and there are nine Swift
+frameworks now.
 
 ## Guardrails
 
 - Edit the **generator** (`ide/*.rb`), not the generated `TextMate.xcodeproj`.
 - Gitignored, regenerated, never committed: `TextMate.xcodeproj/`, `build/`,
   `ide/gen/`.
+- **Re-seed after editing any test source.** `ide/gen_xctest.rb` generates the
+  XCTest bundles at seed time, so `xcodebuild test` alone compiles the *previous*
+  version of a test you just changed. Cost a wasted cycle on 2026-08-05 chasing
+  errors that had already been fixed.
 - `PlugIns/dialog` and the other submodules are out of scope for edits.
 - Commit messages carry a `Co-Authored-By:` trailer. Ask before pushing.
+
+## How this session worked, if that is useful
+
+Four ports in two days, and the pattern that produced them: **write the tests
+first, port, build, run the whole suite, then run the app** — the last step
+because three of the four turned up something no test could reach. The two
+defects that got furthest were both cases where every cheap check passed and only
+the app or the *next* file's survey exposed them.
+
+The rules earned along the way are collected at the end of
+`ide/FIND_PORT_HANDOFF.md`. Two are about this codebase (`@objc dynamic`;
+an ObjC ivar is not an implicitly-unwrapped Swift property) and two are about
+method (measure, never subtract; a negative grep result is not a finding).

@@ -143,11 +143,17 @@ and `brew install capnp ragel ninja multimarkdown boost google-sparsehash`.
 framework.** Read `ide/FIND_PORT_HANDOFF.md` first — it is written for exactly
 this task and carries the two decisions to settle before writing any Swift:
 
-1. **`Find.h` contains C++.** `text::range_t` in two `FindMatch` properties, in
-   its initialiser, and in `FindDelegate`'s `-selectRange:inDocument:`. So
-   `FindMatch` stays ObjC++ and the port needs a `FindSupport.mm` — the
-   FFResultNode shape, not the FFResultsViewController shape. An earlier survey
-   said the opposite; see the struck note above.
+1. **`Find.h` contains C++ — and Swift can express it.** `text::range_t` appears
+   in two `FindMatch` properties, in its initialiser, and in `FindDelegate`'s
+   `-selectRange:inDocument:`; `OakFindServerProtocol` adds `find::options_t` and
+   `text::pos_t const&`. Two claims were made about this and **both were wrong**:
+   first "no C++ in its headers" (false), then "so it cannot be Swift" (also
+   false). Probes on 2026-08-05 showed Swift conforms to the protocol and holds
+   `text.range_t` properties under this project's interop mode. **No support file
+   is forced.** Two things still need probing first: whether the `FindMatch` ABI
+   actually round-trips (compiling is not agreement — see `scm::status::type`),
+   and whether Swift can build the `std::multimap` the replace path hands to
+   `-performReplacements:`.
 2. **`MBCreateMenu` is called twice** (`Find.mm:356`, `:578`) and Swift cannot
    construct its C++ DSL. Hand-roll the two menus, as CommitWindow and
    Preferences already do; do not port MenuBuilder first.

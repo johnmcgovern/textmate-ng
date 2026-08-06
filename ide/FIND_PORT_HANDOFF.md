@@ -183,42 +183,68 @@ It is the window controller everything else hangs off, it owns the
 genuinely C++-heavy. Doing it last means every class it talks to is already Swift
 and already tested.
 
-### `Find.h` has C++ in it — the survey said otherwise and was wrong
+### `Find.h` has C++ in it — and Swift can express all of it
 
-**Read this before planning the port.** The framework was picked partly because a
-survey reported "no C++ in any of its eight public headers". That was false: the
-grep searched `std::|namespace|#include <`, and `Find.h` uses `#import <…>` and
-spells its C++ `text::`.
+Two claims were made about this and **both were wrong**, in opposite directions.
+Probes settled it; neither piece of reasoning did.
 
-```objc
-#import <text/types.h>
+**Claim 1, too optimistic:** "no C++ in any of Find's eight public headers." False.
+`Find.h` imports `<text/types.h>` and puts `text::range_t` in two `FindMatch`
+properties, in its initialiser, and in `FindDelegate`'s `-selectRange:inDocument:`.
+The grep behind it searched `std::|namespace|#include <`, which matches neither
+`#import <…>` nor `text::`.
 
-@interface FindMatch : NSObject
-@property (nonatomic, readonly) text::range_t firstRange;   // Swift cannot hold this
-@property (nonatomic, readonly) text::range_t lastRange;
-- (instancetype)initWithUUID:(NSUUID*)uuid firstRange:(text::range_t const&)f lastRange:(text::range_t const&)l;
-@end
+**Claim 2, too pessimistic:** "so `FindMatch` must stay ObjC++, and `Find` cannot
+be Swift, because `OakFindServerProtocol` requires `find::options_t` and
+`text::pos_t const&`." Also false. Under this project's
+`-cxx-interoperability-mode` **Swift imports those types and can satisfy the
+requirements.** Both probes built clean (2026-08-05):
 
-@protocol FindDelegate <NSObject>
-- (void)selectRange:(text::range_t const&)range inDocument:(OakDocument*)aDocument;
+```swift
+// conforms, compiles
+final class Probe: NSObject, OakFindServerProtocol {
+    @objc var findOperation: find_operation_t { kFindOperationFind }
+    @objc var findOptions: find.options_t { find.none }
+    func didFind(_ n: UInt, occurrencesOf: String?, atPosition: text.pos_t, wrapped: Bool) {}
+}
+
+// holds C++ struct properties behind an @objc initialiser — the FindMatch shape
+final class ProbeMatch: NSObject {
+    @objc private(set) var firstRange: text.range_t
+    @objc(initWithUUID:firstRange:lastRange:) init(uuid: NSUUID?, firstRange: text.range_t, …)
+}
 ```
 
-So `Find.mm` is the **`FFResultNode` shape** — a real C++ half needing a support
-file — not the `FFResultsViewController` shape that needed none. Budget for that
-from the start.
+`find::options_t` arrives as `find.options_t`, `text::pos_t const&` by value as
+`text.pos_t`, `text::range_t` as `text.range_t`.
 
-### What has to stay ObjC++
+**So `Find.mm` is portable in full** — nothing in the headers forces a support
+file. A better answer than either claim, for the cost of two ten-line probes.
 
-| piece | where | why |
-|---|---|---|
-| `FindMatch` (12 lines, `Find.mm:50-61`) | move to `FindSupport.mm` | two `text::range_t` properties; stays declared in `Find.h` |
-| the `-selectRange:` call | `Find.mm:1239` | passes `item.match.range`, a `text::range_t const&`, through the delegate protocol |
-| `-setUpFindMatches:` | `Find.mm:1149` | builds `FindMatch` from `match.range` |
-| the replace path | `Find.mm:~960` | `std::multimap<std::pair<size_t,size_t>, std::string>` handed to `-performReplacements:checksum:`, whose signature is C++ in `OakDocument.h` and is not moving |
-| `format_string::expand`, `path::relative_to`, `text::format`, `std::to_string` | scattered | the usual suspects |
+> **The habit, twice over.** A negative grep is not a finding, and neither is
+> "Swift structurally cannot" derived from reading a header. This project's own
+> rule — *probe with the target's real build flags* — has now overturned a
+> recorded conclusion three times: `fcntl(F_GETPATH)`, the CrashReporter
+> delegate, and this.
 
-Everything else — the window, the bindings, the search-target switch, the status
-strings — is ordinary AppKit.
+### Two things to probe before porting on that basis
+
+**Compiling is not ABI agreement.** `scm::status::type` compiled cleanly on both
+sides and was silently 4 bytes against `NSUInteger`'s 8. Before `FindMatch`
+becomes Swift, write the round-trip test: construct one from ObjC++ with known
+`text::range_t` values, read the properties back, compare field by field. If it
+passes, that part is mechanical; if not, `FindMatch` alone stays ObjC++.
+
+**The replace path is unprobed.** `-performReplacements:checksum:` takes
+`std::multimap<std::pair<size_t,size_t>, std::string>` (`Find.mm:~960`). Whether
+Swift can construct one under interop is unknown — probe it the same way rather
+than assuming either answer.
+
+### What may still have to stay ObjC++
+
+Nothing is *known* to, after the probes. The two open questions are the
+`FindMatch` ABI round-trip and the `std::multimap` replace path, both above. Plan
+a `FindSupport.mm` only if one of those probes says so.
 
 ### `_findOptions` already has its ObjC spelling
 

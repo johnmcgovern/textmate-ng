@@ -170,19 +170,72 @@ with no tests), then the heavy set — `OakAppKit`, `FileBrowser`, `OakFilterLis
 `MenuBuilder` goes **last**, once its ObjC++ callers are gone. `HTMLOutput` needs
 a `std::map` API redesign before it is portable at all.
 
-**Nothing has shipped since alpha.6, and 21 commits are waiting.** A release is a
-heading in `Applications/TextMate/about/Changes.md` plus `bin/notarize`. There
-*is* user-visible content: the Swift grammar (`cbaa5894`) and the
-`passwd_entry()` fix (`7fbd4a07`). The Find ports are invisible by design.
+**alpha.7 shipped 2026-08-06** (`f23dff04`, tag `v2026.7-alpha.7`, 23 commits past
+alpha.6), carrying the Swift grammar (`cbaa5894`), the `passwd_entry()` fix
+(`7fbd4a07`) and the `FFResultsViewController` port. HEAD is **0 commits past the
+tag**. A release is a heading in `Applications/TextMate/about/Changes.md` plus
+`bin/notarize`.
 
-An earlier note here said "five commits, nothing user-visible" — wrong on both
-counts, and wrong the same way as the other counting errors: asserted rather than
-counted.
+Two earlier notes here were wrong about this same count — "five commits, nothing
+user-visible", then "21 commits waiting" — both asserted rather than counted.
+`git rev-list --count <tag>..HEAD` is the whole of the work.
 
 ~~**Then Phase 3** (Swift interop foundation)~~ — **done long ago**; this line
 survived from the session that wrote it. Modules, C++ interop mode, bridging
 headers and the first `.swift` file all landed, and there are nine Swift
 frameworks now.
+
+## Distribution — TODO: publish builds from GitHub
+
+**Nobody can get a build without being handed one.** Seven alphas have been
+tagged and notarized, and the only way to install any of them has been a zip
+passed directly from this machine. For an open-source project that is the wrong
+default, and it came up 2026-08-06 the first time someone outside asked to try
+it. `README.md` now points here for the answer, so this section is the answer.
+
+Where it stands today: `bin/notarize` ends by *printing* the packaging command
+rather than running it —
+
+```sh
+ditto -c -k --keepParent build/Release/TextMate-NG.app TextMate-NG-<version>.zip
+```
+
+— and stops there. Everything upstream of that is already automated and already
+correct: Developer ID signing, hardened runtime, notarization, stapling, and a
+`spctl` check. **The gap is only the last mile**, which is what makes this a
+small task rather than a project.
+
+What needs deciding and doing, roughly in order:
+
+1. **`gh release create` against the tag that already exists.** The tags are
+   there (`v2026.7-alpha.1` … `.7`); a release attaching the stapled zip is one
+   command. Decide whether to backfill the older tags or start at the next one —
+   backfilling means re-notarizing builds nobody has, so probably start fresh.
+2. **Release notes come from `Applications/TextMate/about/Changes.md`.** The
+   newest `## <date> (vX)` section *is* the release note, already written for a
+   reader rather than a committer, and the version already derives from that
+   heading. Extract the section between the first two `##` headings and pass it
+   as the body rather than writing anything a second time.
+3. **Extend `bin/notarize`, or add `bin/release` next to it?** Prefer a separate
+   `bin/release`: notarizing and publishing are different blast radii, and
+   `bin/notarize` is safe to re-run in a way that "create a public release" is
+   not. It should refuse to publish an app whose stapled ticket does not validate
+   and whose version does not match the tag it is publishing to.
+4. **Mark them pre-releases.** These are alphas; GitHub's `--prerelease` flag
+   keeps "Latest release" honest and keeps them out of the default download.
+5. **Check what the zip actually contains before the first public one.** It is
+   built from `build/Release/`, and that directory has held stale artifacts
+   before — there is a pre-rename `TextMate.app.dSYM` sitting in it right now.
+   The zip is `--keepParent` on the `.app` alone so it should be unaffected, but
+   *should* is exactly the word that has cost this project time before. Unzip the
+   artifact somewhere clean, run it, and check its version and signature.
+6. **Say what the requirements are where the download is.** Apple Silicon and
+   macOS 15 are in `README.md`; a release body that omits them will produce a bug
+   report from an Intel Mac.
+
+Not in scope, and worth writing down so it does not creep in: **this is not
+software update.** Sparkle-style updating stays off until the fork has a server,
+and a GitHub Release is not a substitute for one.
 
 ## Guardrails
 

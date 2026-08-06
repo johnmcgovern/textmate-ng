@@ -1,60 +1,85 @@
-# TextMate
+# TextMate-NG
 
-## Download
+A fork of [TextMate 2](https://github.com/textmate/textmate), being modernised
+rather than rewritten. Three things are different from upstream:
 
-TextMate-NG has no published download yet — alpha builds are handed over
-directly. That link is *upstream* TextMate 2:
-[download TextMate from here](https://macromates.com/download).
+* **It builds with Xcode.** The `rave`/ninja build system was retired
+  2026-07-26 (tag `rave-final`) once the Xcode build reached parity.
+* **It is being migrated to Swift, framework by framework.** The C++ text engine
+  — buffer, editor, selection, layout, parser, regexp — is deliberately *kept*,
+  behind Swift/C++ interop. It is the AppKit shell that is moving.
+* **It has its own identity.** It installs as `TextMate-NG.app` with the bundle
+  identifier `com.j23software.TextMate-NG`, so it coexists with an installed
+  upstream TextMate rather than replacing it.
 
-## Installing a test build
+[`PROJECT_PHASES.md`](PROJECT_PHASES.md) is the roadmap and the progress tracker.
 
-Alpha builds are **Apple Silicon only and need macOS 15 Sequoia or later** (see
-the Apple Silicon and minimum-version notes in the release notes). They are
-signed ad-hoc rather than with an Apple Developer ID, and are not notarized —
-that is gated on Stream 3 in `PROJECT_PHASES.md`.
-
-Unpack with `ditto` rather than double-clicking the archive, so the code
-signature and extended attributes survive:
-
-```
-ditto -x -k TextMate-NG-<version>.zip /Applications/
-```
-
-If the archive reached the machine by a route that sets the quarantine flag —
-AirDrop, a browser download, email — Gatekeeper will refuse to open it, reporting
-that the app "is damaged and can't be opened". It is not damaged; that is what
-Gatekeeper says about an app it cannot verify because it is unsigned and
-unnotarized. Clear the flag on the copy:
-
-```
-xattr -dr com.apple.quarantine /Applications/TextMate-NG.app
-```
-
-Copying with `scp` or `rsync` over SSH does not set the flag in the first place,
-which avoids the step entirely.
-
-Two things a test build deliberately will not do: it will not update itself
-(software-update channels are unconfigured while the fork has no server), and
-its QuickLook generator will not load, because Apple's QuickLook host processes
-are library-validated and refuse ad-hoc-signed plug-ins.
-
-## Feedback
-
-You can use [the TextMate mailing list](https://lists.macromates.com/listinfo/textmate) or [#textmate][] IRC channel on [freenode.net][] for questions, comments, and bug reports.
-
-You can also [contact MacroMates](https://macromates.com/support).
-
-Before you submit a bug report please read the [writing bug reports](https://github.com/textmate/textmate/wiki/writing-bug-reports) instructions.
+**Status: alpha.** The current release is `v2026.7-alpha.7` (2026-08-06). Release
+notes for every build are in
+[`Applications/TextMate/about/Changes.md`](Applications/TextMate/about/Changes.md).
 
 ## Screenshot
 
-![textmate](https://raw.github.com/textmate/textmate/gh-pages/images/screenshot.png)
+![TextMate-NG editing its own source in dark mode](docs/screenshot.png)
+
+## Requirements
+
+* **Apple Silicon.** Builds are `arm64`-only; Intel is not supported (see the
+  "Decided" section of `PROJECT_PHASES.md` for why).
+* **macOS 15 Sequoia or later.**
+
+## Download
+
+There is no GitHub Releases download yet — alpha builds are currently handed over
+directly. Publishing them from this repository is on the list; see
+`ide/NEXT_SESSION_HANDOFF.md` under "Distribution".
+
+If you were looking for *upstream* TextMate 2, that is
+[a separate download](https://macromates.com/download) from MacroMates.
+
+## Installing a build
+
+Builds have been signed with an Apple Developer ID and notarized since alpha.4,
+so Gatekeeper accepts them with no workaround: unzip, drag to `/Applications`,
+open. Using `ditto` preserves the signature and extended attributes if you prefer
+the command line:
+
+```sh
+ditto -x -k TextMate-NG-<version>.zip /Applications/
+```
+
+Earlier versions of this file described clearing the quarantine flag with
+`xattr -dr com.apple.quarantine`. That was needed when builds were ad-hoc signed;
+it is not needed now, and if an install *does* get refused, that is a real signal
+rather than something to work around. You can check what the system thinks:
+
+```sh
+spctl -a -vv /Applications/TextMate-NG.app
+```
+
+A good build reports `accepted` and `source=Notarized Developer ID`.
+
+### What an alpha build still will not do
+
+* **No software update.** The channels are unconfigured while the fork has no
+  server of its own — a new build means downloading a new build.
+* **No crash-report submission**, for the same reason.
+* **Finder thumbnails are generic.** Quick Look *previews* do work — select a
+  source file in Finder and press space, and it is syntax-highlighted using your
+  installed bundles and TextMate-NG's current theme.
+
+## Feedback
+
+Bug reports and questions about **this fork** belong in
+[its GitHub issues](https://github.com/johnmcgovern/textmate-ng/issues).
+
+For questions about **upstream TextMate 2**, use
+[the TextMate mailing list](https://lists.macromates.com/listinfo/textmate) or
+[contact MacroMates](https://macromates.com/support). Upstream's
+[writing bug reports](https://github.com/textmate/textmate/wiki/writing-bug-reports)
+guide is worth reading before filing anywhere.
 
 # Building
-
-TextMate-NG builds with Xcode. `bin/rave`/ninja, the original build system, was
-retired 2026-07-26 (tag `rave-final`) once the Xcode build reached full parity —
-see `PROJECT_PHASES.md`'s rave parity audit.
 
 ## Setup
 
@@ -72,9 +97,6 @@ brew install boost capnp google-sparsehash multimarkdown ragel
 gem install --user-install xcodeproj
 ```
 
-TextMate-NG is **Apple Silicon only** (see the "Decided" section of
-`PROJECT_PHASES.md` for why); building on Intel is not supported.
-
 After installing dependencies, make sure you have a full checkout (including
 submodules), then generate and build the Xcode project:
 
@@ -91,12 +113,21 @@ open build/Release/TextMate-NG.app
 the two `ruby` commands above (`ide/extract_specs.rb` parses the `default.rave`
 spec files that describe the target graph; `ide/seed_xcodeproj.rb` authors the
 `.pbxproj` from that). Re-running is safe: it rebuilds the project from scratch.
+Edit the generators under `ide/`, never the generated project.
+
+That produces an ad-hoc signed build, which is fine for development. A
+distributable build additionally needs `TM_CODE_SIGN_IDENTITY` and
+`TM_DEVELOPMENT_TEAM` set, followed by `bin/notarize`.
 
 ## Running the test suite
 
 ```sh
 xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
 ```
+
+The bundles are generated at seed time by `ide/gen_xctest.rb`, so **re-seed after
+editing any test source** — `xcodebuild test` on its own compiles the previous
+version of a test you just changed.
 
 ## Building from within TextMate
 
@@ -115,5 +146,3 @@ TextMate is a trademark of Allan Odgaard.
 [ragel]:         http://www.complang.org/ragel/
 [capnp]:         https://github.com/capnproto/capnproto.git
 [sparsehash]:    https://code.google.com/p/sparsehash/
-[#textmate]:     irc://irc.freenode.net/#textmate
-[freenode.net]:  http://freenode.net/

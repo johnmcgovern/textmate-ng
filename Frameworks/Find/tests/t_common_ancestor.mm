@@ -1,7 +1,8 @@
 #import "../src/CommonAncestor.h"
 
 // CommonAncestor reduces the folder search's path list to the directory that
-// results are displayed relative to (Find.mm:1137 hands it straight to
+// results are displayed relative to (Find.swift's -acceptMatches: hands it
+// straight to
 // -resultNodeWithMatch:baseDirectory:). It is the one piece of Find that is a
 // pure function over strings — one filesystem touch at the very end — which
 // makes it the piece that can be pinned exactly before the port.

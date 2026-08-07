@@ -5,7 +5,7 @@
 // -acceptMatches: is where the results tree is assembled: one branch per
 // distinct document, leaves in document order, CommonAncestor applied once to
 // pick the base directory every file row is displayed relative to
-// (Find.mm:1126). It is the most valuable thing in Find.mm that can be tested
+// (Find.swift's -acceptMatches:). It is the most valuable thing in Find that can be tested
 // without a window, and it is untested.
 //
 // Neither the method nor the `results` property is in Find.h — both live in the

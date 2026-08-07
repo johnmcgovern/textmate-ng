@@ -9,8 +9,8 @@
 //
 // Three of this class's properties are observed rather than read:
 //
-//  - `replaceString` and `showReplacementPreviews` are *bound* by Find.mm
-//    (Find.mm:194-195) to the replace text field, and are listed in
+//  - `replaceString` and `showReplacementPreviews` are *bound* by Find
+//    (Find.swift's -loadWindow) to the replace text field, and are listed in
 //    OakSearchResultsMatchCellView's +keyPathsForValuesAffectingExcerptString,
 //    so a change has to repaint every visible excerpt.
 //  - `showKeyEquivalent` is observed by OakSearchResultsHeaderCellView through
@@ -104,7 +104,7 @@ void test_a_fresh_controller_has_no_selection ()
 	OAK_ASSERT_EQ(controller.selectedResults.count, 0);
 }
 
-// -setResults: takes the whole tree; Find.mm hands it a bare root before the
+// -setResults: takes the whole tree; Find hands it a bare root before the
 // first batch of matches arrives, so nil and empty both have to be survivable.
 void test_results_accepts_an_empty_tree ()
 {

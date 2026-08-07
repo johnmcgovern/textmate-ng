@@ -38,7 +38,7 @@ final class FFResultNode: NSObject {
 		super.init()
 	}
 
-	// The root is built with `[FFResultNode new]` (Find.mm:1096) — no match, no
+	// The root is built with `[FFResultNode new]` (Find.swift's -clearMatches) — no match, no
 	// children, counting nothing. Swift does not inherit -init once another
 	// initializer exists, so this has to be spelled out or every search dies at
 	// "unimplemented initializer".

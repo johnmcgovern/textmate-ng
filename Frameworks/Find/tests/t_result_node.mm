@@ -29,7 +29,7 @@ static FFResultNode* Leaf ()
 	return [FFResultNode resultNodeWithMatch:nil];
 }
 
-// The production tree, as Find.mm builds it: a bare root, a branch per file,
+// The production tree, as Find builds it: a bare root, a branch per file,
 // leaves under it.
 static FFResultNode* TreeWithRoot (FFResultNode** rootOut, FFResultNode** fileOut, NSUInteger matches)
 {
@@ -49,7 +49,7 @@ static FFResultNode* TreeWithRoot (FFResultNode** rootOut, FFResultNode** fileOu
 // = Initial states =
 // ==================
 
-// The root is `[FFResultNode new]` in Find.mm — no match, no children, and
+// The root is `[FFResultNode new]` in Find — no match, no children, and
 // counting nothing. It must not count itself, or every search starts one match
 // over.
 void test_a_fresh_root_counts_nothing ()
@@ -248,7 +248,7 @@ void test_clearing_either_flag_clears_the_pair ()
 
 // A branch whose children have all been removed still *has* a children array,
 // so the derivation compares 0 excluded against 0 leaves and reports the empty
-// branch as excluded. Nothing renders it today — Find.mm removes empty parents
+// branch as excluded. Nothing renders it today — Find removes empty parents
 // — but it is the difference between `children != nil` and `children.count`,
 // and a Swift port with an empty array instead of an optional would land here
 // by default rather than by choice.
@@ -269,7 +269,7 @@ void test_an_emptied_branch_reports_itself_excluded ()
 // = Tree accessors =
 // ==================
 
-// Find.mm builds its FindMatch list from firstResultNode/lastResultNode, so
+// Find builds its FindMatch list from firstResultNode/lastResultNode, so
 // their order is the order matches are stepped through.
 void test_first_and_last_follow_insertion_order ()
 {

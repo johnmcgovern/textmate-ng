@@ -43,7 +43,7 @@ void test_ff_find_options_matches_the_cxx_enum ()
 		OAK_MASSERT_EQ(std::string("FFFindOptions diverged from find::options_t for ") + pair.name, (NSUInteger)pair.cxx, (NSUInteger)pair.objc);
 }
 
-// The bits are a mask, which is why this is NS_OPTIONS and not NS_ENUM — Find.mm
+// The bits are a mask, which is why this is NS_OPTIONS and not NS_ENUM — Find
 // builds it with | and tests it with &.
 void test_ff_find_options_composes_as_a_mask ()
 {

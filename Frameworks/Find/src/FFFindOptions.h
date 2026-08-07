@@ -16,7 +16,8 @@
 // without static_assert.
 //
 // NS_OPTIONS and not NS_ENUM because it is genuinely a bitmask: callers build it
-// with `|` and test it with `&` (Find.mm:881, :1030).
+// with `|` and test it with `&` — Find.swift's -findOptionsForAction: builds it,
+// and FindSupport.mm's -didFind:… tests it.
 //
 // Deliberately free of C++ so a Swift bridging header can import it.
 #import <Foundation/Foundation.h>

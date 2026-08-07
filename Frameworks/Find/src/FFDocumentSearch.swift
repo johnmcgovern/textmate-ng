@@ -28,8 +28,9 @@ final class FFDocumentSearch: NSObject, @unchecked Sendable {
 	@objc var searchBinaryFiles = false
 	@objc var searchHiddenFolders = false
 
-	// `dynamic` is load-bearing: Find.mm observes this key path
-	// (Find.mm:1120) to show which folder is being scanned. A plain `@objc`
+	// `dynamic` is load-bearing: Find observes this key path
+	// (Find.swift's -setDocumentSearch:) to show which folder is being scanned.
+	// A plain `@objc`
 	// property emits no KVO notifications, so the status line would simply stop
 	// updating — silently, and only in the running app.
 	@objc dynamic private(set) var currentPath: String?

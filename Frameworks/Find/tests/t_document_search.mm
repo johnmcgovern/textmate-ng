@@ -36,7 +36,8 @@ static FFDocumentSearch* SearchFor (NSString* needle, test::jail_t const& jail)
 	FFDocumentSearch* search = [FFDocumentSearch new];
 	search.searchString = needle;
 	search.paths        = @[ [NSString stringWithUTF8String:jail.path().c_str()] ];
-	// Required, not optional — see test_a_nil_glob_searches_nothing. Find.mm:933
+	// Required, not optional — see test_a_nil_glob_searches_nothing.
+	// Find.swift's -performFindAction:
 	// always supplies one and the UI defaults it to "*".
 	search.glob         = @"*";
 	return search;
@@ -114,7 +115,7 @@ void test_a_search_with_no_matches_still_finishes ()
 
 // -updateMatches: posts the *live* _matches array and then empties it, so the
 // userInfo an observer keeps a reference to is worthless the moment the
-// notification returns. Find.mm gets away with it by consuming synchronously.
+// notification returns. Find gets away with it by consuming synchronously.
 // Pinned because it is exactly the shape a port "cleans up" into a copy — which
 // would be an improvement, and therefore a behaviour change to make on purpose.
 void test_the_delivered_array_is_emptied_after_posting ()
@@ -158,7 +159,8 @@ void test_the_delivered_array_is_emptied_after_posting ()
 // = currentPath is observed, not just read =
 // ==========================================
 
-// Find.mm watches this key path (Find.mm:1120) to show which folder is being
+// Find watches this key path (Find.swift's -setDocumentSearch:) to show
+// which folder is being
 // scanned; nothing ever reads the property directly. That makes it the one
 // piece of this class whose contract is *KVO compliance* rather than a value,
 // and the one a Swift port silently breaks: an `@objc` property that is not
@@ -218,7 +220,8 @@ void test_scanned_counts_cover_every_file ()
 
 // -start resets the match buffer but *not* the scanned counters, so a second
 // search on the same object reports the sum of both. Unreachable from the UI —
-// Find.mm assigns a fresh FFDocumentSearch per search (Find.mm:1111) — which is
+// Find assigns a fresh FFDocumentSearch per search (in Find.swift's
+// -setDocumentSearch:) — which is
 // precisely why it has never been noticed. Pinned as behaviour, not endorsed.
 void test_a_second_start_accumulates_the_scanned_counters ()
 {
@@ -293,7 +296,8 @@ void test_stop_without_start_is_harmless ()
 // list matches no files at all, so a nil glob scans nothing and reports a
 // clean, instant, entirely empty search.
 //
-// Unreachable from the UI, which always supplies one (Find.mm:933) — so this is
+// Unreachable from the UI, which always supplies one (Find.swift's
+// -performFindAction:) — so this is
 // a trap for the next caller rather than a live bug. Worth pinning before the
 // port, because a Swift `String?` invites treating nil as "no filter".
 void test_a_nil_glob_searches_nothing ()

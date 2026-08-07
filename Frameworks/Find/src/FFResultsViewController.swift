@@ -10,8 +10,9 @@ import AppKit
 //
 // **Every `dynamic` in this file is load-bearing.** OakTableCellView observes key
 // paths *on the view controller* and mirrors the values onto itself with
-// `setValue:forKey:`, and Find.mm binds two of the controller's properties
-// (Find.mm:194-195). A property that is `@objc` but not `dynamic` is called
+// `setValue:forKey:`, and Find.swift binds two of the controller's properties
+// (Find.swift's -loadWindow). A property that is `@objc` but not `dynamic` is
+// called
 // directly from Swift and never notifies — the defect that shipped in the
 // FFResultNode port (9d560946). The names are load-bearing too: the bridge is
 // KVC-by-string in both directions, so a rename that Swift accepts is a runtime
@@ -304,7 +305,7 @@ final class FFResultsViewController: NSViewController, NSOutlineViewDataSource, 
 	// Optional, not implicitly-unwrapped, and that is a behaviour requirement
 	// rather than style. In the ObjC++ this was a plain ivar, so every use before
 	// -loadView ran was a message to nil: harmless, returning 0/nil/NO. Swift traps
-	// instead. -selectedResults is reachable that early (Find.mm reads it, and
+	// instead. -selectedResults is reachable that early (Find reads it, and
 	// t_results_view_controller.mm caught it), so each use below reproduces what
 	// nil-messaging returned.
 	private var outlineView: NSOutlineView?
@@ -325,7 +326,7 @@ final class FFResultsViewController: NSViewController, NSOutlineViewDataSource, 
 	// public header, which is why the test reaches it by name.
 	@objc dynamic var showKeyEquivalent = false
 
-	// Bound by Find.mm:194-195 and named in
+	// Bound by Find.swift's -loadWindow and named in
 	// +keyPathsForValuesAffectingExcerptString.
 	@objc dynamic var replaceString: String?
 	@objc dynamic var showReplacementPreviews = false

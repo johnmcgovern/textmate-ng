@@ -2434,3 +2434,105 @@ pattern is not a finding; it is an absence of one.
 The damage is contained — three files ported cleanly and the pick was sound on
 other grounds — but it changes the shape of the remaining work, which is recorded
 in `ide/FIND_PORT_HANDOFF.md`.
+
+#### Find.mm — the port, and Find finished (2026-08-07)
+
+**Find has no big ObjC++ files left.** `Find.mm` (1402) is `Find.swift` (1533)
+plus `FindSupport.mm` (271), and the framework is **1107 lines of ObjC++,
+measured** — 2238 before, 3123 at `cbaa5894`. The directory fell by **1131, not
+1402**, because the support file is where the C++ went; that is the fourth time
+in this framework and the arithmetic has been got wrong here twice before.
+
+Tests: **76**, from 50. The suite is **535 across 34 bundles**, green.
+
+##### Coverage first, which meant extracting before testing
+
+The three new test files could not be written against `Find.mm` as it stood —
+the logic was inline in `-performFindAction:` and in two notification handlers.
+So it was extracted into named members first, pinned in `FindTesting.h`, and the
+tests were written and run green against the **ObjC++** before any Swift existed.
+That is the same order the other three Find ports used and it paid the same way.
+
+- `t_find_option_assembly.mm` (7). The find-options mask: five check boxes plus
+  the two bits the action implies. The valuable one is
+  `test_ignore_whitespace_is_suppressed_by_regular_expression` — `-ignoreWhitespace`
+  is not the ivar the check box writes, because its getter answers NO whenever
+  `regularExpression` is on. A port that stores five plain `Bool`s compiles,
+  passes the other six tests, and silently changes what every regexp search
+  matches.
+- `t_find_status_strings.mm` (16). Five sentences, each picking different wording
+  at N = 1, plus the positional-format specifiers (`%2$@ … %1$@`) whose
+  transposition reads "Found needle results for “2”".
+- `t_find_operation.mm` (3). `FFFindOperation` against `find_operation_t` — the
+  same NS_ENUM split `FFFindOptions` already was, with `static_assert` in
+  `FindSupport.mm` **and** a runtime table, for the reason `t_find_options.mm`
+  gives: the assert lives in a file that only exists while C++ does.
+
+##### The boundary: no C++ in Find.swift at all
+
+The `f9bb0414` probes had established that Swift *can* name `find::options_t`,
+`text::pos_t` and `text::range_t` under this project's interop mode. The port
+did not use that. Everything C++ went behind `FindSupport.h` — 13 functions, one
+class, one NS_ENUM — including an **ObjC++ category carrying the whole
+`OakFindServerProtocol` conformance**, the `BEInterop.mm`/`CRSupport.mm` recipe
+for a third time.
+
+Two of that protocol's five requirements are C++; the category implements those
+and forwards to a C++-free Swift surface, while the other three are ordinary ObjC
+and are Swift methods. Swift never declares the conformance and never imports
+`OakFindProtocol.h`. The argument for preferring this to the probe's answer is
+locality: one declared boundary per framework, with the enum conversions next to
+the `static_assert`s that pin them.
+
+##### `Find.h` had to be split — the part that was not foreseen
+
+`Find.h` declared `FindMatch`, `FFSearchTarget`, `FindDelegate` **and**
+`@interface Find`. The Swift needs the first three and must not see the fourth,
+so the three moved to `FindTypes.h`; both are exported and `Find.h` re-imports
+it, so `#import <Find/Find.h>` is unchanged for every consumer.
+
+The import must be **quoted**. A target's farm include dirs are its
+*dependencies'* headers, never its own, so `<Find/FindTypes.h>` does not resolve
+while compiling this framework — `BundlesManager.h → Bundle.h` and
+`OakDocumentView.h → OakTextView.h` already had it right.
+
+Generalise it: any public header declaring both a class being ported and types
+the Swift needs will want the same split. Look for it while surveying.
+
+##### The menu trap was in the builder, not the call site
+
+Both `MBCreateMenu` calls were hand-rolled, as planned, and MenuBuilder was not
+touched. But `MBCreateMenuItem` makes **an item with a nil title into a
+separator**, so `Find.mm`'s `{ /* Placeholder */ }` was `[NSMenuItem
+separatorItem]` and not an empty item. Nothing renders differently either way —
+a pop-up button never draws item 0 — but reproducing it as an empty item would
+have shifted every key equivalent below it by one. Its other non-obvious
+defaults: `modifierFlags` is Command rather than 0, `enabled` is YES, and a
+non-nil `.delegate` alone is enough to build a submenu, which is how
+"Select Result" gets the menu `-menuNeedsUpdate:` fills.
+
+##### And then the app, again
+
+Five things no test reaches were driven in the running Debug build: both
+hand-rolled menus (with `-validateMenuItem:` supplying the check marks and the
+disabled "Check All"), the "Select Result" submenu with its ⌘1–⌘6 numbering and
+file icons, a folder search end to end, the `std::multimap` replace path against
+a scratch fixture (3 replacements across 2 files, verified on disk), and the
+in-document find — the full `OakFindServerProtocol` round trip out through the
+ObjC++ category and back, which is the only way to watch `format_string::expand`
+produce "Found “REPLACED” at line 1, column 7."
+
+##### A suspected regression that was not, and how that got settled
+
+After Replace All the "Replace All" button stays **enabled**, though
+`-canReplaceAll` reads as if it should go false once every match is read-only.
+Instead of reasoning about it, the **alpha.7 Release build — which still has the
+ObjC++ `Find.mm`** — was driven through the identical sequence. It behaves the
+same. Pre-existing, not introduced.
+
+A shipped build of the previous commit is a free A/B oracle for "is this a port
+defect?", and it answers in minutes what reading two implementations answers in
+an hour. One caveat, learned by tripping over it: the first comparison was
+invalid because the ObjC++ run had not actually searched, so its button was
+disabled for a trivial reason. **Check the control did the thing before comparing
+outcomes** — a control that silently did nothing agrees with every hypothesis.

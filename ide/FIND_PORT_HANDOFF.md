@@ -1,27 +1,30 @@
-# Finishing the Find port — Find.mm, and the tail
+# The Find port — done, and the tail
 
-_Written 2026-08-05; revised the same day when `FFResultsViewController` landed.
-Three of Find's four substantial files are Swift. Read `PROJECT_PHASES.md` under
-"Phase 4 — Find, tests first" for what they cost; this covers what is left._
+_Written 2026-08-05 as a plan for `Find.mm`; rewritten 2026-08-07 when that port
+landed. **Find has no big files left.** What follows is what the last one cost
+and what is still in the directory, not a plan._
 
-Find is **2238 lines of ObjC++** (measured, `.mm` outside `tests/`), against 3123
-at `cbaa5894`. Tests: **50**, from zero on 2026-08-04.
+Find is **1107 lines of ObjC++** (measured, `.mm` outside `tests/`), against 2238
+before this port and 3123 at `cbaa5894`. Tests: **76**, from zero on 2026-08-04.
 
-Watch how that number moves. Three files totalling 1205 lines are ported and the
-directory fell by 885, because `FFResultNode` and `FFDocumentSearch` each left a
-C++ support file behind (244 + 76) while `FFResultsViewController` left nothing.
-**Porting relocates C++ as often as it removes it.** Measure the directory; never
-subtract the file you ported — that error has been made twice here already.
+Watch how that number moves, because it is the thing this document has been wrong
+about most often. `Find.mm` was 1402 lines and the directory fell by 1131, not by
+1402: `FindSupport.mm` (271) is where its C++ went. That is the fourth time in
+this framework — `FFResultNode` left 244 behind, `FFDocumentSearch` 76,
+`FFResultsViewController` nothing. **Porting relocates C++ as often as it removes
+it.** Measure the directory; never subtract the file you ported.
 
 | file | lines | state |
 |---|---:|---|
-| `Find.mm` | 1402 | the window controller — **next, and last of the big ones** |
+| `FindSupport.mm` | 271 | C++ by design, new — see below |
 | `FFResultNodeSupport.mm` | 244 | C++ by design, stays |
 | `FFTextFieldViewController.mm` | 216 | small, unsurveyed |
 | `FFStatusBarViewController.mm` | 156 | small, unsurveyed |
 | `FFFolderMenu.mm` | 108 | small, unsurveyed |
 | `FFDocumentSearchSupport.mm` | 76 | C++ by design, stays |
 | `CommonAncestor.mm` | 36 | a Swift global cannot be `@objc` — see TMFileReference's `FileItemImage.mm` |
+
+The Swift side is 2678 lines across four files, of which `Find.swift` is 1533.
 
 ---
 
@@ -174,145 +177,113 @@ twin. And `validateMenuItem:` is `NSMenuItemValidation`, not an
 
 ---
 
-## Next: `Find.mm` (1402 lines)
+## Done: `Find.mm` (1402 lines → Swift + 271 of ObjC++, 2026-08-07)
 
-### Why it was left until last
+### What it actually took
 
-It is the window controller everything else hangs off, it owns the
-`OakFindProtocol` conformance, and it is the only file in the framework that is
-genuinely C++-heavy. Doing it last means every class it talks to is already Swift
-and already tested.
+`Find.swift` (1533) plus `FindSupport.h`/`.mm` (271), and three new headers that
+exist only to make the split possible:
 
-### `Find.h` has C++ in it — and Swift can express all of it
+| file | why |
+|---|---|
+| `FindTypes.h` | `FindMatch`, `FFSearchTarget`, `FindDelegate` — **see below**, this was the one structural surprise |
+| `FFFindAction.h` | the eight action tags, lifted out of `Find.mm`'s file scope so a test can name them |
+| `FindSupport.h` | the C++ boundary: 13 functions, one class, one NS_ENUM |
 
-Two claims were made about this and **both were wrong**, in opposite directions.
-Probes settled it; neither piece of reasoning did.
+### The decision that shaped it: no C++ in `Find.swift` at all
 
-**Claim 1, too optimistic:** "no C++ in any of Find's eight public headers." False.
-`Find.h` imports `<text/types.h>` and puts `text::range_t` in two `FindMatch`
-properties, in its initialiser, and in `FindDelegate`'s `-selectRange:inDocument:`.
-The grep behind it searched `std::|namespace|#include <`, which matches neither
-`#import <…>` nor `text::`.
+Probes (`f9bb0414`) established that Swift *can* name `find::options_t`,
+`text::pos_t` and `text::range_t` under this project's interop mode. This port
+did not use that. Everything C++ went behind `FindSupport.h`, including an
+**ObjC++ category carrying the whole `OakFindServerProtocol` conformance** — the
+`BEInterop.mm`/`CRSupport.mm` recipe, now used a third time.
 
-**Claim 2, too pessimistic:** "so `FindMatch` must stay ObjC++, and `Find` cannot
-be Swift, because `OakFindServerProtocol` requires `find::options_t` and
-`text::pos_t const&`." Also false. Under this project's
-`-cxx-interoperability-mode` **Swift imports those types and can satisfy the
-requirements.** Both probes built clean (2026-08-05):
+Two of the protocol's five requirements are C++ (`-findOptions` returns
+`find::options_t`, `-didFind:…atPosition:` takes `text::pos_t const&`). The
+category implements those two and forwards to a C++-free Swift surface
+(`findOptionsMask`, `findOperationTag`, `-didFindNumber:statusString:`); the other
+three are ordinary ObjC and are Swift methods. Swift never declares conformance
+and never imports `OakFindProtocol.h`.
 
-```swift
-// conforms, compiles
-final class Probe: NSObject, OakFindServerProtocol {
-    @objc var findOperation: find_operation_t { kFindOperationFind }
-    @objc var findOptions: find.options_t { find.none }
-    func didFind(_ n: UInt, occurrencesOf: String?, atPosition: text.pos_t, wrapped: Bool) {}
-}
+The reason to prefer this over the probe's answer: one declared boundary per
+framework, with the enum conversions sitting next to the `static_assert`s that pin
+them, rather than C++ spellings scattered through a 900-line window controller.
 
-// holds C++ struct properties behind an @objc initialiser — the FindMatch shape
-final class ProbeMatch: NSObject {
-    @objc private(set) var firstRange: text.range_t
-    @objc(initWithUUID:firstRange:lastRange:) init(uuid: NSUUID?, firstRange: text.range_t, …)
-}
-```
+### `Find.h` had to be split, and that was not foreseen
 
-`find::options_t` arrives as `find.options_t`, `text::pos_t const&` by value as
-`text.pos_t`, `text::range_t` as `text.range_t`.
+`Find.h` declared four things: `FindMatch`, `FFSearchTarget`, `FindDelegate` and
+`@interface Find`. The Swift needs the first three and **must not see the
+fourth** — it defines that class. So the three moved to `FindTypes.h`, which the
+bridging header imports and `Find.h` re-imports, and both are now exported.
 
-**So `Find.mm` is portable in full** — nothing in the headers forces a support
-file. A better answer than either claim, for the cost of two ten-line probes.
+Two things fell out of that:
 
-> **The habit, twice over.** A negative grep is not a finding, and neither is
-> "Swift structurally cannot" derived from reading a header. This project's own
-> rule — *probe with the target's real build flags* — has now overturned a
-> recorded conclusion three times: `fcntl(F_GETPATH)`, the CrashReporter
-> delegate, and this.
+- `Find.h` imports it **quoted**, not `<Find/FindTypes.h>`. A target's farm
+  include dirs are its *dependencies'* headers, never its own, so the angle form
+  does not resolve while compiling this framework. `BundlesManager.h → Bundle.h`
+  and `OakDocumentView.h → OakTextView.h` already do it the quoted way.
+- No consumer changed. `#import <Find/Find.h>` still yields everything.
 
-### Two things to probe before porting on that basis
+**Generalise this before the next port:** any public header that declares both a
+class being ported *and* types the Swift needs will need the same split. Check
+for it while surveying, not after the bridging header fails to compile.
 
-**Compiling is not ABI agreement.** `scm::status::type` compiled cleanly on both
-sides and was silently 4 bytes against `NSUInteger`'s 8. Before `FindMatch`
-becomes Swift, write the round-trip test: construct one from ObjC++ with known
-`text::range_t` values, read the properties back, compare field by field. If it
-passes, that part is mechanical; if not, `FindMatch` alone stays ObjC++.
+### The menus were hand-rolled, as planned — with one detail worth keeping
 
-**The replace path is unprobed.** `-performReplacements:checksum:` takes
-`std::multimap<std::pair<size_t,size_t>, std::string>` (`Find.mm:~960`). Whether
-Swift can construct one under interop is unknown — probe it the same way rather
-than assuming either answer.
+Option (1) from the old plan, and it was right; both menus are ~20 items. The
+detail that a reading of the call site would have missed: in `MBCreateMenuItem`,
+**an item with a nil title becomes a separator**, so `Find.mm`'s
+`{ /* Placeholder */ }` first item was `[NSMenuItem separatorItem]`, not an empty
+item. A pop-up button never draws item 0, so nothing shows either way — but the
+menu would have been off by one had it been reproduced as an empty item, and
+every key equivalent below it would have shifted. Read the builder, not the DSL.
 
-### What may still have to stay ObjC++
+`MBMenuItem`'s other defaults that matter: `modifierFlags` defaults to
+`NSEventModifierFlagCommand` (not 0), `enabled` to `YES`, and a non-nil
+`.delegate` alone is enough to make it build a submenu — which is how
+"Select Result" gets the submenu that `-menuNeedsUpdate:` fills.
 
-Nothing is *known* to, after the probes. The two open questions are the
-`FindMatch` ABI round-trip and the `std::multimap` replace path, both above. Plan
-a `FindSupport.mm` only if one of those probes says so.
+### What the tests caught, and what only the app could
 
-### `_findOptions` already has its ObjC spelling
+Coverage went 50 → 76. The 26 new tests are three files, all written against the
+ObjC++ *before* the port, all of which required extracting the logic into named
+members first and pinning them in `FindTesting.h`:
 
-`Find.mm:139` declares it `find::options_t` in the class extension and builds it
-with `|` from `find::` constants (`:881`), testing it with `&` (`:1030`).
-**`FFFindOptions` already exists for exactly this type** (`FFFindOptions.h`, from
-the FFDocumentSearch port). Reuse it; do not invent a second spelling.
+- `t_find_option_assembly.mm` (7) — the five check boxes plus the two
+  action-implied bits. The one that earns its keep is
+  `test_ignore_whitespace_is_suppressed_by_regular_expression`: `-ignoreWhitespace`
+  is **not** the ivar the check box writes, because its getter answers NO whenever
+  regularExpression is on. A port that stores five plain `Bool`s compiles, passes
+  the other six tests, and silently changes what every regexp search matches.
+- `t_find_status_strings.mm` (16) — five sentences, each of which picks a
+  different wording at N = 1, plus the positional-format transposition that would
+  otherwise read "Found needle results for “2”".
+- `t_find_operation.mm` (3) — `FFFindOperation` against `find_operation_t`, the
+  same NS_ENUM split `FFFindOptions` already was.
 
-### The blocker to decide before starting
+**And then the app, which was again not optional.** Five things it exercised that
+no test reaches: both hand-rolled menus (including `-validateMenuItem:` driving
+the check marks and the disabled "Check All"), the "Select Result" submenu built
+by `-updateShowTabMenu:` with its ⌘1–⌘6 numbering and file icons, a folder search
+end to end, the `std::multimap` replace path against a scratch fixture, and the
+in-document find — which is the whole `OakFindServerProtocol` round trip through
+the ObjC++ category and back, and the only way to see `format_string::expand`
+produce "Found “x” at line 1, column 7."
 
-**`Find.mm` calls `MBCreateMenu` twice** (lines 356, 578), and MenuBuilder's
-public API is a C++ DSL — `std::vector<MBMenuItem>` with designated-initializer
-aggregates — that **Swift cannot construct**. This is the MenuBuilder trap
-arriving from the other direction, and it is the reason MenuBuilder is scheduled
-*last* (see `PROJECT_PHASES.md`, Phase 4 coupling survey).
+### One thing looked like a regression and was not
 
-Three ways out, in order of preference:
+After Replace All, the "Replace All" button stays **enabled**, though
+`-canReplaceAll` reads as though it should go false once every match is read-only.
+Rather than reason about it, the alpha.7 Release build — which still has the
+ObjC++ `Find.mm` — was driven through the identical sequence: **it behaves the
+same**. Pre-existing, not introduced.
 
-1. **Hand-roll the two menus in Swift**, as `CommitWindow` and `Preferences`
-   already do — their `.swift` files say so in comments
-   (`FilesPreferences.swift:45` and siblings). Proven, local, no new API.
-2. **A narrow ObjC++ shim** in a `FindSupport.mm`: one function per menu that
-   builds the `MBMenu` and returns the `NSMenu*`. Cheap, but adds a file whose
-   only purpose is to outlive MenuBuilder's C++ API.
-3. **Port MenuBuilder first.** Rejected — it would ship a Swift menu API with
-   zero Swift callers while the DSL stays alive for the six remaining ObjC++
-   ones, one of which (`OTVStatusBar`, inside OakTextView) is permanent.
-
-Take (1) unless the menus turn out to be large.
-
-### The rest of the C++ surface
-
-- **`find::options_t _findOptions`** (line 139) is a class-extension property,
-  not public, and is built with `|` from `find::` constants (line 881) and tested
-  with `&` (line 1030). `FFFindOptions` already exists for exactly this type —
-  reuse it rather than inventing a second spelling.
-- **`format_string::expand`** (lines 961, 1030, 1320) and `to_s`/`to_ns` are the
-  usual suspects; they belong in a support file with the menu shim if one is
-  written.
-- **`std::multimap<std::pair<size_t,size_t>, std::string> replacements`** (line
-  961) is handed to `-performReplacements:checksum:`. That signature is C++ in
-  `OakDocument.h` and is not moving, so the replace path stays ObjC++ — probably
-  the largest single piece that cannot be ported without an ABI decision like
-  `FFFindOptions`. **Survey this before committing to a whole-file port**; it may
-  be a `FindReplaceSupport.mm` rather than a Swift method.
-- **`Find.mm:974`** does `[parent.children setValue:nil forKey:@"replaceString"]`
-  — KVC on an array, which fans out to every element. It works against the Swift
-  `FFResultNode` today because `replaceString` is `dynamic`. Do not remove that
-  keyword.
-
-### Coverage — partly written (2026-08-05, `b1595405`)
-
-`Find.mm` is a window controller, so most of it needs the GUI-suite treatment.
-
-- **`-acceptMatches:`** (line 1126) — **done**, 4 tests in `t_find_matches.mm`.
-  The tree assembly, accumulation across batches, and the fact that a *recurring*
-  document starts a new branch rather than rejoining its earlier one. Reached
-  through `FindTesting.h`, which declares the class-extension members and thereby
-  pins them for the port.
-- **`Find` is constructible in a test** — asserted, not assumed. Its `-init`
-  passes `@"UNUSED"` as a nib name; the window is built in code.
-- **The find-options assembly** (line 881) — still to write. Five booleans in,
-  one mask out; pure, and it should assert against `FFFindOptions` so the port has
-  no room to invent a second spelling.
-- **The status-string formatting** (lines 1188, 1272) — still to write.
-  Pluralisation and number formatting, pure given a count. `:1188` picks between
-  "searched one file" and "searched N files", which is the kind of thing a port
-  quietly gets wrong at N=1.
+Worth keeping as a method note: a shipped build of the previous commit is a free
+A/B oracle for any "is this a port defect?" question, and it settles in minutes
+what reading two implementations settles in an hour. The first attempt at that
+comparison was invalid — the ObjC++ run had not actually searched, so its button
+was disabled for the trivial reason — which is its own reminder to check that the
+control run did the thing before comparing outcomes.
 
 ---
 
@@ -343,3 +314,20 @@ Take (1) unless the menus turn out to be large.
    measurement — the suite twice in one session, and Find's remaining ObjC++
    twice more, each time because a ported file's C++ half was subtracted without
    adding back the support file it moved into. Re-run the command.
+11. **Split a public header that declares both the class and its types.** A
+   bridging header cannot import the declaration of a class Swift defines, so
+   anything else in that header goes with it. Export both halves and cross-import
+   them with a **quoted** include — the angle form cannot resolve a framework's
+   own farm dir from inside that framework.
+12. **Read the builder, not the DSL.** `MBMenuItem`'s defaults are not the
+   obvious ones: a nil title yields a *separator*, `modifierFlags` defaults to
+   Command, and a non-nil `.delegate` alone creates a submenu. Hand-rolling a
+   menu from the call site alone gets the item count wrong.
+13. **The last shipped build is an A/B oracle.** Before calling a behaviour
+   difference a port defect, drive the previous release through the identical
+   sequence. Check that the control run actually performed the action first —
+   a control that silently did nothing agrees with any hypothesis.
+14. **`@preconcurrency` on the conformance, not `nonisolated` on the method,**
+   when a `@MainActor` class adopts a plain ObjC protocol whose delivery is
+   main-thread by contract. State *why* it is main-thread — `OakObserveUserDefaults`
+   registers with `queue: NSOperationQueue.mainQueue`, and that is checkable.

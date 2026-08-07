@@ -1,9 +1,9 @@
 # Next-session handoff — TextMate-NG
 
-_Snapshot at end of session 2026-08-05. Point-in-time; when it disagrees with the
+_Snapshot at end of session 2026-08-07. Point-in-time; when it disagrees with the
 git log or the docs below, trust those._
 
-## Where things stand (updated 2026-08-05)
+## Where things stand (updated 2026-08-07)
 
 - **Phase 2 is DONE.** Stream 3 (signing & notarization) landed: Developer ID
   `John McGovern (R22V2H7QF4)`, `bin/notarize` drives `notarytool`, and shipped
@@ -17,21 +17,23 @@ git log or the docs below, trust those._
   The old note here said the id "must not move again"; it moved once more, on
   purpose, to match the product name while the audience was still alpha-only.
   Now it does match, so there is no third move worth making.
-- **Three releases shipped 2026-08-02:** alpha.3 (fixes + Swift ports), alpha.4
-  (first notarized build), alpha.5 (the rename). Latest tag: `v2026.7-alpha.6`
-  (2026-08-03), and **HEAD is 21 commits past it** — nothing since alpha.6 has
-  shipped to anyone. Two of those are user-visible: the Swift grammar now ships
-  in the default bundle set (`cbaa5894`), so `.swift` files highlight in the
-  editor and in Quick Look, and `passwd_entry()` no longer answers an unreadable
-  home with an unclickable modal (`7fbd4a07`).
-- **Phase 4 is in Find, and Find is nearly done (2026-08-04/05).** Three of its
-  four substantial files are Swift — `FFResultNode`, `FFDocumentSearch`,
-  `FFResultsViewController` — each with its tests written *before* the port.
-  Only `Find.mm` (1402) is left. The framework went from **zero tests to 50** and
-  from 3123 lines of ObjC++ to **2238**. Everything about finishing it is in
-  `ide/FIND_PORT_HANDOFF.md`; read that before touching `Find.mm`.
-- **509 tests across 34 bundles**, green (2026-08-05; 50 of them Find's, a
-  bundle that did not exist three days ago). Re-measure by summing each bundle's own `Executed N tests`; do not
+- **Four releases shipped so far:** alpha.3–alpha.5 on 2026-08-02/03, then
+  **`v2026.7-alpha.7` on 2026-08-06** (Swift grammar in the default bundle set,
+  the `passwd_entry()` fix, and the find-results port). Count what is unreleased
+  with `git rev-list --count v2026.7-alpha.7..HEAD` rather than by assertion —
+  that number has been stated wrong here three times.
+- **Nobody can download a build.** Seven alphas tagged and notarized, all handed
+  over by hand. See "Distribution" below; it is a small task and it now has a
+  reader waiting on it.
+- **Phase 4's Find work is DONE (2026-08-07).** All four substantial files are
+  Swift — `FFResultNode`, `FFDocumentSearch`, `FFResultsViewController` and now
+  `Find.mm` (1402) — each with its tests written *before* the port. The framework
+  went from **zero tests to 76** and from 3123 lines of ObjC++ to **1107**. The
+  last port left `FindSupport.mm` (271) behind, which is why the directory fell
+  by 1131 and not by 1402. What it cost, and the four new rules it earned, are in
+  `ide/FIND_PORT_HANDOFF.md`.
+- **535 tests across 34 bundles**, green (2026-08-07; 76 of them Find's, a
+  bundle that did not exist four days ago). Re-measure by summing each bundle's own `Executed N tests`; do not
   increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
   `s` optional.** xctest prints `Executed 1 test` for single-test suites, and a
   plural-only pattern skips those lines and then mis-attributes the next
@@ -131,7 +133,7 @@ xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release b
 open -a "$PWD/build/Release/TextMate-NG.app"     # target TextMate, product TextMate-NG
 ```
 
-Tests (34 bundles, 509 green):
+Tests (34 bundles, 535 green):
 
 ```bash
 xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
@@ -142,31 +144,28 @@ and `brew install capnp ragel ninja multimarkdown boost google-sparsehash`.
 
 ## What's next
 
-**Finish Find: port `Find.mm` (1402 lines), the last substantial file in the
-framework.** Read `ide/FIND_PORT_HANDOFF.md` first — it is written for exactly
-this task and carries the two decisions to settle before writing any Swift:
+**Find is finished.** `Find.mm` landed 2026-08-07 as `Find.swift` (1533) plus
+`FindSupport.mm` (271), with 26 tests written against the ObjC++ first. The two
+decisions this section used to carry were both settled, and one of them differently
+than either of the recorded plans said:
 
-1. **`Find.h` contains C++ — and Swift can express it.** `text::range_t` appears
-   in two `FindMatch` properties, in its initialiser, and in `FindDelegate`'s
-   `-selectRange:inDocument:`; `OakFindServerProtocol` adds `find::options_t` and
-   `text::pos_t const&`. Two claims were made about this and **both were wrong**:
-   first "no C++ in its headers" (false), then "so it cannot be Swift" (also
-   false). Probes on 2026-08-05 showed Swift conforms to the protocol and holds
-   `text.range_t` properties under this project's interop mode. **No support file
-   is forced.** Two things still need probing first: whether the `FindMatch` ABI
-   actually round-trips (compiling is not agreement — see `scm::status::type`),
-   and whether Swift can build the `std::multimap` the replace path hands to
-   `-performReplacements:`.
-2. **`MBCreateMenu` is called twice** (`Find.mm:356`, `:578`) and Swift cannot
-   construct its C++ DSL. Hand-roll the two menus, as CommitWindow and
-   Preferences already do; do not port MenuBuilder first.
+1. **Nothing in the headers forced ObjC++**, per the `f9bb0414` probes — but the
+   port put every C++ type behind `FindSupport.h` anyway, including an ObjC++
+   category carrying the whole `OakFindServerProtocol` conformance. `Find.swift`
+   contains no C++ at all. One declared boundary per framework beat C++ spellings
+   scattered through a window controller.
+2. **The two menus were hand-rolled**, as planned, and `MenuBuilder` was not
+   touched. The trap was in `MBCreateMenuItem`, not the call site: a nil title
+   makes a *separator*, so the placeholder item is one.
 
-Coverage is partly written: `-acceptMatches:` has 4 tests (`b1595405`). The
-find-options assembly (`:881`) and the status-string pluralisation (`:1188`) are
-still worth pinning before the port, and both are pure.
+The unforeseen piece was `Find.h`: it declared both `@interface Find` and the
+three types the Swift needs, so it had to be split into `FindTypes.h`. Expect
+that shape again — check for it while surveying the next public header.
 
-**After Find:** `DocumentWindow` (3564, of which 2885 is one window controller
-with no tests), then the heavy set — `OakAppKit`, `FileBrowser`, `OakFilterList`.
+**Next:** `DocumentWindow` (3564, of which 2885 is one window controller
+with no tests) — and note it is Find's `FindDelegate` client, so
+`-selectRange:inDocument:` and its `text::range_t` come back into scope there.
+Then the heavy set — `OakAppKit`, `FileBrowser`, `OakFilterList`.
 `MenuBuilder` goes **last**, once its ObjC++ callers are gone. `HTMLOutput` needs
 a `std::map` API redesign before it is portable at all.
 

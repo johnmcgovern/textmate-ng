@@ -1,0 +1,156 @@
+#!/bin/sh
+# Publish a notarized TextMate-NG.app as a GitHub Release.
+#
+# Usage: bin/release [path/to/TextMate-NG.app]
+#   Defaults to build/Release/TextMate-NG.app.
+#
+#   --dry-run   do everything except create the release (still builds and
+#               verifies the zip, and prints the notes it would publish)
+#
+# This is the last mile that bin/notarize deliberately stops short of. Keeping it
+# a separate script is the point: re-running a notarization is safe, and
+# re-running "publish a public release" is not.
+#
+# What it does, in order:
+#   1. verifies the app is Developer ID-signed, stapled, and accepted by
+#      Gatekeeper — a release nobody can open is worse than no release
+#   2. reads the version out of the app itself and checks it against the newest
+#      heading in Changes.md and against the git tag it is about to publish to
+#   3. packages with ditto, then **unpacks the package somewhere clean and
+#      re-verifies it**, because the artifact people download is the zip, not the
+#      directory it was made from
+#   4. creates the release, marked pre-release, with notes taken from Changes.md
+#
+# Requires: gh, authenticated with repo scope (`gh auth status`).
+set -e
+
+APP="build/Release/TextMate-NG.app"
+DRY_RUN=NO
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=YES ;;
+    *)         APP="$arg"  ;;
+  esac
+done
+
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+CHANGES="$ROOT/Applications/TextMate/about/Changes.md"
+
+[ -d "$APP" ] || { echo "error: $APP not found (build Release first)" >&2; exit 1; }
+command -v gh >/dev/null || { echo "error: gh not installed (brew install gh)" >&2; exit 1; }
+gh auth status >/dev/null 2>&1 || { echo "error: gh is not authenticated (gh auth login)" >&2; exit 1; }
+
+# ============================================================
+# = 1. The app has to be something a stranger can actually open =
+# ============================================================
+
+echo "==> verifying $APP"
+codesign --verify --deep --strict "$APP" || {
+  echo "error: $APP fails codesign verification" >&2; exit 1; }
+codesign -dvv "$APP" 2>&1 | grep -q '^Authority=Developer ID Application' || {
+  echo "error: $APP is not Developer ID-signed (ad-hoc?) — run bin/notarize first" >&2; exit 1; }
+xcrun stapler validate "$APP" >/dev/null 2>&1 || {
+  echo "error: $APP has no stapled notarization ticket — run bin/notarize first" >&2; exit 1; }
+spctl --assess --type execute "$APP" >/dev/null 2>&1 || {
+  echo "error: Gatekeeper does not accept $APP" >&2; exit 1; }
+
+# ============================================================
+# = 2. Version, three ways, and they have to agree           =
+# ============================================================
+
+VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
+TAG="v$VERSION"
+
+# The newest `## <date> (vX)` heading — the same expression ide/seed_xcodeproj.rb
+# uses to stamp the app, so a disagreement means the app was built before the
+# heading was written.
+NOTES_VERSION=$(sed -n 's/^## .* (v\(.*\))$/\1/p' "$CHANGES" | head -1)
+[ "$VERSION" = "$NOTES_VERSION" ] || {
+  echo "error: app is $VERSION but the newest Changes.md heading is $NOTES_VERSION" >&2
+  echo "       (rebuild after adding the heading — the heading *is* the version bump)" >&2
+  exit 1; }
+
+git -C "$ROOT" rev-parse "$TAG" >/dev/null 2>&1 || {
+  echo "error: no git tag $TAG — tag the release commit first" >&2; exit 1; }
+
+if gh release view "$TAG" >/dev/null 2>&1; then
+  echo "error: release $TAG already exists — delete it or bump the version" >&2; exit 1
+fi
+
+echo "==> releasing $TAG"
+
+# ============================================================
+# = 3. Package, then verify the package                      =
+# ============================================================
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+ZIP="$ROOT/build/TextMate-NG-$VERSION.zip"
+echo "==> packaging $(basename "$ZIP")"
+rm -f "$ZIP"
+ditto -c -k --keepParent "$APP" "$ZIP"
+
+# The artifact people download is the zip. build/ has held stale bundles before,
+# and --keepParent means the zip's contents are not self-evidently the app that
+# was just verified — so unpack it somewhere clean and check it again.
+echo "==> verifying the packaged copy"
+ditto -x -k "$ZIP" "$WORK/unpacked"
+UNPACKED="$WORK/unpacked/TextMate-NG.app"
+[ -d "$UNPACKED" ] || { echo "error: zip does not contain TextMate-NG.app at its root" >&2; exit 1; }
+
+UNPACKED_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$UNPACKED/Contents/Info.plist")
+[ "$UNPACKED_VERSION" = "$VERSION" ] || {
+  echo "error: packaged app is $UNPACKED_VERSION, expected $VERSION" >&2; exit 1; }
+xcrun stapler validate "$UNPACKED" >/dev/null 2>&1 || {
+  echo "error: the packaged copy has no stapled ticket (staple before packaging)" >&2; exit 1; }
+spctl --assess --type execute "$UNPACKED" >/dev/null 2>&1 || {
+  echo "error: Gatekeeper does not accept the packaged copy" >&2; exit 1; }
+
+echo "    $(du -h "$ZIP" | cut -f1), $VERSION, stapled, Gatekeeper-accepted"
+
+# ============================================================
+# = 4. Notes, from the file that already has them            =
+# ============================================================
+
+# Everything between the newest `## ` heading and the next one. Changes.md is
+# written for a reader rather than a committer, so it is the release note — there
+# is nothing to write a second time.
+NOTES="$WORK/notes.md"
+awk '/^## /{ if(seen) exit; seen=1; next } seen' "$CHANGES" > "$NOTES"
+
+# The requirements do not appear in Changes.md, and a release page that omits
+# them produces a bug report from an Intel Mac.
+cat >> "$NOTES" <<'REQUIREMENTS'
+
+---
+
+**Requirements:** Apple Silicon, macOS 15 Sequoia or later.
+
+Unzip and drag to `/Applications`. The build is signed with an Apple Developer ID
+and notarized, so Gatekeeper accepts it with no workaround — if macOS refuses to
+open it, that is a real signal rather than something to work around.
+
+This is an alpha. Software update and crash-report submission are switched off
+while the fork has no server of its own, so a new build means downloading a new
+build.
+REQUIREMENTS
+
+if [ "$DRY_RUN" = YES ]; then
+  echo "==> --dry-run: not creating the release. Notes would be:"
+  echo "----------------------------------------------------------------"
+  cat "$NOTES"
+  echo "----------------------------------------------------------------"
+  echo "==> zip left at $ZIP"
+  exit 0
+fi
+
+# --prerelease on purpose: these are alphas, and it keeps "Latest release" honest
+# for whenever a non-alpha appears.
+echo "==> creating GitHub release $TAG"
+gh release create "$TAG" "$ZIP" \
+  --title "TextMate-NG $VERSION" \
+  --notes-file "$NOTES" \
+  --prerelease
+
+echo "==> done: $(gh release view "$TAG" --json url --jq .url)"

@@ -22,9 +22,8 @@ git log or the docs below, trust those._
   the `passwd_entry()` fix, and the find-results port). Count what is unreleased
   with `git rev-list --count v2026.7-alpha.7..HEAD` rather than by assertion —
   that number has been stated wrong here three times.
-- **Nobody can download a build.** Seven alphas tagged and notarized, all handed
-  over by hand. See "Distribution" below; it is a small task and it now has a
-  reader waiting on it.
+- **Builds are downloadable as of 2026-08-10.** `bin/release` publishes a
+  notarized build to GitHub Releases; alpha.7 is up. See "Distribution" below.
 - **Phase 4's Find work is DONE (2026-08-07).** All four substantial files are
   Swift — `FFResultNode`, `FFDocumentSearch`, `FFResultsViewController` and now
   `Find.mm` (1402) — each with its tests written *before* the port. The framework
@@ -184,57 +183,44 @@ survived from the session that wrote it. Modules, C++ interop mode, bridging
 headers and the first `.swift` file all landed, and there are nine Swift
 frameworks now.
 
-## Distribution — TODO: publish builds from GitHub
+## Distribution — done (2026-08-10)
 
-**Nobody can get a build without being handed one.** Seven alphas have been
-tagged and notarized, and the only way to install any of them has been a zip
-passed directly from this machine. For an open-source project that is the wrong
-default, and it came up 2026-08-06 the first time someone outside asked to try
-it. `README.md` now points here for the answer, so this section is the answer.
-
-Where it stands today: `bin/notarize` ends by *printing* the packaging command
-rather than running it —
+**Builds are downloadable.** `v2026.7-alpha.7` is published at
+<https://github.com/johnmcgovern/textmate-ng/releases>, and `bin/release` is what
+publishes the next one:
 
 ```sh
-ditto -c -k --keepParent build/Release/TextMate-NG.app TextMate-NG-<version>.zip
+bin/release              # after bin/notarize, on a tagged release commit
+bin/release --dry-run    # packages and verifies, prints the notes, publishes nothing
 ```
 
-— and stops there. Everything upstream of that is already automated and already
-correct: Developer ID signing, hardened runtime, notarization, stapling, and a
-`spctl` check. **The gap is only the last mile**, which is what makes this a
-small task rather than a project.
+It is separate from `bin/notarize` on purpose — re-running a notarization is
+safe, re-running "publish a public release" is not. Three of its four steps are
+checks, because the failure that matters is publishing something a stranger
+cannot open:
 
-What needs deciding and doing, roughly in order:
+- Developer ID-signed, stapled, Gatekeeper-accepted;
+- the app's `CFBundleShortVersionString` agrees with both the newest `Changes.md`
+  heading and the git tag — the heading *is* the version bump, so a disagreement
+  means the build predates it;
+- **the zip is unpacked somewhere clean and verified again**, because the artifact
+  people download is the zip and `build/` has held stale bundles here before.
 
-1. **`gh release create` against the tag that already exists.** The tags are
-   there (`v2026.7-alpha.1` … `.7`); a release attaching the stapled zip is one
-   command. Decide whether to backfill the older tags or start at the next one —
-   backfilling means re-notarizing builds nobody has, so probably start fresh.
-2. **Release notes come from `Applications/TextMate/about/Changes.md`.** The
-   newest `## <date> (vX)` section *is* the release note, already written for a
-   reader rather than a committer, and the version already derives from that
-   heading. Extract the section between the first two `##` headings and pass it
-   as the body rather than writing anything a second time.
-3. **Extend `bin/notarize`, or add `bin/release` next to it?** Prefer a separate
-   `bin/release`: notarizing and publishing are different blast radii, and
-   `bin/notarize` is safe to re-run in a way that "create a public release" is
-   not. It should refuse to publish an app whose stapled ticket does not validate
-   and whose version does not match the tag it is publishing to.
-4. **Mark them pre-releases.** These are alphas; GitHub's `--prerelease` flag
-   keeps "Latest release" honest and keeps them out of the default download.
-5. **Check what the zip actually contains before the first public one.** It is
-   built from `build/Release/`, and that directory has held stale artifacts
-   before — there is a pre-rename `TextMate.app.dSYM` sitting in it right now.
-   The zip is `--keepParent` on the `.app` alone so it should be unaffected, but
-   *should* is exactly the word that has cost this project time before. Unzip the
-   artifact somewhere clean, run it, and check its version and signature.
-6. **Say what the requirements are where the download is.** Apple Silicon and
-   macOS 15 are in `README.md`; a release body that omits them will produce a bug
-   report from an Intel Mac.
+Notes come from `Changes.md` (everything between the newest `## ` heading and the
+next), plus the requirements, which are not in that file and whose absence earns a
+bug report from an Intel Mac. Releases are `--prerelease`.
 
-Not in scope, and worth writing down so it does not creep in: **this is not
-software update.** Sparkle-style updating stays off until the fork has a server,
-and a GitHub Release is not a substitute for one.
+Verified as a stranger would experience it, not just locally: downloaded the
+published asset over HTTPS, unpacked it, and confirmed the stapled ticket and
+`spctl` acceptance **with `com.apple.quarantine` set** — which is the state a
+browser download arrives in, and the exact case the README used to be wrong
+about.
+
+Older tags were deliberately **not** backfilled: their artifacts no longer exist,
+so backfilling would mean rebuilding and re-notarizing alphas nobody ever had.
+
+Still not software update. Sparkle-style updating stays off while the fork has no
+server, and a GitHub Release is not a substitute for one.
 
 ## Guardrails
 

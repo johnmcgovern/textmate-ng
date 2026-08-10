@@ -30,9 +30,12 @@ notes for every build are in
 
 ## Download
 
-There is no GitHub Releases download yet — alpha builds are currently handed over
-directly. Publishing them from this repository is on the list; see
-`ide/NEXT_SESSION_HANDOFF.md` under "Distribution".
+**[Latest release](https://github.com/johnmcgovern/textmate-ng/releases/latest)** —
+builds are published here as pre-releases, signed with an Apple Developer ID and
+notarized. Unzip, drag to `/Applications`, open.
+
+Only alphas from `v2026.7-alpha.7` onwards are published. Earlier tags exist in
+the history but were never released as downloads.
 
 If you were looking for *upstream* TextMate 2, that is
 [a separate download](https://macromates.com/download) from MacroMates.

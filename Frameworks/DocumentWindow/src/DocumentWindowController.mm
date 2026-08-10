@@ -861,7 +861,12 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	return nil;
 }
 
-- (BOOL)documents:(NSArray<OakDocument*>*)lhs hasCommonSubsequenceWithDocuments:(NSArray<OakDocument*>*)rhs
+// A class method: it touches no instance state, and hoisting it is what lets it
+// be tested without standing up a whole window. The unconditional ++i/++j at the
+// end of the loop is on top of whichever branch already advanced one of them —
+// that reads like a bug, is load-bearing, and is pinned by
+// t_document_window_controller.mm.
++ (BOOL)documents:(NSArray<OakDocument*>*)lhs hasCommonSubsequenceWithDocuments:(NSArray<OakDocument*>*)rhs
 {
 	NSMutableSet<NSUUID*>* subsequence = [NSMutableSet setWithArray:[lhs valueForKey:@"identifier"]];
 	[subsequence intersectSet:[NSSet setWithArray:[rhs valueForKey:@"identifier"]]];
@@ -916,7 +921,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	}
 
 	[NSAnimationContext runAnimationGroup:^(NSAnimationContext* context){
-		context.allowsImplicitAnimation = [self documents:self.documents hasCommonSubsequenceWithDocuments:newDocuments];
+		context.allowsImplicitAnimation = [DocumentWindowController documents:self.documents hasCommonSubsequenceWithDocuments:newDocuments];
 		self.documents        = newDocuments;
 		self.selectedTabIndex = [_documents indexOfObject:selectDocument];
 	} completionHandler:^{

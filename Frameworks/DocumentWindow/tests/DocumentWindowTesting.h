@@ -14,6 +14,7 @@
 #import "../src/OakRunCommandWindowController.h"
 #import "../src/DWOutputType.h"
 #import "../src/ProjectLayoutView.h"
+#import "../src/DocumentWindowController.h"
 
 @class BundleGrammar;
 
@@ -44,4 +45,15 @@
 @property (nonatomic, readonly) NSRect fileBrowserResizeRect;
 @property (nonatomic, readonly) NSRect htmlOutputResizeRect;
 @property (nonatomic, readonly) NSView* htmlOutputDivider;
+@end
+
+@class OakDocument;
+
+@interface DocumentWindowController (Testing)
+// Pure, and a class method for that reason — see the note at its definition.
++ (BOOL)documents:(NSArray<OakDocument*>*)lhs hasCommonSubsequenceWithDocuments:(NSArray<OakDocument*>*)rhs;
+
+// Sticky tabs, whose backing set is created lazily.
+- (BOOL)isDocumentSticky:(OakDocument*)aDocument;
+- (void)setDocument:(OakDocument*)aDocument sticky:(BOOL)stickyFlag;
 @end

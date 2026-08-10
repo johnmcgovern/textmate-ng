@@ -1,12 +1,14 @@
+// The strip that slides down from the top of a document offering to install the
+// bundle that would syntax-highlight it.
+//
+// The response enum moved to SelectGrammarResponse.h so the Swift bridging
+// header can import it without importing this file, which declares a class the
+// Swift defines. This header re-imports it, so nothing that includes this one
+// changed.
+#import "SelectGrammarResponse.h"
+
 @class BundleGrammar;
 @class OakDocumentView;
-
-typedef NS_ENUM(NSInteger, SelectGrammarResponse) {
-	SelectGrammarResponseInstall = 0,
-	SelectGrammarResponseNotNow,
-	SelectGrammarResponseNever,
-	SelectGrammarResponseCount
-};
 
 @interface SelectGrammarViewController : NSViewController
 @property (nonatomic) NSString* documentDisplayName;

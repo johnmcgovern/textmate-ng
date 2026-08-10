@@ -72,19 +72,28 @@ static id RetrieveObjectAtKeyPath (NSString* keyPath)
 
 - (instancetype)initWithName:(NSString*)defaultsName stackSize:(NSUInteger)size defaultItems:(id)firstItem, ...
 {
+	NSMutableArray* items = [NSMutableArray array];
+
+	va_list ap;
+	va_start(ap, firstItem);
+	while(firstItem)
+	{
+		[items addObject:firstItem];
+		firstItem = va_arg(ap, id);
+	}
+	va_end(ap);
+
+	return [self initWithName:defaultsName stackSize:size defaultItemsArray:items];
+}
+
+- (instancetype)initWithName:(NSString*)defaultsName stackSize:(NSUInteger)size defaultItemsArray:(NSArray*)items
+{
 	if(self = [self initWithName:defaultsName stackSize:size])
 	{
+		// Only seeds an empty list: the stored history wins over the defaults, which
+		// is what makes these "default items" rather than "always-present items".
 		if(self.list.count == 0)
-		{
-			va_list ap;
-			va_start(ap, firstItem);
-			while(firstItem)
-			{
-				[self.list addObject:firstItem];
-				firstItem = va_arg(ap, id);
-			}
-			va_end(ap);
-		}
+			[self.list addObjectsFromArray:items];
 	}
 	return self;
 }

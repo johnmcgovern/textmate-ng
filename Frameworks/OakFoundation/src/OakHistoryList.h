@@ -12,6 +12,11 @@ If the list grows beyond _stackSize_ objects, the last object will be removed be
 - (id)initWithName:(NSString*)defaultsName stackSize:(NSUInteger)size;
 - (id)initWithName:(NSString*)defaultsName stackSize:(NSUInteger)size fallbackUserDefaultsKey:(NSString*)fallbackDefaultsName;
 - (id)initWithName:(NSString*)defaultsName stackSize:(NSUInteger)size defaultItems:(id)firstItem, ...;
+
+// The array spelling of the nil-terminated variadic above, for Swift callers: a
+// C variadic ObjC method is not merely awkward from Swift, it is uncallable. The
+// variadic one funnels into this, so there is one implementation rather than two.
+- (id)initWithName:(NSString*)defaultsName stackSize:(NSUInteger)size defaultItemsArray:(NSArray*)items;
 - (void)addObject:(ObjectType)newItem;
 - (NSEnumerator<ObjectType>*)objectEnumerator;
 - (ObjectType)objectAtIndex:(NSUInteger)index;

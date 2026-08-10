@@ -183,6 +183,60 @@ survived from the session that wrote it. Modules, C++ interop mode, bridging
 headers and the first `.swift` file all landed, and there are nine Swift
 frameworks now.
 
+## DocumentWindowController is blocked on a model layer (2026-08-10)
+
+**Do not start the Swift port of `DocumentWindowController.mm` by writing Swift.**
+It is gated on a piece of work that does not exist yet, and the gate is the same
+one `TMBundleModel` was built to open.
+
+The class extension holds **seven C++ ivars**, with 38 references between them:
+
+```objc
+scm::info_ptr                      _projectSCMInfo;          // std::shared_ptr
+std::map<std::string, std::string> _projectSCMVariables;
+std::vector<std::string>           _projectScopeAttributes;
+std::vector<std::string>           _externalScopeAttributes;
+scm::info_ptr                      _documentSCMInfo;         // std::shared_ptr
+std::map<std::string, std::string> _documentSCMVariables;
+std::vector<std::string>           _documentScopeAttributes;
+```
+
+A Swift `@objc` class cannot hold those. Two of them are `std::shared_ptr`s with
+**live callbacks** — `_documentSCMInfo->push_callback(^(scm::info_t const& info){…})`
+captures the controller and fires on SCM changes — so this is not a matter of
+converting a value at a boundary; it is C++ state whose lifetime is tied to the
+object.
+
+This is the `bundles::item_ptr` blocker recurring in a new place. `TMBundleModel`
+exists because that blocker sat "under both BundleMenu and BundleEditor's window
+controller", and its own header says it was built so the problem is "solved once
+rather than per framework". The same answer applies here: an ObjC-shaped model
+layer over `scm::info_t` and the scope-attribute vectors, C++-free in its header,
+with the SCM callbacks living behind it.
+
+**Sequence, and none of it is speculative:**
+
+1. Build that layer — call it what it is, an SCM/scope-context model — with its
+   own tests, as its own change. Scope it the way `TMBundleItem.h` was scoped:
+   only what the consumer actually touches, not all of `scm::info_t`.
+2. Then port the controller. The rest of it is ordinary AppKit; the ten
+   C++-typed selectors (`updateEnvironment:forCommand:`, `variables`,
+   `performBundleItem:`, `selectRange:inDocument:`, the four SCM-variable
+   accessors, `titleForDocument:withSetting:`) go in an ObjC++ category on the
+   Swift class, which is the arrangement `Find (OakFindServer)` already proved.
+
+**Groundwork already committed**, so this starts from a known state rather than a
+survey: the framework has 38 tests where it had none, the trailing
+`OakDocumentController` category is out (`OakDocumentControllerWindows.mm`), the
+registry is class methods, and `DocumentWindowControllerPrivate.h` names the
+internal surface the port has to keep reachable.
+
+Also established, and worth not re-deriving: **the controller is constructible in
+a test process.** Its `-init` stands up an `OakDocumentView` — the whole C++ text
+engine — and that works headlessly, so coverage can use real instances. Find's
+controller was constructible and CrashReporter's was not, so this was worth
+checking.
+
 ## Distribution — done (2026-08-10)
 
 **Builds are downloadable.** `v2026.7-alpha.7` is published at

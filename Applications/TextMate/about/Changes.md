@@ -2,6 +2,32 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-10 (v2026.7-alpha.8)
+
+**You can download TextMate-NG from GitHub now.** Until this release the only way
+to get a build was to be handed one; releases are published at
+[github.com/johnmcgovern/textmate-ng/releases](https://github.com/johnmcgovern/textmate-ng/releases)
+from alpha.7 onwards. They are signed and notarized, so macOS opens them without
+any of the right-click-Open ceremony — if it ever refuses one of these, that is a
+real signal and worth reporting rather than working around.
+
+**Nothing else in this release is visible.** That is not a hedge: the work since
+alpha.7 was rebuilding the Find window and three of the project window's
+supporting files in Swift, and a port that changes behaviour has failed. It is
+mentioned only because it is a large change to code you touch constantly — every
+folder search, every Filter Through Command, and the divider you drag between the
+editor and the file browser — so if any of those behave oddly, this is the
+release that did it, and that is worth a bug report.
+
+The find window in particular was checked against the previous build side by side
+rather than by reading the code, after one behaviour looked wrong and turned out
+to have been that way all along.
+
+**Known limitations in this alpha:** unchanged. Software update and crash-report
+submission stay switched off while the fork has no server of its own, so a new
+build means downloading a new build. Finder thumbnails are still generic; Quick
+Look previews work.
+
 ## 2026-08-06 (v2026.7-alpha.7)
 
 **Swift files are syntax-highlighted now.** A Swift grammar ships in the default bundle set, so `.swift` files are coloured in the editor and in Quick Look previews. Alpha.6's notes said you had to install one yourself; that is no longer true, and this is the release that makes it so. It applies to **fresh installs only** — the default set is unpacked the first time the app runs, so if you already have an alpha installed, add Swift from Preferences ▸ Bundles instead.

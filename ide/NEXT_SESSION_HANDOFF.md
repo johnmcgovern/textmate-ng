@@ -1,9 +1,9 @@
 # Next-session handoff — TextMate-NG
 
-_Snapshot at end of session 2026-08-07. Point-in-time; when it disagrees with the
+_Snapshot at end of session 2026-08-11. Point-in-time; when it disagrees with the
 git log or the docs below, trust those._
 
-## Where things stand (updated 2026-08-07)
+## Where things stand (updated 2026-08-11)
 
 - **Phase 2 is DONE.** Stream 3 (signing & notarization) landed: Developer ID
   `John McGovern (R22V2H7QF4)`, `bin/notarize` drives `notarytool`, and shipped
@@ -17,13 +17,15 @@ git log or the docs below, trust those._
   The old note here said the id "must not move again"; it moved once more, on
   purpose, to match the product name while the audience was still alpha-only.
   Now it does match, so there is no third move worth making.
-- **Four releases shipped so far:** alpha.3–alpha.5 on 2026-08-02/03, then
-  **`v2026.7-alpha.7` on 2026-08-06** (Swift grammar in the default bundle set,
-  the `passwd_entry()` fix, and the find-results port). Count what is unreleased
-  with `git rev-list --count v2026.7-alpha.7..HEAD` rather than by assertion —
-  that number has been stated wrong here three times.
-- **Builds are downloadable as of 2026-08-10.** `bin/release` publishes a
-  notarized build to GitHub Releases; alpha.7 is up. See "Distribution" below.
+- **Six releases shipped so far:** alpha.3–alpha.5 on 2026-08-02/03, then
+  alpha.7 (2026-08-06), alpha.8 and alpha.9 (both 2026-08-10). Count what is
+  unreleased with `git rev-list --count v2026.7-alpha.9..HEAD` rather than by
+  assertion — that number has been stated wrong here three times.
+- **Builds are downloadable.** `bin/release` publishes a notarized build to
+  GitHub Releases; **alpha.7, .8 and .9 are up** (2026-08-10). The flow has been
+  run three times and verified from the outside each time — download the
+  published asset, set `com.apple.quarantine`, check `spctl`. See
+  "Distribution" below.
 - **Phase 4's Find work is DONE (2026-08-07).** All four substantial files are
   Swift — `FFResultNode`, `FFDocumentSearch`, `FFResultsViewController` and now
   `Find.mm` (1402) — each with its tests written *before* the port. The framework
@@ -31,8 +33,8 @@ git log or the docs below, trust those._
   last port left `FindSupport.mm` (271) behind, which is why the directory fell
   by 1131 and not by 1402. What it cost, and the four new rules it earned, are in
   `ide/FIND_PORT_HANDOFF.md`.
-- **535 tests across 34 bundles**, green (2026-08-07; 76 of them Find's, a
-  bundle that did not exist four days ago). Re-measure by summing each bundle's own `Executed N tests`; do not
+- **583 tests across 35 bundles**, green (2026-08-11; 76 of them Find's and 58
+  DocumentWindow's, neither bundle existing a week ago). Re-measure by summing each bundle's own `Executed N tests`; do not
   increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
   `s` optional.** xctest prints `Executed 1 test` for single-test suites, and a
   plural-only pattern skips those lines and then mis-attributes the next
@@ -132,7 +134,7 @@ xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release b
 open -a "$PWD/build/Release/TextMate-NG.app"     # target TextMate, product TextMate-NG
 ```
 
-Tests (34 bundles, 535 green):
+Tests (35 bundles, 583 green):
 
 ```bash
 xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
@@ -161,21 +163,19 @@ The unforeseen piece was `Find.h`: it declared both `@interface Find` and the
 three types the Swift needs, so it had to be split into `FindTypes.h`. Expect
 that shape again — check for it while surveying the next public header.
 
-**Next:** `DocumentWindow` (3564, of which 2885 is one window controller
-with no tests) — and note it is Find's `FindDelegate` client, so
-`-selectRange:inDocument:` and its `text::range_t` come back into scope there.
-Then the heavy set — `OakAppKit`, `FileBrowser`, `OakFilterList`.
-`MenuBuilder` goes **last**, once its ObjC++ callers are gone. `HTMLOutput` needs
-a `std::map` API redesign before it is portable at all.
+**`DocumentWindow` is three-quarters done.** Its three leaves are Swift and the
+window controller is unblocked — see the section below, which is the one to read
+before starting. After it: the heavy set — `OakAppKit`, `FileBrowser`,
+`OakFilterList`. `MenuBuilder` goes **last**, once its ObjC++ callers are gone.
+`HTMLOutput` needs a `std::map` API redesign before it is portable at all.
 
-**alpha.7 shipped 2026-08-06** (`f23dff04`, tag `v2026.7-alpha.7`, 23 commits past
-alpha.6), carrying the Swift grammar (`cbaa5894`), the `passwd_entry()` fix
-(`7fbd4a07`) and the `FFResultsViewController` port. HEAD is **0 commits past the
-tag**. A release is a heading in `Applications/TextMate/about/Changes.md` plus
-`bin/notarize`.
+**alpha.9 shipped 2026-08-10** (`921f2270`, tag `v2026.7-alpha.9`); HEAD is at the
+tag. A release is a heading in `Applications/TextMate/about/Changes.md`, then
+`bin/notarize` and `bin/release` — the full sequence is under "Distribution".
 
-Two earlier notes here were wrong about this same count — "five commits, nothing
-user-visible", then "21 commits waiting" — both asserted rather than counted.
+Three earlier notes here were wrong about the unreleased-commit count — "five
+commits, nothing user-visible", "21 commits waiting", "nothing has shipped since
+alpha.6" — each asserted rather than counted.
 `git rev-list --count <tag>..HEAD` is the whole of the work.
 
 ~~**Then Phase 3** (Swift interop foundation)~~ — **done long ago**; this line
@@ -183,59 +183,54 @@ survived from the session that wrote it. Modules, C++ interop mode, bridging
 headers and the first `.swift` file all landed, and there are nine Swift
 frameworks now.
 
-## DocumentWindowController is blocked on a model layer (2026-08-10)
+## Next: port DocumentWindowController (2573 lines) — now unblocked
 
-**Do not start the Swift port of `DocumentWindowController.mm` by writing Swift.**
-It is gated on a piece of work that does not exist yet, and the gate is the same
-one `TMBundleModel` was built to open.
+The blocker recorded on 2026-08-10 is **gone**. `DWScopeContext` (`d7f43ebd`)
+holds the seven C++ ivars — two `scm::info_ptr` with live callbacks, two variable
+maps, three attribute vectors — so the controller holds one object pointer and no
+C++ members. It is an ordinary AppKit port now.
 
-The class extension holds **seven C++ ivars**, with 38 references between them:
+**Read `DWScopeContext.h` before touching any of this.** It is the model layer,
+the same answer `TMBundleModel` gave to `bundles::item_ptr`, and it has the same
+two-header split: `DWScopeContext.h` is C++-free for Swift, `DWScopeContextCxx.h`
+carries the `std::map` accessor for the ObjC++ shims that feed
+`settings_for_path`.
 
-```objc
-scm::info_ptr                      _projectSCMInfo;          // std::shared_ptr
-std::map<std::string, std::string> _projectSCMVariables;
-std::vector<std::string>           _projectScopeAttributes;
-std::vector<std::string>           _externalScopeAttributes;
-scm::info_ptr                      _documentSCMInfo;         // std::shared_ptr
-std::map<std::string, std::string> _documentSCMVariables;
-std::vector<std::string>           _documentScopeAttributes;
-```
+### The plan, and none of it is speculative
 
-A Swift `@objc` class cannot hold those. Two of them are `std::shared_ptr`s with
-**live callbacks** — `_documentSCMInfo->push_callback(^(scm::info_t const& info){…})`
-captures the controller and fires on SCM changes — so this is not a matter of
-converting a value at a boundary; it is C++ state whose lifetime is tied to the
-object.
+1. **Ten C++-typed selectors go into an ObjC++ category on the Swift class**, in
+   `DocumentWindowSupport.mm`. They are `updateEnvironment:forCommand:`,
+   `variables`, `performBundleItem:`, `selectRange:inDocument:`,
+   `titleForDocument:withSetting:`, and the SCM/scope accessors. This is not
+   optional and not a style choice: `OakCommand` reaches
+   `updateEnvironment:forCommand:` through `targetForAction:` with a
+   `std::map&`, `OakTextView` calls `[self.delegate variables]` expecting a
+   `std::map`, and `AppController` passes a `bundles::item_ptr` to
+   `performBundleItem:`. Those callers are not moving. `Find (OakFindServer)` is
+   the worked example; `CRSupport.mm` and `BEInterop.mm` are the other two.
+2. **One `MBCreateMenu`** (the tab-bar context menu). Hand-roll it, as Find's two
+   were. Read `MBCreateMenuItem` first, not the call site: a nil title makes a
+   **separator**, `modifierFlags` defaults to Command, and a non-nil `.delegate`
+   alone builds a submenu.
+3. `DocumentWindowController.h` keeps `performBundleItem:(bundles::item_ptr)`, so
+   it cannot be in the bridging header. Check whether it needs the `FindTypes.h`
+   split (rule 11) — it declares only the one class today, so probably not.
 
-This is the `bundles::item_ptr` blocker recurring in a new place. `TMBundleModel`
-exists because that blocker sat "under both BundleMenu and BundleEditor's window
-controller", and its own header says it was built so the problem is "solved once
-rather than per framework". The same answer applies here: an ObjC-shaped model
-layer over `scm::info_t` and the scope-attribute vectors, C++-free in its header,
-with the SCM callbacks living behind it.
+### What is already done, so the port starts from a known state
 
-**Sequence, and none of it is speculative:**
-
-1. Build that layer — call it what it is, an SCM/scope-context model — with its
-   own tests, as its own change. Scope it the way `TMBundleItem.h` was scoped:
-   only what the consumer actually touches, not all of `scm::info_t`.
-2. Then port the controller. The rest of it is ordinary AppKit; the ten
-   C++-typed selectors (`updateEnvironment:forCommand:`, `variables`,
-   `performBundleItem:`, `selectRange:inDocument:`, the four SCM-variable
-   accessors, `titleForDocument:withSetting:`) go in an ObjC++ category on the
-   Swift class, which is the arrangement `Find (OakFindServer)` already proved.
-
-**Groundwork already committed**, so this starts from a known state rather than a
-survey: the framework has 38 tests where it had none, the trailing
-`OakDocumentController` category is out (`OakDocumentControllerWindows.mm`), the
-registry is class methods, and `DocumentWindowControllerPrivate.h` names the
-internal surface the port has to keep reachable.
-
-Also established, and worth not re-deriving: **the controller is constructible in
-a test process.** Its `-init` stands up an `OakDocumentView` — the whole C++ text
-engine — and that works headlessly, so coverage can use real instances. Find's
-controller was constructible and CrashReporter's was not, so this was worth
-checking.
+- **58 tests** in a framework that had none four days ago.
+  `DocumentWindowTesting.h` and `DocumentWindowControllerPrivate.h` between them
+  name every internal member the port has to keep reachable from ObjC — a
+  mistake is a compile error, not a runtime unrecognized selector.
+- The trailing `OakDocumentController` category is out
+  (`OakDocumentControllerWindows.mm`, 200 lines) and the controller registry is
+  class methods rather than file statics.
+- **The controller is constructible in a test process** — asserted, not assumed.
+  Its `-init` stands up an `OakDocumentView`, i.e. the whole C++ text engine, and
+  that works headlessly. Find's controller was; CrashReporter's was not.
+- `-documents:hasCommonSubsequenceWithDocuments:` is a class method now and
+  pinned by two tests that distinguish it from the obvious rewrite. Its
+  unconditional double-advance reads like a bug and is load-bearing.
 
 ## Distribution — done (2026-08-10)
 

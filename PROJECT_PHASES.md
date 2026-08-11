@@ -2536,3 +2536,98 @@ an hour. One caveat, learned by tripping over it: the first comparison was
 invalid because the ObjC++ run had not actually searched, so its button was
 disabled for a trivial reason. **Check the control did the thing before comparing
 outcomes** — a control that silently did nothing agrees with every hypothesis.
+
+#### DocumentWindow — three leaves, and the blocker under the fourth (2026-08-10/11)
+
+**Three of DocumentWindow's four files are Swift**, the framework went from zero
+tests to **58**, and the window controller — the largest single file left in the
+migration — is unblocked rather than ported.
+
+`SelectGrammarViewController` (149), `ProjectLayoutView` (390) and
+`OakRunCommandWindowController` (140) are 750 lines of Swift plus a 26-line
+`DocumentWindowSupport.mm`. Tests written against the ObjC++ first, as with every
+port since Find.
+
+##### The C++ survey was wrong, in the way rule 9 describes
+
+A grep for `std::|text::|path::|oak::` reported `OakRunCommandWindowController`
+as C++-free. It uses `output::type` and `input::selection`, which that pattern
+cannot match. Re-run with a generic `\w+::` it showed up immediately. **Stop
+hand-writing namespace lists**; the generic pattern costs nothing.
+
+##### `output::type` is the first *persisted* enum split
+
+`FFFindOptions` and `TMSCMStatus` closed ABI traps. `DWOutputType` closes one
+too, but it is the only one of the three whose raw integer is **written to user
+defaults** — `filterOutputType`. A renumbering would not mis-render something; it
+would read back last week's "insert after input" as "replace document" and edit
+your file. Hence the full treatment: NS_ENUM, `static_assert`, runtime table, and
+a test pinning zero specifically, because setting replace-input *removes* the key
+and so "no preference" and "replace input" have to stay the same value.
+
+##### The rule 11 split paid immediately
+
+`SelectGrammarResponse` had to move to its own header for the same reason
+`FindTypes.h` exists — a bridging header cannot import the header that declares a
+class the Swift defines. Earned on Find.h, applied on the very next file.
+
+##### And the blocker, which is the useful part
+
+`DocumentWindowController` held **seven C++ ivars**: two `scm::info_ptr` (a
+`std::shared_ptr`) with live callbacks that capture the controller and fire on
+version-control changes, two variable maps, three attribute vectors. A Swift
+`@objc` class cannot hold those, and unlike `text::range_t` in Find it is not a
+value to convert at a boundary — it is C++ state whose lifetime is tied to the
+object.
+
+That is the `bundles::item_ptr` blocker recurring. `TMBundleModel` exists because
+that one sat under BundleMenu *and* BundleEditor's window controller; its header
+says it was built so the problem is solved once rather than per framework. The
+same answer applied: **`DWScopeContext`**, an ObjC-shaped model layer, with the
+same two-header split (`DWScopeContext.h` C++-free for Swift,
+`DWScopeContextCxx.h` carrying the `std::map` accessor for the ObjC++ shims that
+feed `settings_for_path`).
+
+Found by reading the ivars before writing Swift, which is the cheap order. The
+expensive order is finding it two thousand lines in.
+
+The single most valuable thing it encapsulates is one line: *"the document's SCM
+variables if it has any, otherwise the project's"* appeared **five times** in the
+controller, spelled two different ways. Ten tests, against a real directory
+rather than a mock, since the attribute walk is asynchronous and touches the
+filesystem.
+
+**Verified in the running app**, which the suite could not do: the window title
+still reads `(git: master)`, meaning `scm::info` found the repository, the
+callback fired, `variablesDidChange` reached `updateWindowTitle`, and the
+effective-variables rule supplied the branch — the whole path through the new
+layer, and later confirmed again in the shipped notarized alpha.9 build.
+
+Controller: 2885 → **2573 lines**, no C++ ivars. Suite **583 across 35 bundles**.
+
+#### Distribution, and Release configuration (2026-08-10)
+
+Seven alphas had been tagged and notarized and **none was downloadable** — every
+build had been handed over by hand. `bin/release` closes that: it verifies the
+app is Developer ID-signed, stapled and Gatekeeper-accepted, checks the version
+agrees with both the newest `Changes.md` heading and the git tag, packages with
+`ditto`, then **unpacks the package somewhere clean and verifies it again**,
+because the artifact people download is the zip and `build/` has held stale
+bundles here before.
+
+Three releases published and each verified from the outside rather than the build
+directory: download the asset over HTTPS, set `com.apple.quarantine` to what
+Safari stamps, confirm `spctl` still accepts it. That is the exact claim the
+README got wrong for four releases.
+
+Two things the flow itself taught:
+
+- **`gh release create` resolves the tag on the remote.** `bin/release` checked
+  only that it existed locally, so the first alpha.8 attempt ran signature
+  checks, notarization validation, packaging and re-verification before failing
+  at the last step. Now `git ls-remote --exit-code`, which fails in a second.
+- **Cutting a release is how Release configuration gets exercised at all.** Every
+  port up to alpha.8 had been built and driven only in Debug; `-O` plus `NDEBUG`
+  is a different build, and this project has a history of config-specific
+  failures. Making a release forces a Release build and a run. Nothing broke, but
+  nothing had been checked either.

@@ -1,5 +1,6 @@
 #import "DocumentWindowController.h"
 #import "DocumentWindowControllerPrivate.h"
+#import "DWScopeContextCxx.h"
 #import "ProjectLayoutView.h"
 #import "SelectGrammarViewController.h"
 #import "OakRunCommandWindowController.h"
@@ -83,15 +84,12 @@ static void show_command_error (std::string const& message, oak::uuid_t const& u
 {
 	NSMutableSet<NSUUID*>*                 _stickyDocumentIdentifiers;
 
-	scm::info_ptr                          _projectSCMInfo;
-	std::map<std::string, std::string>     _projectSCMVariables;
-	std::vector<std::string>               _projectScopeAttributes;  // kSettingsScopeAttributesKey
-	std::vector<std::string>               _externalScopeAttributes; // attr.scm.git, attr.project.ninja
-
-	scm::info_ptr                          _documentSCMInfo;
-	std::map<std::string, std::string>     _documentSCMVariables;
-	std::vector<std::string>               _documentScopeAttributes; // attr.os-version, attr.untitled / attr.rev-path + kSettingsScopeAttributesKey
 }
+// The seven C++ ivars that used to sit here — two scm::info_ptr with live
+// callbacks, two variable maps and three attribute vectors — now live in
+// DWScopeContext. See its header: a Swift @objc class cannot hold them, and this
+// class is next in the port queue.
+@property (nonatomic) DWScopeContext* scopeContext;
 @property (nonatomic) NSTitlebarAccessoryViewController* titlebarViewController;
 @property (nonatomic) ProjectLayoutView*          layoutView;
 @property (nonatomic) OakTabBarView*              tabBarView;
@@ -224,6 +222,10 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 
 		[self.window.contentView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[view]|" options:0 metrics:nil views:@{ @"view": self.layoutView }]];
 		[self.window.contentView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[view]|" options:0 metrics:nil views:@{ @"view": self.layoutView }]];
+
+		_scopeContext = [DWScopeContext new];
+		__weak DocumentWindowController* weakSelf = self;
+		_scopeContext.variablesDidChange = ^{ [weakSelf updateWindowTitle]; };
 
 		_arrayController = [[NSArrayController alloc] init];
 		[_arrayController bind:NSContentBinding toObject:self withKeyPath:@"documents" options:nil];
@@ -1308,76 +1310,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 
 - (void)updateExternalAttributes
 {
-	struct attribute_rule_t { std::string attribute; path::glob_t glob; std::string group; };
-	static auto const rules = new std::vector<attribute_rule_t>
-	{
-		{ "attr.scm.svn",         ".svn",           "scm"     },
-		{ "attr.scm.hg",          ".hg",            "scm"     },
-		{ "attr.scm.git",         ".git",           "scm"     },
-		{ "attr.scm.p4",          ".p4config",      "scm"     },
-		{ "attr.project.ninja",   "build.ninja",    "build"   },
-		{ "attr.project.make",    "Makefile",       "build"   },
-		{ "attr.project.xcode",   "*.xcodeproj",    "build"   },
-		{ "attr.project.rake",    "Rakefile",       "build"   },
-		{ "attr.project.ant",     "build.xml",      "build"   },
-		{ "attr.project.cmake",   "CMakeLists.txt", "build"   },
-		{ "attr.project.maven",   "pom.xml",        "build"   },
-		{ "attr.project.scons",   "SConstruct",     "build"   },
-		{ "attr.project.lein",    "project.clj",    "build"   },
-		{ "attr.project.cargo",   "Cargo.toml",     "build"   },
-		{ "attr.project.swift",   "Package.swift",  "build"   },
-		{ "attr.project.vagrant", "Vagrantfile",    NULL_STR  },
-		{ "attr.project.jekyll",  "_config.yml",    NULL_STR  },
-		{ "attr.project.rave",    "default.rave",   NULL_STR  },
-		{ "attr.test.rspec",      ".rspec",         "test"    },
-	};
-
-	_externalScopeAttributes.clear();
-	if(!self.selectedDocument && !_projectPath)
-		return;
-
-	std::string const projectDir   = to_s(_projectPath ?: NSHomeDirectory());
-	std::string const documentPath = self.selectedDocument.path ? to_s(self.selectedDocument.path) : path::join(projectDir, "dummy");
-
-	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-
-		std::vector<std::string> res;
-		std::set<std::string> groups;
-		std::string dir = documentPath;
-		do {
-
-			dir = path::parent(dir);
-			auto entries = path::entries(dir);
-
-			for(auto rule : *rules)
-			{
-				if(groups.find(rule.group) != groups.end())
-					continue;
-
-				for(auto entry : entries)
-				{
-					if(rule.glob.does_match(entry->d_name))
-					{
-						res.push_back(rule.attribute);
-						if(rule.group != NULL_STR)
-						{
-							groups.insert(rule.group);
-							break;
-						}
-					}
-				}
-			}
-
-		} while(path::is_child(dir, projectDir) && dir != projectDir);
-
-		dispatch_async(dispatch_get_main_queue(), ^{
-			std::string const currentProjectDir   = to_s(_projectPath ?: NSHomeDirectory());
-			std::string const currentDocumentPath = self.selectedDocument.path ? to_s(self.selectedDocument.path) : path::join(projectDir, "dummy");
-			if(projectDir == currentProjectDir && documentPath == currentDocumentPath)
-				_externalScopeAttributes = res;
-		});
-
-	});
+	[self.scopeContext updateExternalAttributesForDocumentPath:self.selectedDocument.path];
 }
 
 - (void)setProjectPath:(NSString*)newProjectPath
@@ -1385,23 +1318,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	if(_projectPath != newProjectPath && ![_projectPath isEqualToString:newProjectPath])
 	{
 		_projectPath = newProjectPath;
-		if(_projectSCMInfo = scm::info(to_s(_projectPath)))
-		{
-			__weak DocumentWindowController* weakSelf = self;
-			_projectSCMInfo->push_callback(^(scm::info_t const& info){
-				weakSelf.projectSCMVariables = info.scm_variables();
-			});
-		}
-		else
-		{
-			self.projectSCMVariables = std::map<std::string, std::string>();
-		}
-
-		_projectScopeAttributes.clear();
-
-		std::string const customAttributes = settings_for_path(NULL_STR, text::join(_projectScopeAttributes, " "), to_s(_projectPath)).get(kSettingsScopeAttributesKey, NULL_STR);
-		if(customAttributes != NULL_STR)
-			_projectScopeAttributes.push_back(customAttributes);
+		self.scopeContext.projectPath = _projectPath;
 
 		[self updateExternalAttributes];
 		[self updateWindowTitle];
@@ -1410,63 +1327,17 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 
 - (void)setDocumentPath:(NSString*)newDocumentPath
 {
-	if(_documentPath != newDocumentPath && !([_documentPath isEqualToString:newDocumentPath]) || _documentScopeAttributes.empty())
-	{
-		_documentPath = newDocumentPath;
-		_documentScopeAttributes = text::split(file::path_attributes(to_s(_documentPath)), " ");
+	// The context decides whether this is a change worth acting on: it also
+	// re-runs when its attribute list is empty, which is how a window that opens
+	// with no document picks the attributes up once it has one. That guard used to
+	// be the `|| _documentScopeAttributes.empty()` half of the condition here.
+	_documentPath = newDocumentPath;
+	[self.scopeContext setDocumentPath:newDocumentPath fileType:self.selectedDocument.fileType];
 
-		std::string docDirectory = _documentPath ? path::parent(to_s(_documentPath)) : to_s(self.projectPath);
+	[self updateExternalAttributes];
 
-		if(self.selectedDocument)
-		{
-			std::string const customAttributes = settings_for_path(to_s(_documentPath), to_s(self.selectedDocument.fileType) + " " + text::join(_documentScopeAttributes, " "), docDirectory).get(kSettingsScopeAttributesKey, NULL_STR);
-			if(customAttributes != NULL_STR)
-				_documentScopeAttributes.push_back(customAttributes);
-		}
-
-		self.documentSCMVariables = std::map<std::string, std::string>();
-
-		if(_documentSCMInfo = scm::info(docDirectory))
-		{
-			__weak DocumentWindowController* weakSelf = self;
-			_documentSCMInfo->push_callback(^(scm::info_t const& info){
-				weakSelf.documentSCMVariables = info.scm_variables();
-			});
-		}
-
-		[self updateExternalAttributes];
-
-		if(self.autoRevealFile && self.selectedDocument.path && self.fileBrowserVisible)
-			[self revealFileInProject:self];
-	}
-}
-
-- (void)setProjectSCMVariables:(std::map<std::string, std::string> const&)newVariables
-{
-	if(_projectSCMVariables != newVariables)
-	{
-		_projectSCMVariables = newVariables;
-		[self updateWindowTitle];
-	}
-}
-
-- (void)setDocumentSCMVariables:(std::map<std::string, std::string> const&)newVariables
-{
-	if(_documentSCMVariables != newVariables)
-	{
-		_documentSCMVariables = newVariables;
-		[self updateWindowTitle];
-	}
-}
-
-- (std::map<std::string, std::string> const&)projectSCMVariables
-{
-	return _projectSCMVariables;
-}
-
-- (std::map<std::string, std::string> const&)documentSCMVariables
-{
-	return _documentSCMVariables;
+	if(self.autoRevealFile && self.selectedDocument.path && self.fileBrowserVisible)
+		[self revealFileInProject:self];
 }
 
 - (void)takeProjectPathFrom:(NSMenuItem*)aMenuItem
@@ -1481,24 +1352,14 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 
 - (NSString*)scopeAttributes
 {
-	std::set<std::string> attributes;
-
-	auto const& vars = _documentSCMVariables.empty() ? _projectSCMVariables : _documentSCMVariables;
-	auto scmName = vars.find("TM_SCM_NAME");
-	if(scmName != vars.end())
-		attributes.insert("attr.scm." + scmName->second);
-	auto branch = vars.find("TM_SCM_BRANCH");
-	if(branch != vars.end())
-		attributes.insert("attr.scm.branch." + branch->second);
-
+	// Converting scm::status::type to its attribute fragment stays here: this file
+	// already speaks C++, and that enum is TMSCMStatus's business rather than
+	// DWScopeContext's.
+	NSString* statusAttribute = nil;
 	if(self.selectedDocument.scmStatus != scm::status::unknown)
-		attributes.insert("attr.scm.status." + to_s(self.selectedDocument.scmStatus));
+		statusAttribute = [NSString stringWithCxxString:"attr.scm.status." + to_s(self.selectedDocument.scmStatus)];
 
-	attributes.insert(_documentScopeAttributes.begin(), _documentScopeAttributes.end());
-	attributes.insert(_projectScopeAttributes.begin(), _projectScopeAttributes.end());
-	attributes.insert(_externalScopeAttributes.begin(), _externalScopeAttributes.end());
-
-	return [NSString stringWithCxxString:text::join(attributes, " ")];
+	return [self.scopeContext scopeAttributesWithSCMStatusAttribute:statusAttribute];
 }
 
 // ==============
@@ -2111,7 +1972,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 - (NSString*)titleForDocument:(OakDocument*)document withSetting:(std::string const&)setting
 {
 	auto map = document.variables;
-	auto const scm = _documentSCMVariables.empty() ? _projectSCMVariables : _documentSCMVariables;
+	auto const& scm = self.scopeContext.effectiveSCMVariablesMap;
 	map.insert(scm.begin(), scm.end());
 	if(self.projectPath)
 		map["projectDirectory"] = to_s(self.projectPath);
@@ -2171,7 +2032,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	}
 
 	auto map = self.selectedDocument.variables;
-	auto const& scm = _documentSCMVariables.empty() ? _projectSCMVariables : _documentSCMVariables;
+	auto const& scm = self.scopeContext.effectiveSCMVariablesMap;
 	map.insert(scm.begin(), scm.end());
 	if(self.projectPath)
 		map["projectDirectory"] = to_s(self.projectPath);
@@ -2650,25 +2511,10 @@ static NSUInteger DisableSessionSavingCount = 0;
 	if(self.fileBrowser)
 		res = [self.fileBrowser variables];
 
-	auto const& scmVars = _documentSCMVariables.empty() ? _projectSCMVariables : _documentSCMVariables;
-
-	if(!scmVars.empty())
-	{
-		auto scmName = scmVars.find("TM_SCM_NAME");
-		if(scmName != scmVars.end())
-			res["TM_SCM_NAME"] = scmName->second;
-	}
-	else
-	{
-		for(auto const& attr : _externalScopeAttributes)
-		{
-			if(regexp::match_t const& m = regexp::search("^attr.scm.(?'TM_SCM_NAME'\\w+)$", attr))
-			{
-				res.insert(m.captures().begin(), m.captures().end());
-				break;
-			}
-		}
-	}
+	// TM_SCM_NAME, including its fallback to an attr.scm.<name> marker when the
+	// document itself is not in a repository.
+	for(NSString* key in self.scopeContext.scmNameVariables)
+		res[to_s(key)] = to_s(self.scopeContext.scmNameVariables[key]);
 
 	if(NSString* projectDir = self.projectPath)
 	{

@@ -2,6 +2,27 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-10 (v2026.7-alpha.9)
+
+**Another release with nothing you can see in it**, and for the same reason as
+alpha.8: the work continues to be rebuilding internals in Swift, and a rebuild
+that changes behaviour has failed.
+
+What moved this time is the machinery behind the version-control information a
+project window knows about. If you notice any of these behaving differently from
+alpha.8, this is the release that did it and it is worth reporting:
+
+* the repository and branch shown in a window's title, e.g. `(git: master)`
+* `TM_SCM_NAME` and the other `TM_SCM_*` variables available to bundle commands
+* bundle items that only appear for certain kinds of project — a Git checkout, a
+  Makefile project, an Xcode project — since the attributes driving that matching
+  are assembled by the same code
+
+**Known limitations in this alpha:** unchanged. Software update and crash-report
+submission stay switched off while the fork has no server of its own, so a new
+build means downloading a new build. Finder thumbnails are still generic; Quick
+Look previews work.
+
 ## 2026-08-10 (v2026.7-alpha.8)
 
 **You can download TextMate-NG from GitHub now.** Until this release the only way

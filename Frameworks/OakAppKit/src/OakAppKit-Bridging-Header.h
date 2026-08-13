@@ -19,3 +19,15 @@
 #include "../../../Shared/PCH/prelude.cc"
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
+
+// OakNotEmptyString / OakIsEmptyString.
+#import <OakFoundation/OakFoundation.h>
+
+// This framework's own headers, for the classes and free functions the Swift
+// calls. OakUIConstructionFunctions declares OakControlFont and
+// OakCreateCloseButton; their C++ default arguments are simply invisible to
+// Swift, which spells the arguments out instead.
+#import "OakView.h"
+#import "OakRolloverButton.h"
+#import "OakUIConstructionFunctions.h"
+#import "OakAppKitSupport.h"

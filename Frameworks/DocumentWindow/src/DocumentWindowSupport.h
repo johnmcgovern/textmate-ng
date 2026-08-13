@@ -37,7 +37,15 @@
 #import <document/OakDocument.h>
 
 @class DWScopeContext;
+@class Find;
 @class OakTextView;
+
+// Find.delegate is `id<FindDelegate>`, and DocumentWindowController is not a
+// FindDelegate as far as Swift is concerned: -selectRange:inDocument: takes a
+// `text::range_t const&`, which — unlike a std::map return type — the importer
+// does *not* drop under objcxx interop, so the conformance lives on the ObjC++
+// category and the assignment comes through here.
+void DWSetFindDelegate (Find* find, id delegate);
 
 // Runs `command` over the first responder that accepts it, taking the selection
 // as input and putting the result where `outputType` says.
@@ -142,6 +150,36 @@ void DWPerformDidOpenCallbacks (OakTextView* textView);
 // suggestion. The host comes from the REST_API build setting — a preprocessor
 // define, so it is not visible to Swift at all.
 BOOL DWCanReachBundleServer (void);
+
+// ============================================================
+// = Window and tab titles                                    =
+// ============================================================
+
+// Which settings key the title comes from. The ObjC++ passed
+// kSettingsWindowTitleKey / kSettingsTabTitleKey — two std::strings — to a
+// -titleForDocument:withSetting: whose signature was C++ for that reason alone.
+// Nothing outside the class ever called it, so the parameter narrows to this
+// instead of the selector staying ObjC++.
+typedef NS_ENUM(NSInteger, DWTitleSetting) {
+	DWTitleSettingWindow = 0,
+	DWTitleSettingTab,
+};
+
+// The document's title under that setting, with the window's SCM variables and
+// projectDirectory merged into the settings lookup. Falls back to the document's
+// display name, exactly as settings_t::get did.
+//
+// `scopeAttributes` and `untitledSavePath` are parameters rather than being
+// recomputed here: both are the caller's, and passing them keeps this function
+// from deciding anything.
+NSString* DWTitleForDocument (OakDocument* document, DWTitleSetting setting, NSString* projectPath, NSString* untitledSavePath, NSString* scopeAttributes, DWScopeContext* scopeContext);
+
+// The `attr.scm.status.…` fragment for a document, or nil when it has no SCM
+// status. This exists because OakDocument.scmStatus is scm::status::type, which
+// the importer drops — so -scopeAttributes reads as portable and is not.
+// Converting the enum to its string is TMSCMStatus's business, which is why it
+// is here and not on DWScopeContext.
+NSString* DWSCMStatusAttribute (OakDocument* document);
 
 // ============================================================
 // = Go to Related File                                       =

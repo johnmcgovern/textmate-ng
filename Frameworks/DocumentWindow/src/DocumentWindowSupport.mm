@@ -3,6 +3,7 @@
 #import <OakTextView/OakTextView.h>
 #import <OakAppKit/OakSavePanel.h>
 #import <BundleEditor/BundleEditor.h>
+#import <Find/Find.h>
 #import <OakSystem/application.h>
 #import <document/OakDocumentController.h>
 #import <bundles/bundles.h>
@@ -13,7 +14,9 @@
 #import <io/path.h>
 #import <regexp/glob.h>
 #import <regexp/regexp.h>
+#import <scm/scm.h>
 #import <settings/settings.h>
+#import <settings/keys.h>
 #import <text/format.h>
 #import <text/utf8.h>
 #import <ns/ns.h>
@@ -197,6 +200,35 @@ BOOL DWCanReachBundleServer (void)
 	return res;
 }
 
+void DWSetFindDelegate (Find* find, id delegate)
+{
+	find.delegate = delegate;
+}
+
+// ============================================================
+// = Window and tab titles                                    =
+// ============================================================
+
+NSString* DWTitleForDocument (OakDocument* document, DWTitleSetting setting, NSString* projectPath, NSString* untitledSavePath, NSString* scopeAttributes, DWScopeContext* scopeContext)
+{
+	auto map = document.variables;
+	auto const& scm = scopeContext.effectiveSCMVariablesMap;
+	map.insert(scm.begin(), scm.end());
+	if(projectPath)
+		map["projectDirectory"] = to_s(projectPath);
+
+	NSString* docDirectory = document.path ? [document.path stringByDeletingLastPathComponent] : untitledSavePath;
+	settings_t const settings = settings_for_path(to_s(document.virtualPath ?: document.path), to_s(document.fileType) + " " + to_s(scopeAttributes), to_s(docDirectory), map);
+	return to_ns(settings.get(setting == DWTitleSettingWindow ? kSettingsWindowTitleKey : kSettingsTabTitleKey, to_s(document.displayName)));
+}
+
+NSString* DWSCMStatusAttribute (OakDocument* document)
+{
+	if(document.scmStatus == scm::status::unknown)
+		return nil;
+	return [NSString stringWithCxxString:"attr.scm.status." + to_s(document.scmStatus)];
+}
+
 // ============================================================
 // = Go to Related File                                       =
 // ============================================================
@@ -260,3 +292,124 @@ NSString* DWRelatedFilePath (OakDocument* document, NSArray<OakDocument*>* docum
 
 	return [NSString stringWithCxxString:path::join(documentDir, v[((it - v.begin()) + 1) % v.size()])];
 }
+
+// ============================================================
+// = The C++-typed selectors                                  =
+// ============================================================
+//
+// Four, not the ten the handoff predicted, and every one is pinned by a caller
+// in another framework rather than by anything this class chose:
+//
+//   -variables                     OakTextViewDelegate; OakTextView.mm:1923
+//                                  does `res << [self.delegate variables]`.
+//   -updateEnvironment:forCommand: OakCommand.mm:592 finds it with
+//                                  -targetForAction: and passes a std::map&.
+//   -performBundleItem:            OakTextView and AppController both send it a
+//                                  bundles::item_ptr.
+//   -selectRange:inDocument:       FindDelegate.
+//
+// -scopeAttributes and -titleForDocument:withSetting: were expected to be here
+// too and are not. The first is ObjC-typed and became Swift once
+// DWSCMStatusAttribute took over the one C++ line it had; the second had no
+// caller outside the class, so its std::string parameter narrowed to
+// DWTitleSetting instead.
+//
+// The direction of this file matters: an ObjC++ category may call *into* the
+// Swift, but the Swift cannot call back into the category — that would need
+// DocumentWindowController.h in the bridging header, which would declare the
+// class a second time. That is why everything above is a free function and only
+// these four are methods.
+#import "DocumentWindowController.h"
+#import <FileBrowser/FileBrowserViewController.h>
+#import <OakCommand/OakCommand.h>
+#import <OakTextView/OakDocumentView.h>
+
+@interface DocumentWindowController (Cxx) <OakTextViewDelegate, FindDelegate>
+@end
+
+@interface DocumentWindowController (DocumentWindowSwiftHalf)
+// Implemented in DocumentWindowController.swift. Declared here rather than
+// through the generated DocumentWindow-Swift.h, which under
+// SWIFT_OBJC_INTEROP_MODE=objcxx emits a `namespace DocumentWindow` that clashes
+// with this framework's own names — the same reason FindSupport.mm hand-declares
+// Find's half. Nothing checks these against the Swift at build time; a mismatch
+// is an unrecognized selector at runtime.
+@property (nonatomic, readonly) FileBrowserViewController* fileBrowser;
+@property (nonatomic, readonly) DWScopeContext*            scopeContext;
+@property (nonatomic, readonly) NSString*                  projectPath;
+@property (nonatomic, readonly) NSUUID*                    identifier;
+@property (nonatomic, readonly) OakTextView*               textView;
+@property (nonatomic, readonly) OakDocumentView*           documentView;
+- (void)showWindow:(id)sender;
+- (void)makeTextViewFirstResponder:(id)sender;
+- (void)openItems:(NSArray*)items closingOtherTabs:(BOOL)closeOtherTabsFlag activate:(BOOL)activateFlag;
+- (void)bringToFront; // FindDelegate's other half, implemented in the Swift.
+- (NSString*)scopeAttributes;
+@end
+
+@implementation DocumentWindowController (Cxx)
+
+- (std::map<std::string, std::string>)variables
+{
+	std::map<std::string, std::string> res;
+	if(self.fileBrowser)
+		res = [self.fileBrowser variables];
+
+	// TM_SCM_NAME, including its fallback to an attr.scm.<name> marker when the
+	// document itself is not in a repository.
+	for(NSString* key in self.scopeContext.scmNameVariables)
+		res[to_s(key)] = to_s(self.scopeContext.scmNameVariables[key]);
+
+	if(NSString* projectDir = self.projectPath)
+	{
+		res["TM_PROJECT_DIRECTORY"] = [projectDir fileSystemRepresentation];
+		res["TM_PROJECT_UUID"]      = to_s(self.identifier);
+	}
+
+	return res;
+}
+
+- (void)updateEnvironment:(std::map<std::string, std::string>&)res forCommand:(OakCommand*)aCommand
+{
+	for(auto const& pair : [self variables])
+		res[pair.first] = pair.second;
+
+	if(aCommand.firstResponder == self.fileBrowser)
+	{
+		NSURL* fileURL = self.fileBrowser.selectedFileURLs.firstObject;
+		res = bundles::scope_variables(res);
+		res = variables_for_path(res, to_s(fileURL.path));
+	}
+	else if(aCommand.firstResponder != self.textView)
+	{
+		if([aCommand.firstResponder respondsToSelector:@selector(updateEnvironment:)])
+			[(id)aCommand.firstResponder updateEnvironment:res];
+	}
+	else // OakTextView
+	{
+		[self.textView updateEnvironment:res];
+	}
+}
+
+- (void)performBundleItem:(bundles::item_ptr)anItem
+{
+	if(anItem->kind() == bundles::kItemTypeTheme)
+	{
+		self.documentView.textView.themeUUID = [NSString stringWithCxxString:anItem->uuid()];
+	}
+	else
+	{
+		[self showWindow:self];
+		[self makeTextViewFirstResponder:self];
+		[self.textView performBundleItem:anItem];
+	}
+}
+
+- (void)selectRange:(text::range_t const&)range inDocument:(OakDocument*)aDocument
+{
+	if(range != text::range_t::undefined)
+		aDocument.selection = to_ns(range);
+	[self openItems:@[ @{ @"identifier": aDocument.identifier.UUIDString } ] closingOtherTabs:NO activate:YES];
+}
+
+@end

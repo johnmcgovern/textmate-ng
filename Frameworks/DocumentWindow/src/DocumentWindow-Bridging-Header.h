@@ -36,6 +36,34 @@
 // kUserDefaultsHTMLOutputPlacementKey, which ProjectLayoutView observes.
 #import <Preferences/Keys.h>
 
+// What DocumentWindowController itself needs. Deliberately absent from this list
+// is DocumentWindowController.h: it declares the class, and the class is the
+// Swift — importing it would give DocumentWindowController two declarations,
+// exactly as importing Find.h into Find's bridging header would. The ObjC++
+// category in DocumentWindowSupport.mm imports it instead, which is also why
+// that file can call into the Swift but not the other way round.
+//
+// Several of these headers carry C++ in member signatures — OakDocument's
+// scmStatus and variables, OakCommand's -executeWithInput:…, OakTextView's
+// -updateEnvironment: — and the importer drops precisely those. That is the same
+// bargain Find-Bridging-Header.h makes; the dropped members are reached through
+// DocumentWindowSupport.h instead.
+#import <document/OakDocument.h>
+#import <document/OakDocumentController.h>
+#import <OakTabBarView/OakTabBarView.h>
+#import <FileBrowser/FileBrowserViewController.h>
+#import <HTMLOutputWindow/HTMLOutputWindow.h>
+#import <OakFilterList/FileChooser.h>
+#import <OakAppKit/OakPasteboard.h>
+#import <OakAppKit/NSMenuItem Additions.h>
+#import <kvdb/kvdb.h>
+
+// Find, FFSearchTarget and FindDelegate. FindTypes.h keeps the text::range_t in
+// -selectRange:inDocument:, which the importer drops — the category implements
+// that one.
+#import <Find/Find.h>
+
 #import "SelectGrammarResponse.h"
 #import "DWOutputType.h"
+#import "DWScopeContext.h"
 #import "DocumentWindowSupport.h"

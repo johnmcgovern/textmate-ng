@@ -137,3 +137,97 @@ void test_unsticking_an_unknown_document_is_harmless ()
 	[controller setDocument:Doc(@"a") sticky:NO];
 	OAK_ASSERT(![controller isDocumentSticky:Doc(@"a")]);
 }
+
+// ==================================================================
+// = The ObjC selector surface the Swift port has to keep            =
+// ==================================================================
+//
+// Written *after* the port, because the port lost a method and nothing caught
+// it: -goToRelatedFile: was simply not carried across, and the whole suite
+// stayed green because no test and no compiler check reaches an action method.
+// It was found by opening the app and noticing the menu item was disabled.
+//
+// Two things make that failure mode easy to hit here, and both are silent:
+//
+//   * Action methods are looked up by selector through -targetForAction:. A
+//     missing one is a greyed-out menu item, never a build error.
+//   * OakTabBarViewDelegate is @optional. A delegate method whose Swift
+//     spelling does not match the imported name still compiles — it just never
+//     gets called, so the tab bar quietly loses its context menu or its
+//     double-click behaviour.
+//
+// So this pins the surface by selector rather than by Swift signature: every
+// action in DocumentWindowController.h, both tab-bar protocols, and the four
+// C++-typed selectors that live on the ObjC++ category. -respondsToSelector: is
+// the right check precisely because it is what AppKit itself does.
+
+static void assert_responds (SEL selector)
+{
+	OAK_ASSERT([DocumentWindowController instancesRespondToSelector:selector]);
+}
+
+void test_document_window_controller_keeps_its_action_methods ()
+{
+	SEL const actions[] = {
+		@selector(newFolder:), @selector(newDocumentInTab:), @selector(newDocumentInDirectory:),
+		@selector(moveDocumentToNewWindow:), @selector(mergeAllWindows:),
+		@selector(goToRelatedFile:), @selector(selectNextTab:), @selector(selectPreviousTab:),
+		@selector(takeSelectedTabIndexFrom:), @selector(toggleSticky:),
+		@selector(toggleHTMLOutput:), @selector(moveFocus:),
+		@selector(performCloseTab:), @selector(performCloseSplit:), @selector(performCloseWindow:),
+		@selector(performCloseAllTabs:), @selector(performCloseOtherTabsXYZ:),
+		@selector(performCloseTabsToTheRight:), @selector(performCloseTabsToTheLeft:),
+		@selector(saveDocument:), @selector(saveDocumentAs:), @selector(saveAllDocuments:),
+		@selector(orderFrontFindPanel:), @selector(orderFrontRunCommandWindow:), @selector(goToFile:),
+		@selector(toggleFileBrowser:), @selector(revealFileInProject:), @selector(goToProjectFolder:),
+		@selector(goBack:), @selector(goForward:), @selector(goToParentFolder:),
+		@selector(goToComputer:), @selector(goToHome:), @selector(goToDesktop:),
+		@selector(goToFavorites:), @selector(goToSCMDataSource:), @selector(orderFrontGoToFolder:),
+		@selector(takeNewTabIndexFrom:), @selector(takeTabsToCloseFrom:), @selector(takeTabsToTearOffFrom:),
+		@selector(takeProjectPathFrom:), @selector(showWindow:), @selector(positionForWindowUnderCaret),
+	};
+
+	for(SEL selector : actions)
+		assert_responds(selector);
+}
+
+void test_document_window_controller_keeps_its_delegate_methods ()
+{
+	// OakTabBarViewDataSource is @required, so these would fail to compile if the
+	// spelling drifted — they are here so the @optional ones below sit beside the
+	// full picture rather than alone.
+	assert_responds(@selector(numberOfRowsInTabBarView:));
+	assert_responds(@selector(tabBarView:titleForIndex:));
+	assert_responds(@selector(tabBarView:pathForIndex:));
+	assert_responds(@selector(tabBarView:UUIDForIndex:));
+	assert_responds(@selector(tabBarView:isEditedAtIndex:));
+
+	// These are the @optional ones, and the reason this test exists.
+	assert_responds(@selector(tabBarView:shouldSelectIndex:));
+	assert_responds(@selector(tabBarView:didDoubleClickIndex:));
+	assert_responds(@selector(tabBarViewDidDoubleClick:));
+	assert_responds(@selector(menuForTabBarView:));
+	assert_responds(@selector(performDropOfTabItem:fromTabBar:index:toTabBar:index:operation:));
+
+	// FileBrowserDelegate and NSWindowDelegate.
+	assert_responds(@selector(fileBrowser:openURLs:));
+	assert_responds(@selector(fileBrowser:closeURL:));
+	assert_responds(@selector(windowShouldClose:));
+	assert_responds(@selector(windowWillClose:));
+}
+
+void test_document_window_controller_keeps_its_cxx_selectors ()
+{
+	// The four that stayed ObjC++ because a caller in another framework pins the
+	// signature — the same check t_be_interop.mm makes for BundleEditor, and the
+	// only evidence that the category on the Swift class actually linked.
+	assert_responds(@selector(variables));
+	assert_responds(@selector(updateEnvironment:forCommand:));
+	assert_responds(@selector(performBundleItem:));
+	assert_responds(@selector(selectRange:inDocument:));
+
+	// -scopeAttributes is OakTextViewDelegate's and is Swift, not ObjC++; it is
+	// here because it reads a C++-typed property and so is easy to mistake for a
+	// category method.
+	assert_responds(@selector(scopeAttributes));
+}

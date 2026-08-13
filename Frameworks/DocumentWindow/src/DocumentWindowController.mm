@@ -1,5 +1,6 @@
 #import "DocumentWindowController.h"
 #import "DocumentWindowControllerPrivate.h"
+#import "DocumentWindowSupport.h"
 #import "DWScopeContextCxx.h"
 #import "ProjectLayoutView.h"
 #import "SelectGrammarViewController.h"
@@ -44,41 +45,10 @@ static NSString* const kUserDefaultsHideStatusBarKey = @"hideStatusBar";
 static NSString* const kUserDefaultsDisableBundleSuggestionsKey = @"disableBundleSuggestions";
 static NSString* const kUserDefaultsGrammarsToNeverSuggestKey = @"grammarsToNeverSuggest";
 
-static bool can_reach_host (char const* host)
-{
-	bool res = false;
-	if(SCNetworkReachabilityRef ref = SCNetworkReachabilityCreateWithName(kCFAllocatorDefault, host))
-	{
-		SCNetworkReachabilityFlags flags;
-		if(SCNetworkReachabilityGetFlags(ref, &flags))
-		{
-			if(flags & kSCNetworkReachabilityFlagsReachable)
-				res = true;
-		}
-		CFRelease(ref);
-	}
-	return res;
-}
-
-static void show_command_error (std::string const& message, oak::uuid_t const& uuid, NSWindow* window = nil, std::string commandName = NULL_STR)
-{
-	bundles::item_ptr bundleItem = bundles::lookup(uuid);
-	if(commandName == NULL_STR)
-		commandName = bundleItem ? bundleItem->name() : "(unknown)";
-
-	NSAlert* alert = [[NSAlert alloc] init];
-	[alert setAlertStyle:NSAlertStyleCritical];
-	[alert setMessageText:[NSString stringWithCxxString:text::format("Failure running “%.*s”.", (int)commandName.size(), commandName.data())]];
-	[alert setInformativeText:[NSString stringWithCxxString:message] ?: @"No output"];
-	[alert addButtonWithTitle:@"OK"];
-	if(bundleItem)
-		[alert addButtonWithTitle:@"Edit Command"];
-
-	[alert beginSheetModalForWindow:window completionHandler:^(NSModalResponse button){
-		if(button == NSAlertSecondButtonReturn)
-			[BundleEditor.sharedInstance revealBundleItem:bundleItem];
-	}];
-}
+// can_reach_host and show_command_error moved to DocumentWindowSupport.mm as
+// DWCanReachBundleServer and DWShowCommandError — the first because REST_API is
+// a preprocessor define Swift cannot see, the second because its uuid parameter
+// is C++.
 
 @interface DocumentWindowController () <NSWindowDelegate, NSTouchBarDelegate, OakTabBarViewDelegate, OakTabBarViewDataSource, OakTextViewDelegate, OakUserDefaultsObserver, FileBrowserDelegate, FindDelegate>
 {
@@ -416,8 +386,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	{
 		if(doc.isDocumentEdited && doc.path)
 		{
-			settings_t const settings = settings_for_path(to_s(doc.virtualPath ?: doc.path), to_s(doc.fileType), path::parent(to_s(doc.path)));
-			if(settings.get(kSettingsSaveOnBlurKey, false))
+			if(DWShouldSaveOnBlur(doc))
 			{
 				if([doc isEqual:self.selectedDocument])
 					[_textView updateDocumentMetadata];
@@ -655,7 +624,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	NSString* path = userInfo[FileBrowserPathKey];
 
 	NSIndexSet* indexSet = [_documents indexesOfObjectsPassingTest:^BOOL(OakDocument* doc, NSUInteger idx, BOOL* stop){
-		return doc.isDocumentEdited == NO && path::is_child(to_s(doc.path), to_s(path));
+		return doc.isDocumentEdited == NO && DWIsChildPath(doc.path, path);
 	}];
 
 	[self closeTabsAtIndexes:indexSet askToSaveChanges:NO createDocumentIfEmpty:YES activate:NO];
@@ -1012,13 +981,12 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 
 - (void)didOpenDocuemntInTextView:(OakTextView*)textView
 {
-	for(auto const& item : bundles::query(bundles::kFieldSemanticClass, "callback.document.did-open", [textView scopeContext], bundles::kItemTypeMost, oak::uuid_t(), false))
-		[textView performBundleItem:item];
+	DWPerformDidOpenCallbacks(textView);
 }
 
 - (void)openAndSelectDocument:(OakDocument*)document activate:(BOOL)activateFlag
 {
-	[document loadModalForWindow:self.window completionHandler:^(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID){
+	DWLoadDocumentModalForWindow(document, self.window, ^(OakDocumentIOResult result, NSString* errorMessage, NSString* filterUUID){
 		if(result == OakDocumentIOResultSuccess)
 		{
 			BOOL showBundleSuggestions = ![NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsDisableBundleSuggestionsKey];
@@ -1030,7 +998,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 				if(_bundlesAlreadySuggested)
 					grammars = [grammars filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"NOT (bundle IN %@)", _bundlesAlreadySuggested]];
 
-				if([grammars count] && can_reach_host([[[NSURL URLWithString:@(REST_API)] host] UTF8String]))
+				if([grammars count] && DWCanReachBundleServer())
 				{
 					self.bundlesAlreadySuggested = [(_bundlesAlreadySuggested ?: @[ ]) arrayByAddingObject:[grammars firstObject].bundle];
 
@@ -1062,22 +1030,22 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 					}];
 				}
 
-				std::string const docAttributes = document.path ? "attr.file.unknown-type" : "attr.untitled";
-				document.fileType = to_ns(settings_for_path(to_s(document.virtualPath ?: document.path), docAttributes, to_s(self.projectPath)).get(kSettingsFileTypeKey, "text.plain"));
+				document.fileType = DWDefaultFileTypeForDocument(document, self.projectPath);
 			}
 
 			if(activateFlag)
 				[self makeTextViewFirstResponder:self];
 
-			crash_reporter_info_t info("old selected document ‘%s’, new selected document ‘%s’", [_selectedDocument.displayName UTF8String] ?: "nil", [document.displayName UTF8String] ?: "nil");
-			self.selectedDocument = document;
-			[self performSelector:@selector(didOpenDocuemntInTextView:) withObject:self.documentView.textView afterDelay:0];
-			[document close];
+			DWWithCrashReporterInfo([NSString stringWithFormat:@"old selected document ‘%@’, new selected document ‘%@’", _selectedDocument.displayName ?: @"nil", document.displayName ?: @"nil"], ^{
+				self.selectedDocument = document;
+				[self performSelector:@selector(didOpenDocuemntInTextView:) withObject:self.documentView.textView afterDelay:0];
+				[document close];
+			});
 		}
 		else
 		{
 			if(filterUUID)
-				show_command_error(to_s(errorMessage), filterUUID);
+				DWShowCommandError(errorMessage, filterUUID, nil);
 
 			// Close the tab that failed to open
 			NSUInteger i = [_documents indexOfObject:document];
@@ -1087,7 +1055,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 			if(_documents.count == 0)
 				[self close];
 		}
-	}];
+	});
 }
 
 - (IBAction)saveDocument:(id)sender
@@ -1104,30 +1072,30 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	{
 		NSString* const suggestedFolder  = self.untitledSavePath;
 		NSString* const suggestedName    = [doc displayNameWithExtension:YES];
-		[OakSavePanel showWithPath:suggestedName directory:suggestedFolder fowWindow:self.window encoding:encoding::type(to_s(doc.diskNewlines), to_s(doc.diskEncoding)) fileType:doc.fileType completionHandler:^(NSString* path, encoding::type const& encoding){
+		DWShowSavePanelForDocument(doc, suggestedName, suggestedFolder, self.window, ^(NSString* path, NSString* newlines, NSString* charset){
 			if(!path)
 				return;
 
-			std::vector<std::string> const& paths = path::expand_braces(to_s(path));
-			ASSERT_LT(0, paths.size());
+			NSArray<NSString*>* paths = DWExpandBraces(path);
+			ASSERT_LT(0, paths.count);
 
-			doc.path = to_ns(paths[0]);
-			doc.diskNewlines = to_ns(encoding.newlines());
-			doc.diskEncoding = to_ns(encoding.charset());
+			doc.path = paths[0];
+			doc.diskNewlines = newlines;
+			doc.diskEncoding = charset;
 
 			// if(doc.identifier == _scratchDocument)
 			// 	self.scratchDocument = nil;
 
-			if(paths.size() > 1)
+			if(paths.count > 1)
 			{
 				// FIXME check if paths[0] already exists (overwrite)
 
 				NSMutableArray<OakDocument*>* documents = [NSMutableArray arrayWithObject:doc];
-				for(size_t i = 1; i < paths.size(); ++i)
+				for(NSUInteger i = 1; i < paths.count; ++i)
 				{
-					OakDocument* newDocument = [OakDocumentController.sharedInstance documentWithPath:to_ns(paths[i])];
-					newDocument.diskNewlines = to_ns(encoding.newlines());
-					newDocument.diskEncoding = to_ns(encoding.charset());
+					OakDocument* newDocument = [OakDocumentController.sharedInstance documentWithPath:paths[i]];
+					newDocument.diskNewlines = newlines;
+					newDocument.diskEncoding = charset;
 					[documents addObject:newDocument];
 				}
 
@@ -1135,7 +1103,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 			}
 
 			[self saveDocumentsUsingEnumerator:@[ doc ].objectEnumerator completionHandler:nil];
-		}];
+		});
 	}
 }
 
@@ -1147,14 +1115,14 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 
 	NSString* const suggestedFolder = [doc.path stringByDeletingLastPathComponent] ?: self.untitledSavePath;
 	NSString* const suggestedName   = [doc.path lastPathComponent] ?: [doc displayNameWithExtension:YES];
-	[OakSavePanel showWithPath:suggestedName directory:suggestedFolder fowWindow:self.window encoding:encoding::type(to_s(doc.diskNewlines), to_s(doc.diskEncoding)) fileType:doc.fileType completionHandler:^(NSString* path, encoding::type const& encoding){
+	DWShowSavePanelForDocument(doc, suggestedName, suggestedFolder, self.window, ^(NSString* path, NSString* newlines, NSString* charset){
 		if(!path)
 			return;
 		doc.path = path;
-		doc.diskNewlines = to_ns(encoding.newlines());
-		doc.diskEncoding = to_ns(encoding.charset());
+		doc.diskNewlines = newlines;
+		doc.diskEncoding = charset;
 		[self saveDocumentsUsingEnumerator:@[ doc ].objectEnumerator completionHandler:nil];
-	}];
+	});
 }
 
 - (void)saveDocumentsUsingEnumerator:(NSEnumerator*)anEnumerator completionHandler:(void(^)(OakDocumentIOResult result))callback
@@ -1176,7 +1144,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 			}
 		}];
 
-		[document saveModalForWindow:self.window completionHandler:^(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID){
+		DWSaveDocumentModalForWindow(document, self.window, ^(OakDocumentIOResult result, NSString* errorMessage, NSString* filterUUID){
 			[NSNotificationCenter.defaultCenter removeObserver:token];
 			if(result == OakDocumentIOResultSuccess)
 			{
@@ -1188,14 +1156,14 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 				{
 					[self.window.attachedSheet orderOut:self];
 					if(filterUUID)
-							show_command_error(to_s(errorMessage), filterUUID, self.window);
+							DWShowCommandError(errorMessage, filterUUID, self.window);
 					else	[[NSAlert tmAlertWithMessageText:[NSString stringWithFormat:@"The document “%@” could not be saved.", document.displayName] informativeText:(errorMessage ?: @"Please check Console output for reason.") buttons:@"OK", nil] beginSheetModalForWindow:self.window completionHandler:nil];
 				}
 
 				if(callback)
 					callback(result);
 			}
-		}];
+		});
 	}
 	else
 	{
@@ -1413,11 +1381,8 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 		NSString* projectPath = self.defaultProjectPath ?: self.fileBrowser.path ?: [newDocument.path stringByDeletingLastPathComponent];
 		if(projectPath)
 		{
-			std::map<std::string, std::string> const map = { { "projectDirectory", to_s(projectPath) } };
-			settings_t const settings = settings_for_path(NULL_STR, scope::scope_t(), to_s(projectPath), map);
-			std::string const userProjectDirectory = settings.get(kSettingsProjectDirectoryKey, NULL_STR);
-			if(path::is_absolute(userProjectDirectory))
-				projectPath = [NSString stringWithCxxString:path::normalize(userProjectDirectory)];
+			if(NSString* userProjectDirectory = DWUserProjectDirectoryForPath(projectPath))
+				projectPath = userProjectDirectory;
 		}
 		else if(NSString* urlString = [NSUserDefaults.standardUserDefaults stringForKey:kUserDefaultsInitialFileBrowserURLKey])
 		{
@@ -1504,7 +1469,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 		{
 			DocumentWindowController* controller = [DocumentWindowController new];
 			controller.documents = documents;
-			if(path::is_child(to_s(documents.firstObject.path), to_s(self.projectPath)))
+			if(DWIsChildPath(documents.firstObject.path, self.projectPath))
 				controller.defaultProjectPath = self.projectPath;
 			[controller openAndSelectDocument:documents.firstObject activate:YES];
 			[controller showWindow:self];
@@ -1947,13 +1912,8 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 
 	if(OakPasteboardEntry* entry = [OakPasteboard.findPasteboard current])
 	{
-		std::string str = to_s(entry.string);
-		if(regexp::search("\\A.*?(\\.|/).*?:\\d+\\z", str))
-		{
-			if([entry.string hasPrefix:fc.path])
-					fc.filterString = [NSString stringWithCxxString:path::relative_to(str, to_s(fc.path))];
-			else	fc.filterString = entry.string;
-		}
+		if(NSString* filterString = DWFindClipboardFilterString(entry.string, fc.path))
+			fc.filterString = filterString;
 	}
 
 	[fc showWindowRelativeToFrame:[self.window convertRectToScreen:[self.textView convertRect:[self.textView visibleRect] toView:nil]]];
@@ -2019,62 +1979,10 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	if(!self.selectedDocument.path)
 		return (void)NSBeep();
 
-	std::string const documentPath = to_s(self.selectedDocument.path);
-	std::string const documentDir  = path::parent(documentPath);
-	std::string const documentName = path::name(documentPath);
-	std::string const documentBase = path::strip_extensions(documentName);
+	NSString* path = DWRelatedFilePath(self.selectedDocument, _documents, self.projectPath, self.scopeAttributes, self.scopeContext);
+	if(!path)
+		return (void)NSBeep();
 
-	std::set<std::string> candidates = { documentName };
-	for(OakDocument* document in _documents)
-	{
-		if(documentDir == path::parent(to_s(document.path)) && documentBase == path::strip_extensions(path::name(to_s(document.path))))
-			candidates.insert(path::name(to_s(document.path)));
-	}
-
-	auto map = self.selectedDocument.variables;
-	auto const& scm = self.scopeContext.effectiveSCMVariablesMap;
-	map.insert(scm.begin(), scm.end());
-	if(self.projectPath)
-		map["projectDirectory"] = to_s(self.projectPath);
-
-	settings_t const settings = settings_for_path(to_s(self.selectedDocument.virtualPath ?: self.selectedDocument.path), to_s(self.selectedDocument.fileType) + " " + to_s(self.scopeAttributes), path::parent(documentPath), map);
-	std::string const customCandidate = settings.get(kSettingsRelatedFilePathKey, NULL_STR);
-
-	if(customCandidate != NULL_STR && customCandidate != documentPath && ([_documents indexOfObjectPassingTest:^BOOL(OakDocument* doc, NSUInteger, BOOL*){ return customCandidate == to_s(doc.path); }] != NSNotFound || path::exists(customCandidate)))
-		return [self openItems:@[ @{ @"path": [NSString stringWithCxxString:customCandidate] } ] closingOtherTabs:NO activate:YES];
-
-	for(auto const& entry : path::entries(documentDir))
-	{
-		std::string const name = entry->d_name;
-		if(entry->d_type == DT_REG && documentBase == path::strip_extensions(name) && path::extensions(name) != "")
-		{
-			std::string const content = path::content(path::join(documentDir, name));
-			if(utf8::is_valid(content.data(), content.data() + content.size()))
-				candidates.insert(name);
-		}
-	}
-
-	path::glob_t const excludeGlob(settings.get(kSettingsExcludeKey, ""));
-	path::glob_t const binaryGlob(settings.get(kSettingsBinaryKey, ""));
-
-	std::vector<std::string> v;
-	for(auto const& name : candidates)
-	{
-		if(name == documentName || !binaryGlob.does_match(name) && !excludeGlob.does_match(name))
-			v.push_back(name);
-	}
-
-	if(v.size() == 1)
-	{
-		if(customCandidate == NULL_STR || customCandidate == documentPath)
-			return (void)NSBeep();
-		v.push_back(customCandidate);
-	}
-
-	std::vector<std::string>::const_iterator it = std::find(v.begin(), v.end(), documentName);
-	ASSERT(it != v.end());
-
-	NSString* path = [NSString stringWithCxxString:path::join(documentDir, v[((it - v.begin()) + 1) % v.size()])];
 	[self openItems:@[ @{ @"path": path } ] closingOtherTabs:NO activate:YES];
 }
 
@@ -2321,8 +2229,7 @@ static NSTouchBarItemIdentifier kTouchBarFavoritesItemIdentifier = @"com.j23soft
 
 + (NSString*)sessionPath
 {
-	static NSString* const res = [NSString stringWithCxxString:path::join(oak::application_t::support("Session"), "Info.plist")];
-	return res;
+	return DWSessionPath();
 }
 
 static NSUInteger DisableSessionSavingCount = 0;
@@ -2453,7 +2360,7 @@ static NSUInteger DisableSessionSavingCount = 0;
 	NSMutableArray* docs = [NSMutableArray array];
 	for(OakDocument* document in _documents)
 	{
-		if(!includeUntitled && (!document.path || !path::exists(to_s(document.path))))
+		if(!includeUntitled && (!document.path || !DWPathExists(document.path)))
 			continue;
 
 		NSMutableDictionary* doc = [NSMutableDictionary dictionary];

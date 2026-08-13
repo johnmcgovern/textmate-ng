@@ -38,3 +38,12 @@ NSString* OakEventString (NSEvent* anEvent);
 // stops existing there is one place to change.
 void* OakPushSymbolicHotKeyModeAllDisabled (void);
 void OakPopSymbolicHotKeyMode (void* token);
+
+// ============================================================
+// = Extended attributes                                      =
+// ============================================================
+
+// path::get_attr for `com.apple.metadata:_kMDItemUserTags` — the bplist Finder
+// stores a file's tags in. Nil when the file has no such attribute, which is the
+// NULL_STR check on the C++ side and the common case.
+NSData* OakUserTagsAttributeForURL (NSURL* url);

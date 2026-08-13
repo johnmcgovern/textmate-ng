@@ -331,3 +331,33 @@ control run did the thing before comparing outcomes.
    when a `@MainActor` class adopts a plain ObjC protocol whose delivery is
    main-thread by contract. State *why* it is main-thread — `OakObserveUserDefaults`
    registers with `queue: NSOperationQueue.mainQueue`, and that is checkable.
+
+The next four are from DocumentWindowController (2026-08-12). The first three are
+things a `grep` for `std::` in method signatures cannot find, and the fourth is
+the one that actually shipped a broken feature.
+
+15. **Survey block parameters, not just method parameters.** C++ in a *block*
+   signature makes the whole method uncallable from Swift, not just the block —
+   `-loadModalForWindow:completionHandler:` and `-saveModalForWindow:…` hand their
+   block an `oak::uuid_t const&`, and that alone put the document-open path and
+   all three save paths behind shims. Grep for `(^)` in any header the port
+   touches, then read each block's parameter list.
+16. **ObjC variadic methods cannot be called from Swift at all.** `-addButtons:`
+   and `+tmAlertWithMessageText:informativeText:buttons:` have no C++ in them and
+   no survey looking for C++ will find them. Grep for `, ...)` in the headers.
+17. **"Dropped by the importer" is not uniform, so check the member.** Under
+   `SWIFT_OBJC_INTEROP_MODE=objcxx` a `std::map` *return type* is dropped, but a
+   `text::range_t const&` *parameter* imports fine. That decides whether a Swift
+   class can declare a protocol conformance or has to leave it on the ObjC++
+   category: `OakTextViewDelegate` yes, `FindDelegate` no, and both protocols have
+   exactly one C++-typed member.
+18. **Pin the ObjC selector surface with `-instancesRespondToSelector:`.** Two
+   classes of defect are invisible to the compiler *and* to a green suite:
+   an action method that was never ported (a greyed-out menu item, because
+   `-targetForAction:` looks up by selector), and an `@optional` protocol method
+   whose Swift spelling does not match the imported name — that one compiles,
+   satisfies nothing, exposes no selector, and the feature silently does nothing.
+   `-performDropOfTabItem:fromTabBar:index:toTabBar:index:operation:` was written
+   with Swift's `from:`/`to:` and tab drag-and-drop was dead with no warning. A
+   test listing the selectors caught it on its first run; `t_be_interop.mm:80`
+   already did this for one selector, and it generalises.

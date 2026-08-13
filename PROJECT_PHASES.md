@@ -2540,8 +2540,13 @@ outcomes** — a control that silently did nothing agrees with every hypothesis.
 #### DocumentWindow — three leaves, and the blocker under the fourth (2026-08-10/11)
 
 **Three of DocumentWindow's four files are Swift**, the framework went from zero
-tests to **58**, and the window controller — the largest single file left in the
+tests to **48**, and the window controller — the largest single file left in the
 migration — is unblocked rather than ported.
+
+> Corrected 2026-08-12: this said **58**, and the figure was never measured. The
+> bundle ran 48 here and 51 after the controller port added three. This is the
+> same arithmetic-instead-of-measurement mistake rule 10 was written for, and it
+> propagated into `ide/NEXT_SESSION_HANDOFF.md` before anyone counted.
 
 `SelectGrammarViewController` (149), `ProjectLayoutView` (390) and
 `OakRunCommandWindowController` (140) are 750 lines of Swift plus a 26-line
@@ -2631,3 +2636,133 @@ Two things the flow itself taught:
   is a different build, and this project has a history of config-specific
   failures. Making a release forces a Release build and a run. Nothing broke, but
   nothing had been checked either.
+
+### Phase 4 — DocumentWindowController (2026-08-12)
+
+The largest single file in the migration is Swift. `DocumentWindowController.mm`
+(2573) is `DocumentWindowController.swift` (**2343**) over a `DocumentWindowSupport.mm`
+that grew from 26 lines to **415**. Measured, not subtracted: `src/`'s `.mm` and
+`.h` together fell from **3534 to 1558**, and the `.mm` alone from 3111 to 927.
+Suite **586 across 35 bundles**, from 583.
+
+`DWScopeContext` (`d7f43ebd`) had already taken the seven C++ ivars out, so the
+class had no C++ members left to argue about. What the port actually cost was
+somewhere else entirely.
+
+#### The port was done in two commits, and the first one is why the second worked
+
+`2ff2a1de` moved every piece of C++ out of the controller **while it was still
+ObjC++**, so the existing 583 tests judged each shim before any Swift existed.
+That ordering is worth repeating: at the end of it the controller held five
+C++-typed selectors and five `std::` uses Swift expresses directly, and the diff
+that followed was a translation rather than a translation *and* a boundary
+design. Every previous port in this project did both at once.
+
+#### The predicted boundary was wrong three ways
+
+The handoff written the day before said ten C++-typed selectors. There are five,
+and only **four** are forced:
+
+| selector | what pins it |
+| --- | --- |
+| `-variables` | `OakTextViewDelegate`; `OakTextView.mm:1923` does `res << [self.delegate variables]` |
+| `-updateEnvironment:forCommand:` | `OakCommand.mm:592` finds it via `-targetForAction:` with a `std::map&` |
+| `-performBundleItem:` | `OakTextView` and `AppController` both send a `bundles::item_ptr` |
+| `-selectRange:inDocument:` | `FindDelegate` |
+
+`-titleForDocument:withSetting:` had **no caller outside the class**, so its
+`std::string` was a free choice, not a constraint; it became a `DWTitleSetting`
+enum. And `-scopeAttributes` was expected to be ObjC++ for the reason the handoff
+gave and is Swift instead: its one C++ line moved to `DWSCMStatusAttribute`.
+
+**The thing nobody had written down was C++ in *block* signatures.**
+`-loadModalForWindow:completionHandler:` and `-saveModalForWindow:…` hand their
+block an `oak::uuid_t const&`, and `OakSavePanel` both takes an `encoding::type`
+and passes one back. A block parameter Swift cannot name makes the *whole method*
+uncallable, which put the document-open path and all three save paths behind
+shims — not the stray line the first survey suggested. Find met this at
+`FindSupport.h:118` but only where the block ignored the C++ argument; here all
+three use it, so these convert: uuid to `NSString`, encoding to a
+newlines/charset pair.
+
+A third category turned up at the call site: **ObjC variadic methods**.
+`-addButtons:` and `+tmAlertWithMessageText:informativeText:buttons:` cannot be
+called from Swift at all. Both are loops over `-addButtonWithTitle:`, so they
+inline exactly, but a survey that greps for `std::` will never find them.
+
+#### "Dropped by the importer" is not uniform, and the difference decides conformance
+
+`OakTextViewDelegate` and `FindDelegate` each have exactly one C++-typed member,
+and they behave oppositely under `SWIFT_OBJC_INTEROP_MODE=objcxx`:
+
+- `-variables` returns a `std::map` — **dropped**. Swift's view of the protocol
+  is `-scopeAttributes` alone, so the Swift class conforms and the category adds
+  the missing method.
+- `-selectRange:inDocument:` takes a `text::range_t const&` — **imported fine**.
+  Conforming in Swift would have meant naming and comparing that type, so
+  `FindDelegate` stays on the ObjC++ category and `Find.delegate` is assigned
+  through `DWSetFindDelegate`.
+
+So "the importer drops C++" is not a rule to plan against. Check the member.
+
+#### Two defects that a green suite, a clean build and a successful launch all missed
+
+Both were found by running the app, which is the fourth time this project has
+learned the same thing, and both were invisible to every compile-time check:
+
+1. **`-goToRelatedFile:` was not carried across at all.** Action methods are
+   dispatched by selector through `-targetForAction:`, so a missing one is a
+   greyed-out menu item and never a build error — and no test in this project
+   reaches an action method. Found by opening the Navigate menu and seeing it
+   disabled.
+
+2. **`-performDropOfTabItem:fromTabBar:index:toTabBar:index:operation:` exposed
+   no selector.** It was written with Swift's preferred `from:`/`to:` labels
+   rather than the importer's `fromTabBar:`/`toTabBar:`, and
+   `OakTabBarViewDelegate` is `@optional` — so it compiled, satisfied no
+   requirement, and **dragging a tab between windows would have silently done
+   nothing**. No warning anywhere.
+
+The second is the more dangerous shape and is the reason for the three new tests:
+they pin the ObjC surface with `-instancesRespondToSelector:` rather than by
+Swift signature — every action in the public header, both tab-bar protocols, the
+file-browser and window delegates, and the four C++-typed category selectors.
+That check caught defect 2 on its first run. It is the same thing
+`t_be_interop.mm:80` does for BundleEditor, generalised.
+
+#### Verification in the app
+
+Not just "it launched": the window title read
+`DocumentWindowSupport.mm (DocumentWindow) — src (git: master)`, which exercises
+`DWTitleForDocument`, `settings_for_path` and `DWScopeContext`'s SCM variables in
+one string. Three tabs open and switch; the file browser toggles and
+`-validateMenuItem:` flips its title with it; **Go to Related File** jumps
+`.mm` → `.h`, which is the whole of `DWRelatedFilePath` — `path::entries`, the
+two globs, the byte-wise rotation — running through the Swift.
+
+The tab-bar context menu was checked last and matters most, because it is the one
+piece hand-rolled from a C++ designated-initializer `MBMenu`. It builds nine
+items and shows eight: both separators render, and the hidden row is
+"Close Tabs to the Left", the `.alternate` item under Option — an item built
+*without* `isAlternate` would have been visible. Clicking "Close Other Tabs" took
+three tabs to one, which exercises its `representedObject` index set,
+`-takeTabsToCloseFrom:` and the target-assignment loop that works around the
+fullscreen delegate-targeting bug.
+
+#### Carried over deliberately rather than tidied
+
+- `-goToRelatedFile:`'s candidate filter reads
+  `name == documentName || !binaryGlob.does_match(name) && !excludeGlob.does_match(name)` —
+  mixed `&&` and `||` without parentheses, so the current document survives a glob
+  that would exclude it. The whole function moved to `DocumentWindowSupport.mm`
+  intact rather than being half-translated, which is also what preserves the
+  `std::set` ordering the rotation depends on.
+- `-validateMenuItem:`'s tab-bar action list names `takeNewTabIndexFrom::` — two
+  colons, a selector no method has. Kept verbatim; correcting it would change
+  which items get index-set validation, and the change it would make is nothing,
+  because that item's represented object is always a one-element set.
+- `-didOpenDocuemntInTextView:` keeps its misspelling: it is reached by
+  `-performSelector:`.
+- `crash_reporter_info_t` in `-openAndSelectDocument:` is RAII, so its live range
+  *was* the rest of the block. `DWWithCrashReporterInfo` makes that scope explicit
+  rather than dropping the breadcrumb.

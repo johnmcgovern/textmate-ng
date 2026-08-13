@@ -1,0 +1,21 @@
+// The ObjC surface the OakAppKit Swift code sees (Phase 4).
+//
+// Prelude first — its C and C++ layers plus Cocoa only, never prelude.m/.mm,
+// which would pull WebKit/Quartz/AddressBook through the importer on every Swift
+// compile. The reasoning is CommitWindow-Bridging-Header.h's and has not changed.
+//
+// This framework is the bottom of the UI stack: 31 other files import
+// OakUIConstructionFunctions.h and 16 import OakAppKit.h, so almost nothing here
+// depends on anything above it. That is why the list below is short, and it is
+// expected to stay short — a header appearing here that belongs to a *consumer*
+// of OakAppKit is a layering mistake, not a missing import.
+//
+// Unlike BundleEditor and Find, this framework's ObjC++ can import its own
+// generated OakAppKit-Swift.h directly. That header emits `namespace OakAppKit`
+// from the module name under SWIFT_OBJC_INTEROP_MODE=objcxx, which clang rejects
+// only when the framework also has an ObjC *class* of that name — BundleEditor
+// does and needed BESwiftClasses.h; OakAppKit has no such class, only free
+// functions in OakAppKit.h. Check before adding one.
+#include "../../../Shared/PCH/prelude.cc"
+#import <Cocoa/Cocoa.h>
+#import <QuartzCore/QuartzCore.h>

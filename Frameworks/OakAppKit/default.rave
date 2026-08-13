@@ -1,10 +1,16 @@
 target "${dirname}" {
 	require OakFoundation bundles crash file io ns parse regexp settings text theme
+	# Stays a glob. Other ported frameworks list public headers by name, which
+	# would also keep OakAppKit-Bridging-Header.h out of the farm — but seven of
+	# these filenames contain a space ("NSAlert Additions.h"), and a brace list
+	# silently expands to *nothing* rather than failing. That exported zero
+	# headers and would have broken all 31 consumers; the glob is correct and the
+	# bridging header sitting unused in the farm is harmless.
 	headers src/*.h
 
 	files resources/* gfx/CloseButton/*.png "Resources"
 
-	sources src/*.{cc,mm}
+	sources src/*.{cc,mm,swift}
 	tests tests/t_*.{cc,mm}
 	frameworks Carbon Cocoa AudioToolbox Quartz
 	libraries sqlite3

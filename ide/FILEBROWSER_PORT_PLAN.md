@@ -9,6 +9,42 @@ Start by reading **the numbered rules at the end of `ide/FIND_PORT_HANDOFF.md`**
 There are 22 and 8 of them were earned by something that compiled, passed its
 tests, and was still wrong. The survey below is that checklist applied once.
 
+## Progress — 2026-08-14 (steps 1 and 2 of "Suggested order" done)
+
+Three commits landed on `master`, suite green at **605** (the re-measured 601
+baseline + this framework's first 4 tests), and **verified in the running app**
+against a git fixture: SCM badges (deleted/modified/added/untracked), the
+`git: <branch>` window title, and live FSEvents reload of a shell-created file
+all work. What no test reaches (rule 8) was checked by hand, not assumed.
+
+- `fc92d03f` — **tests stood up, constructibility settled.** The open question
+  is answered: **`FileBrowserViewController` IS constructible in a test process**
+  (`-init` is light; the view and the C++ cell machinery build lazily in
+  `-loadView`). So this framework's coverage can use instances. The commit also
+  pins rule 18's selector surface and adds the missing `tests tests/t_*.mm` line
+  to `default.rave`. Test file: `tests/t_file_browser_view_controller.mm`.
+- `3f6bcc0c` — **FSEventStream extracted.** The `std::shared_ptr<fs_events_t>`
+  ivar is gone from `FSEventsManager.mm` (now C++-free); the struct moved verbatim
+  into a new ObjC++ `FSEventStream` class the manager holds by pointer. DWScope-
+  Context treatment, done. FSEventsManager itself is now Swift-portable.
+- `d3619687` — **SCMManager.h is C++-free.** The `std::map` `status` property and
+  the rule-15 `scm::status::type` block method moved to a new `SCMManagerCxx.h`
+  category (the DWScopeContextCxx split); `FileItemObserver.mm` /
+  `FileItemSCMStatus.mm` gained the one Cxx import and are otherwise untouched.
+  Note found in passing: **`-addObserverToFileAtURL:usingBlock:` has zero callers
+  anywhere** — a later cleanup can just delete it.
+
+**What is left, in the plan's order:** step 3, the leaves (`FileBrowserView`,
+`FileBrowserOutlineView`, `OFB/*`, `FileItemTableCellView`), then
+`FileBrowserDiskOperations`; step 4, `FileBrowserViewController.mm` (2328) last.
+Neither manager nor the leaves are Swift yet — only their C++ boundaries are now
+clear. The Swift translation of FSEventsManager/SCMManager can go with the leaves.
+
+Two facts for the next session: the ObjC++ tests compile **ARC-off**, and this
+framework's public headers carry **no Foundation import** (they lean on the PCH,
+like `FileBrowserNotifications.h`) — match that when adding public headers.
+
+
 ## State you are starting from
 
 - `master` clean and in sync with `GH-johnmcgovern`, **alpha.10 shipped**

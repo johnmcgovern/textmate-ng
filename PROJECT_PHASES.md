@@ -2766,3 +2766,163 @@ fullscreen delegate-targeting bug.
 - `crash_reporter_info_t` in `-openAndSelectDocument:` is RAII, so its live range
   *was* the rest of the block. `DWWithCrashReporterInfo` makes that scope explicit
   rather than dropping the breadcrumb.
+
+### Phase 4 — OakAppKit, leaf-first (2026-08-13)
+
+Eight files Swift, **1076 lines of Swift** against `src/`'s `.mm` falling from
+**4825 to 3922, measured**. Tests **601 across 35 bundles**, from 586; this
+framework went from 14 to **29**.
+
+Ported: `OakPopOutAnimation`, `OakKeyEquivalentView`, `OakBorderlessPanel`,
+`OakZoomingIcon`, `OakFinderTag`, `NSImage Additions`, `OakScopeBarView`,
+`OakTransitionViewController`. `OakAppKitSupport.{h,mm}` is the framework's
+declared C++ boundary, on the DocumentWindowSupport model.
+
+#### Swift cannot export a global *anything* to ObjC, and this framework is full of globals
+
+The survey that mattered was not "how much C++ is in here" — it was "how much of
+the public surface is free functions". The answer reframed the work:
+
+| header | surface |
+| --- | --- |
+| `OakUIConstructionFunctions.h` | **14 free functions**, 31 consumers |
+| `OakAppKit.h` | 4 free functions, 16 consumers, no class at all |
+| `OakSound.h`, `OakToolTip.h`, `IOAlertPanel.h`, `OakPopOutAnimation.h` | free-function entry points |
+| `OakRolloverButton.h` | class **plus two `extern NSNotificationName const`** |
+| `OakView.h` | class **plus four `extern NSUInteger const`** masks |
+
+Swift can freely *call* a C function declared in the bridging header — that is
+what makes `OakAppKitSupport` work at all — but it can neither define one nor
+export a global constant. So a file in the left column cannot become Swift while
+its callers are ObjC++; it can only acquire a forwarder `.mm`, which is what
+`OakShowPopOutAnimation` now is (three lines) and what `OakRolloverButton.mm`
+would be reduced to (two constants). That is churn with no caller benefit until
+the consumers are Swift, and it is the same reasoning that puts `MenuBuilder`
+last.
+
+**A C++ default argument makes such a function doubly invisible**, because the
+call sites do not mention the parameter: `OakShowPopOutAnimation(view, rect,
+image, hidePrevious = YES)` is called both ways in OakTextView.mm, and
+`OakIsAlternateKeyOrMouseEvent` takes two.
+
+#### "It has a class, so it is portable" was wrong twice
+
+Both misses were found by reading the implementation after classifying from the
+header:
+
+- **`OakSyntaxFormatter` holds `parse::grammar_ptr _grammar`** — a C++ *ivar*, so
+  it is the `bundles::item_ptr` blocker again and needs the `DWScopeContext`
+  treatment rather than a translation.
+- **`NSSavePanel Additions` has a `+initialize`** registering a user default, and
+  a Swift extension cannot provide one. Porting it means finding that
+  registration a new home, which is a decision, not a port.
+
+#### Rule 11 cascades through headers that import other headers
+
+`OakRolloverButton` was ported and reverted. Defining the class in Swift gives it
+two declarations the moment anything imports `OakRolloverButton.h` — and
+`OakUIConstructionFunctions.h` imports it **at line 1**, while the bridging
+header needs that file for `OakControlFont` and `OakCreateCloseButton`. Every use
+then fails as `__ObjC.OakRolloverButton` vs `OakAppKit.OakRolloverButton`.
+Untangling it means splitting a header 31 files depend on, which deserves its own
+change. **Before porting a class, grep for its header in other public headers,
+not just in `.mm` files.**
+
+#### The seed ignored the Swift, silently, and a header list exported nothing
+
+Two build-wiring failures worth knowing because neither errored:
+
+- `Frameworks/OakAppKit/default.rave` said `sources src/*.{cc,mm}`. The seed
+  simply did not pick up the new `.swift`, and the ObjC++ then failed to find
+  `OakAppKit-Swift.h`. Every already-ported framework has `,swift` there.
+- Replacing `headers src/*.h` with an explicit brace list exported **zero**
+  headers instead of 28, because seven of these filenames contain a space
+  (`NSAlert Additions.h`) and a brace list expands to nothing rather than
+  failing. That would have broken all 31 consumers. The glob stays.
+
+#### Tests first, again, and again it caught something
+
+`t_appkit_leaves.mm` (15 tests) was written and run green against the ObjC++
+before any Swift existed. `test_borderless_panel_forces_style_mask` asserted what
+`OakBorderlessPanel` appears to do — OR in Borderless, mask out Titled — and
+**failed against the unported original**, because `NSWindowStyleMaskBorderless is
+0`. Borderless is the *absence* of Titled, not a bit beside it; that line has
+never done anything. Port-first, a Swift version "helpfully" making it meaningful
+would have been a behaviour change with a green suite agreeing.
+
+`OakFinderTag`'s label→colour switch is now pinned colour by colour: it is a
+seven-entry table, and renumbering it recolours every tagged file in the project
+while compiling and running perfectly.
+
+### The empty gutter — three years of shipped builds, one line (2026-08-13)
+
+**Line numbers, fold markers and bookmarks were invisible in every build of this
+fork on macOS 26, including every shipped alpha**, while upstream TextMate on the
+same machine rendered them. Reported by the user; fixed in `6b419366`.
+
+`OakBackgroundFillView -drawRect:` filled `aRect` unexamined. The view is created
+at `NSZeroRect` with `wantsLayer:YES`, and on macOS 26 — linked against the 26.5
+SDK, which is exactly why upstream escapes — AppKit gives such a view a
+backing-layer contents proxy sized to the **whole window** rather than clamped to
+the view, then asks `drawRect:` to draw that rect. So the 1-point divider between
+gutter and text obligingly filled 904×800 points with its line colour.
+
+Sibling order hid it almost everywhere: the divider paints *after* the gutter
+scroll view and *before* the text scroll view, so the text covered the overpaint
+and only the gutter stayed buried. **The grey strip everyone took for the gutter
+background was the divider's fill.** The fix is the discipline the view always
+owed its neighbours:
+
+```objc
+NSRectFill(NSIntersectionRect(aRect, self.bounds));
+```
+
+The gradient branch already used `self.bounds` and was never at fault. Every
+`OakCreateVerticalLine` divider in the app — file browser, HTML output — was
+liable to the same overpaint, so this likely fixes more than the gutter.
+
+#### Why it took so long, which is the transferable part
+
+Every cheap layer of evidence was not merely unhelpful but *actively misleading*,
+because all of it concerned the innocent party:
+
+- `drawRect:` ran, 28+ times, with partial invalidation working.
+- Its clip box, font (`Menlo-Regular 10pt`), colour, geometry and `CTLine` (one
+  glyph run, width 6.02) were all valid.
+- The layer tree was attached to the window, opacity 1, not hidden, unmasked,
+  with sane frames and `contentsRect {0,0,1,1}`.
+- Auto Layout reported **zero** conflicts, and the frames were textbook: gutter
+  `{{0,25},{48,743}}`, divider at 48, text at 49. No overlap.
+
+The bisect that worked, in order, each step ruling out a whole class of cause:
+
+1. **Force the drawn colour red.** Still invisible → not the colour.
+2. **Fill the column with a solid rect.** Still invisible → not text rendering.
+3. **Fill the entire view.** Still invisible → nothing this view paints lands.
+4. **Swap `GutterView` for a 12-line red `NSView`.** Still invisible → **the
+   view is innocent**; stop reading its code.
+5. **Set `borderWidth` and `backgroundColor` directly on the layers** — pure Core
+   Animation, no backing store, no `drawRect:` involved. Still invisible → the
+   subtree is *occluded*, not failing to render.
+6. **Walk every layer containing a point inside the gutter, front to back.**
+   Found the occluder on the first run: a `ContentLayer` of frame
+   `{{-48,-25},{904,800}}` hanging off a view one point wide.
+
+Step 4 is the one to reach for sooner. Replacing the suspect view with a trivial
+one costs ten minutes and would have skipped everything before it.
+
+#### Two wrong turns, both previously documented
+
+- **An identically-titled upstream window sat exactly over the fork's.** The
+  handoff warns about precisely this. From then on every capture went through
+  `screencapture -l <window-id>` with the id resolved via `CGWindowList` and
+  attributed to `TextMate-NG`, and upstream was quit outright.
+- **The screenshot pipeline was briefly suspected instead of the app.** Ruled out
+  by native captures and by sampling pixel values rather than eyeballing scaled
+  images.
+
+And the practice that ended the doubt, worth keeping for any run-and-look
+debugging: **embed a build stamp**. A `NSLog(@"BUILD %s %s", __DATE__, __TIME__)`
+logged at startup and checked against the compile minute makes "am I looking at
+my own code" a fact rather than an assumption — it is cheap, and it was checked
+before every decisive capture.

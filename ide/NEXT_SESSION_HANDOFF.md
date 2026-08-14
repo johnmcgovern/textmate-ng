@@ -1,11 +1,11 @@
 # Next-session handoff — TextMate-NG
 
-_Snapshot at end of session 2026-08-12. Point-in-time; when it disagrees with the
+_Snapshot at end of session 2026-08-13. Point-in-time; when it disagrees with the
 git log or the docs below, trust those. The section this file used to end with —
 "Next: port DocumentWindowController … now unblocked" — got three things wrong
 about that port, which is a fair warning about how much to trust the rest._
 
-## Where things stand (updated 2026-08-12)
+## Where things stand (updated 2026-08-13)
 
 - **Phase 2 is DONE.** Stream 3 (signing & notarization) landed: Developer ID
   `John McGovern (R22V2H7QF4)`, `bin/notarize` drives `notarytool`, and shipped
@@ -20,7 +20,10 @@ about that port, which is a fair warning about how much to trust the rest._
   purpose, to match the product name while the audience was still alpha-only.
   Now it does match, so there is no third move worth making.
 - **Six releases shipped so far:** alpha.3–alpha.5 on 2026-08-02/03, then
-  alpha.7 (2026-08-06), alpha.8 and alpha.9 (both 2026-08-10). Count what is
+  alpha.7 (2026-08-06), alpha.8 and alpha.9 (both 2026-08-10). **9 commits are
+  unreleased as of 2026-08-13, one of them the first user-visible fix since the
+  fork began** (line numbers, see below) — which makes alpha.10 worth cutting on
+  its own merits rather than to exercise the release flow. Count what is
   unreleased with `git rev-list --count v2026.7-alpha.9..HEAD` rather than by
   assertion — that number has been stated wrong here three times.
 - **Builds are downloadable.** `bin/release` publishes a notarized build to
@@ -35,12 +38,11 @@ about that port, which is a fair warning about how much to trust the rest._
   last port left `FindSupport.mm` (271) behind, which is why the directory fell
   by 1131 and not by 1402. What it cost, and the four new rules it earned, are in
   `ide/FIND_PORT_HANDOFF.md`.
-- **586 tests across 35 bundles**, green (2026-08-12; 76 of them Find's and **51**
-  DocumentWindow's, neither bundle existing a week ago). This bullet said 58 for
-  DocumentWindow and that was never right: the bundle ran **48** before three
-  selector-surface tests were added on 2026-08-12, and 51 after. Counted from
-  `Test Case … started` lines, which is what the rest of this bullet has been
-  telling people to do. Re-measure by summing each bundle's own `Executed N tests`; do not
+- **601 tests across 35 bundles**, green (2026-08-13; 76 Find, 51
+  DocumentWindow, 29 OakAppKit). Counted from `Test Case … started` lines, which
+  is what the rest of this bullet has been telling people to do — and which is
+  how the 58 previously claimed for DocumentWindow was caught: it was never
+  measured, the bundle ran 48. Re-measure by summing each bundle's own `Executed N tests`; do not
   increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
   `s` optional.** xctest prints `Executed 1 test` for single-test suites, and a
   plural-only pattern skips those lines and then mis-attributes the next
@@ -95,6 +97,18 @@ built and signed perfectly:
 
 Run the binary. Open a document. Click the thing.
 
+**And then look at what you are running, not at what you believe you launched.**
+The empty gutter (2026-08-13) survived every shipped alpha because nobody
+compared the app against upstream side by side; it was reported by a user, not
+by the suite. Two further traps surfaced while chasing it, both of which had
+already been written down here and both of which caught us anyway: an
+identically-titled *upstream* window sitting exactly over the fork's, and a
+half-hour spent doubting the screenshot pipeline instead of the app. The cure for
+both is to make identity checkable rather than assumed — resolve a window id with
+`CGWindowList`, capture with `screencapture -l <id>`, and embed a
+`NSLog(@"BUILD %s %s", __DATE__, __TIME__)` you verify against the compile minute
+before trusting a single pixel.
+
 A fourth instance of the same shape turned up on 2026-07-26: the `bl` tool had
 **never once compiled** in the Xcode project. Nothing depended on it, so nothing
 ever asked it to build, and its absence was invisible until Stream 8 made the app
@@ -120,14 +134,20 @@ Two diagnostic traps that cost real time, both worth remembering:
 
 ## Documentation map (read in this order)
 
-1. `PROJECT_PHASES.md` — the 6-phase roadmap. End state = Swift app shell over
-   the kept C++ core. Phase 2 is current.
-2. `ide/PHASE2_PROGRESS.md` — Stream 1 detail: how the two seed scripts work,
+1. **`ide/FIND_PORT_HANDOFF.md`, the numbered rules at the end** — 22 of them, and
+   they are the checklist for every remaining port. Rules 15–22 were all earned
+   by something that compiled, passed, and was still wrong. Read these *before*
+   surveying a framework, not after.
+2. `PROJECT_PHASES.md` — the 6-phase roadmap and the running record. End state =
+   Swift app shell over the kept C++ core. **Phase 4 is current** (Phases 1–3 and
+   2.5/2.6 are done); Phase 6, the core engine, is deliberately skipped, which is
+   why `OakTextView` (6917) and `document` (3250) are out of scope.
+3. `ide/PHASE2_PROGRESS.md` — Stream 1 detail: how the two seed scripts work,
    every solved gotcha, and two corrections to earlier claims that were wrong.
    **Don't re-derive these.**
-3. `ide/STREAM5_HOJSBRIDGE_PLAN.md` — the WKWebView migration, complete, with the
+4. `ide/STREAM5_HOJSBRIDGE_PLAN.md` — the WKWebView migration, complete, with the
    two design questions it answered.
-4. `ide/gen_xctest.rb` + `ide/xctest_preamble.h` — how the OAK-style tests become
+5. `ide/gen_xctest.rb` + `ide/xctest_preamble.h` — how the OAK-style tests become
    XCTest bundles, and why everything compiles as ObjC++ with ARC off.
 
 ## How to build and run
@@ -140,7 +160,7 @@ xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release b
 open -a "$PWD/build/Release/TextMate-NG.app"     # target TextMate, product TextMate-NG
 ```
 
-Tests (35 bundles, 586 green):
+Tests (35 bundles, 601 green):
 
 ```bash
 xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
@@ -149,7 +169,10 @@ xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debu
 Requires Xcode selected (`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`)
 and `brew install capnp ragel ninja multimarkdown boost google-sparsehash`.
 
-## What's next
+## Framework status, framework by framework
+
+_This section is history and pointers. The actual next job is under
+**"Next: `FileBrowser` (4968) or `OakFilterList` (2757)"** below._
 
 **Find is finished.** `Find.mm` landed 2026-08-07 as `Find.swift` (1533) plus
 `FindSupport.mm` (271), with 26 tests written against the ObjC++ first. The two
@@ -171,13 +194,14 @@ that shape again — check for it while surveying the next public header.
 
 **`DocumentWindow` is done (2026-08-12).** The window controller is Swift; what
 is left in `src/` is `DWScopeContext.mm` (312), `OakDocumentControllerWindows.mm`
-(200) and the `DocumentWindowSupport.mm` boundary (415). Next: the heavy set —
-`OakAppKit`, `FileBrowser`, `OakFilterList`. `MenuBuilder` goes **last**, once its
-ObjC++ callers are gone. `HTMLOutput` needs a `std::map` API redesign before it is
-portable at all.
+(200) and the `DocumentWindowSupport.mm` boundary (415).
 
-**alpha.9 shipped 2026-08-10** (`921f2270`, tag `v2026.7-alpha.9`); HEAD is at the
-tag. A release is a heading in `Applications/TextMate/about/Changes.md`, then
+**`OakAppKit`'s portable leaves are done (2026-08-13)** — eight files, `.mm`
+4825 → 3922. Its own section below explains why most of the remainder is waiting
+on its callers rather than on effort.
+
+**alpha.9 shipped 2026-08-10** (`921f2270`, tag `v2026.7-alpha.9`); 9 commits sit
+on top of it as of 2026-08-13. A release is a heading in `Applications/TextMate/about/Changes.md`, then
 `bin/notarize` and `bin/release` — the full sequence is under "Distribution".
 
 Three earlier notes here were wrong about the unreleased-commit count — "five
@@ -232,20 +256,74 @@ public header, every delegate protocol method (`@optional` ones especially), and
 every C++-typed category selector, asserted with `-instancesRespondToSelector:`.
 It caught the second defect on its first run and would have caught the first.
 
-## Next: the heavy set — `OakAppKit`, `FileBrowser`, `OakFilterList`
+## Done: OakAppKit's portable leaves (2026-08-13)
 
-Nothing here is surveyed yet; these are the notes that already exist.
+Eight files Swift, `src/`'s `.mm` **4825 → 3922, measured**, this framework's
+tests 14 → 29. `d8f7ac4e`, `2912e3cb`, `1df5ed0b`, `965970be`. Full account in
+`PROJECT_PHASES.md`; the transferable part is rules 19–22 in
+`ide/FIND_PORT_HANDOFF.md`.
 
+**The one thing to absorb before touching this framework again:** most of what is
+left is *not* waiting on effort, it is waiting on its callers. Swift cannot
+export a free function or an `extern` constant, and `OakUIConstructionFunctions.h`
+alone is 14 free functions with 31 consumers. Porting those today buys a
+forwarder `.mm` per function and nothing else.
+
+What remains, and why each is where it is:
+
+| file | lines | status |
+| --- | --- | --- |
+| `OakPasteboard` + `Chooser` + `Selector` | 1850 | **the real next job here** — a session of its own, and where this framework's actual C++ lives |
+| `OakUIConstructionFunctions`, `OakAppKit.mm`, `OakSound`, `OakToolTip`, `NSColor`/`NSAlert Additions` | ~700 | deferred: free functions / C variadics, want Swift callers first |
+| `OakEncodingPopUpButton` | 345 | not surveyed; 23 C++ hits, the densest left |
+| `NSMenuItem Additions` | 234 | C++-typed selectors, needs a support split |
+| `OakOpenWithMenu`, `OakSavePanel` | 329 | not surveyed |
+| `OakRolloverButton` | 176 | blocked by rule 21 — see below |
+| `OakSyntaxFormatter` | 115 | holds a `parse::grammar_ptr` **ivar**; needs the `DWScopeContext` treatment |
+| `NSSavePanel Additions` | 41 | `+initialize` needs a new home first |
+| `OakView` | 51 | four `extern` mask constants would have to stay in a `.mm` |
+
+`OakRolloverButton` is the interesting blocker and the one to fix deliberately:
+its header is imported **at line 1 of `OakUIConstructionFunctions.h`**, which the
+bridging header needs, so defining the class in Swift breaks every use as
+`__ObjC.X` vs `OakAppKit.X`. Splitting that header is a change 31 files see, and
+it unblocks more than one port — worth doing on purpose rather than mid-port.
+
+## Next: `FileBrowser` (4968) or `OakFilterList` (2757)
+
+Neither is surveyed. What is already known:
+
+- `FileBrowserViewController` declares `- (std::map<std::string, std::string>)variables`,
+  so it has the `OakTextViewDelegate` shape of problem already, and
+  `DocumentWindowController` calls it — that shim exists.
+- **Start with the selector-surface test** (rule 18), then survey with the
+  checklist rules 15–17 and 19–21 now encode: block parameters, C variadics,
+  C++ *ivars*, `+initialize`, free functions and `extern` constants in the
+  public header, and whether that header is imported by another public header.
 - `MenuBuilder` goes **last**, once its ObjC++ callers are gone. `HTMLOutput`
   needs a `std::map` API redesign before it is portable at all.
-- `FileBrowserViewController` declares `- (std::map<std::string, std::string>)variables`,
-  so it has at least the `OakTextViewDelegate` shape of problem already.
-- `OakAppKit` is where the two variadic `NSAlert` helpers live (rule 16) and where
-  `OakIsAlternateKeyOrMouseEvent`'s C++ default arguments are — Swift sees no
-  defaults and needs both arguments spelled out.
-- Check each public header for the `FindTypes.h` split (rule 11) *before*
-  starting: a header that declares both the class and its types cannot be
-  imported by the bridging header.
+
+## The gutter bug, and why it belongs in a handoff
+
+`6b419366` fixed line numbers, fold markers and bookmarks being **invisible in
+every shipped alpha** on macOS 26. One line: `OakBackgroundFillView -drawRect:`
+filled `aRect` unexamined, and on this SDK AppKit hands a `wantsLayer` view
+created at `NSZeroRect` a contents proxy sized to the whole window — so a 1-point
+divider painted 904×800 and buried the gutter behind it.
+
+Three things to carry forward:
+
+1. **This was reported by a user, not by 601 tests, and not by any port.** It
+   predates every Swift file in the project. When something looks wrong in the
+   app, A/B against the last shipped build *and* against upstream before assuming
+   the current work caused it — and after that, suspect the app before the tools.
+2. **Bisect the view out early** (rule 22). Six increasingly exotic facts about
+   `GutterView` were all true and all irrelevant; replacing it with twelve lines
+   that fill themselves red would have exonerated it in ten minutes.
+3. **Every `OakCreateVerticalLine` divider was liable to the same overpaint** —
+   file browser, HTML output, status bars. If some other view is mysteriously
+   blank, this is now the first thing to check, and the fix pattern is
+   `NSRectFill(NSIntersectionRect(aRect, self.bounds))`.
 
 ## Distribution — done (2026-08-10)
 
@@ -295,18 +373,43 @@ server, and a GitHub Release is not a substitute for one.
   XCTest bundles at seed time, so `xcodebuild test` alone compiles the *previous*
   version of a test you just changed. Cost a wasted cycle on 2026-08-05 chasing
   errors that had already been fixed.
+- **Adding the first `.swift` to a framework? Check its `default.rave` first.**
+  The sources line must include `swift` — `sources src/*.{cc,mm,swift}`. OakAppKit's
+  said `{cc,mm}`, so the seed silently ignored the new file and the ObjC++ then
+  failed to find `<Framework>-Swift.h`, which reads like a bridging problem and is
+  not one (2026-08-13).
+- **Leave `headers src/*.h` alone where it is a glob.** Replacing it with an
+  explicit brace list exports **zero** headers if any filename contains a space
+  (`NSAlert Additions.h`) — a brace list expands to nothing rather than failing,
+  and every consumer of that framework breaks at once.
 - `PlugIns/dialog` and the other submodules are out of scope for edits.
 - Commit messages carry a `Co-Authored-By:` trailer. Ask before pushing.
 
-## How this session worked, if that is useful
+## How the 2026-08-13 session worked, if that is useful
 
-Four ports in two days, and the pattern that produced them: **write the tests
-first, port, build, run the whole suite, then run the app** — the last step
-because three of the four turned up something no test could reach. The two
-defects that got furthest were both cases where every cheap check passed and only
-the app or the *next* file's survey exposed them.
+One 2573-line controller, eight OakAppKit leaves, and a three-year-old rendering
+bug, in that order. Three things about the method are worth repeating:
 
-The rules earned along the way are collected at the end of
-`ide/FIND_PORT_HANDOFF.md`. Two are about this codebase (`@objc dynamic`;
-an ObjC ivar is not an implicitly-unwrapped Swift property) and two are about
-method (measure, never subtract; a negative grep result is not a finding).
+**Split the boundary from the translation.** `DocumentWindowController` was
+ported in two commits: the first moved every piece of C++ out while the file was
+still ObjC++, so the existing 583 tests judged each shim before any Swift
+existed; the second was then a translation rather than a translation *and* a
+boundary design. Every earlier port did both at once, and this was markedly
+easier. Do it this way again.
+
+**Write the test before the port, even for "trivial" files.** It caught things
+twice in one day. `test_borderless_panel_forces_style_mask` failed against the
+*unported* original and taught us `NSWindowStyleMaskBorderless is 0`; the
+selector-surface test (rule 18) found a dead tab drag-and-drop on its first run.
+Neither was reachable by reading the code, and both would have shipped.
+
+**Instrument, don't reason, when the app disagrees with you.** The gutter bug
+absorbed hours of correct-but-irrelevant deduction — valid clip, valid font,
+valid CTLine, sane layer tree, zero Auto Layout conflicts — and fell in minutes
+once the question changed from "why is this drawing wrong" to "who owns these
+pixels". Rule 22 is that lesson written as a procedure.
+
+The rules earned across all sessions are collected at the end of
+`ide/FIND_PORT_HANDOFF.md`. They are now the first thing in the documentation
+map, because 8 of the 22 came from something that compiled and passed and was
+still wrong.

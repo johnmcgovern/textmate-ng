@@ -361,3 +361,40 @@ the one that actually shipped a broken feature.
    with Swift's `from:`/`to:` and tab drag-and-drop was dead with no warning. A
    test listing the selectors caught it on its first run; `t_be_interop.mm:80`
    already did this for one selector, and it generalises.
+
+The next four are from OakAppKit and the gutter bug (2026-08-13). The first three
+say what "portable" actually means; the fourth is about debugging what you can
+see.
+
+19. **Swift can *call* a global, never *export* one.** Neither a free function nor
+   an `extern` constant can come from Swift. A file whose public surface is
+   globals — `OakUIConstructionFunctions.h` has 14 functions and 31 consumers,
+   `OakRolloverButton.h` has two `extern NSNotificationName const`, `OakView.h`
+   four mask constants — cannot become Swift while its callers are ObjC++; it can
+   only gain a forwarder `.mm`. Defer those until the consumers are Swift.
+   Corollary: a **C++ default argument** hides such a function from any survey,
+   because the call sites do not mention the parameter.
+20. **Classify portability from the implementation, not the header.** "It has a
+   class" is not enough. `OakSyntaxFormatter` looks clean and holds a
+   `parse::grammar_ptr` **ivar** — the `bundles::item_ptr` blocker, needing the
+   `DWScopeContext` treatment. `NSSavePanel Additions` looks trivial and has a
+   `+initialize`, which a Swift extension cannot provide. Grep each candidate for
+   C++ member declarations and for `+initialize` before promising it.
+21. **Rule 11 cascades.** Before porting a class, grep for its header in other
+   *public headers*, not just in `.mm` files. `OakRolloverButton.h` is imported at
+   line 1 of `OakUIConstructionFunctions.h`, which the bridging header needs — so
+   defining that one class in Swift breaks every use as
+   `__ObjC.X` vs `Module.X`, and fixing it means splitting a header 31 files
+   import.
+22. **When something renders but is invisible, bisect the view out early.**
+   Replace the suspect view with a dozen lines that fill themselves red. If that
+   is invisible too, the view is innocent and its code is a dead end — stop
+   reading it. Then set `backgroundColor`/`borderWidth` directly on the layers:
+   pure Core Animation, no `drawRect:`, no backing store. If *that* is invisible,
+   the subtree is occluded rather than failing to render, and the answer is a
+   front-to-back walk of every layer containing the point. The empty gutter cost
+   hours because six increasingly exotic facts about `GutterView` were all true
+   and all irrelevant; the occluder was found on the first run of the walk.
+   Related discipline: **`drawRect:`'s `aRect` is not clamped to the view's
+   bounds** on macOS 26 — clamp it yourself — and **embed a
+   `__DATE__`/`__TIME__` build stamp** so "am I running my own code" is a fact.

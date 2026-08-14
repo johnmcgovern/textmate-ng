@@ -221,7 +221,15 @@ OakRolloverButton* OakCreateCloseButton (NSString* accessibilityLabel)
 	{
 		NSColor* color = value;
 		[color set];
-		NSRectFill(aRect);
+		// Clamped to bounds, where it used to fill aRect unexamined. On macOS 26
+		// the backing-layer contents proxy for a view created at NSZeroRect with
+		// wantsLayer:YES can be sized to the whole window, and AppKit then asks
+		// drawRect: to draw that rect — so the old code filled the entire window
+		// with the divider colour. Sibling order made it invisible almost
+		// everywhere: it painted over the earlier siblings (the gutter, which lost
+		// its line numbers to this) and was painted over by later ones (the text
+		// view). A view has no business drawing outside its own bounds.
+		NSRectFill(NSIntersectionRect(aRect, self.bounds));
 	}
 }
 @end

@@ -1,4 +1,5 @@
 #import "FSEventsManager.h"
+#import "FSEventStream.h"
 
 @class FSEventsDirectory;
 
@@ -19,62 +20,10 @@
 - (void)didObserveChangeInDirectoryAtURL:(NSURL*)url;
 @end
 
-// ============================
-// = Wrapper for FSEvents API =
-// ============================
-
-namespace
-{
-	struct fs_events_t
-	{
-		FSEventStreamRef _eventStream = nullptr;
-		NSSet<NSURL*>* _observedURLs;
-		void(^_callback)(NSURL*);
-
-		fs_events_t (NSArray<NSURL*>* urls, void(^callback)(NSURL*)) : _callback(callback)
-		{
-			_observedURLs = [NSSet setWithArray:urls];
-			if(_observedURLs.count)
-			{
-				NSArray* pathsToWatch = [_observedURLs.allObjects valueForKey:@"path"];
-
-				FSEventStreamContext contextInfo = { 0, this, nullptr, nullptr, nullptr };
-				if(_eventStream = FSEventStreamCreate(kCFAllocatorDefault, &fs_events_t::callback, &contextInfo, (__bridge CFArrayRef)pathsToWatch, kFSEventStreamEventIdSinceNow, 0.5, kFSEventStreamCreateFlagNone))
-				{
-					FSEventStreamScheduleWithRunLoop(_eventStream, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
-					FSEventStreamStart(_eventStream);
-				}
-			}
-		}
-
-		~fs_events_t ()
-		{
-			if(_eventStream)
-			{
-				FSEventStreamStop(_eventStream);
-				FSEventStreamInvalidate(_eventStream);
-				FSEventStreamRelease(_eventStream);
-			}
-		}
-
-		static void callback (ConstFSEventStreamRef streamRef, void* clientCallBackInfo, size_t numEvents, void* eventPaths, FSEventStreamEventFlags const eventFlags[], FSEventStreamEventId const eventIds[])
-		{
-			fs_events_t* object = static_cast<fs_events_t*>(clientCallBackInfo);
-			for(size_t i = 0; i < numEvents; ++i)
-			{
-				char const* cString = ((char const* const*)eventPaths)[i];
-				object->_callback([NSURL fileURLWithFileSystemRepresentation:cString isDirectory:YES relativeToURL:nil]);
-			}
-		}
-	};
-}
-
-// ============================
-
 @interface FSEventsManager ()
 {
 	NSMapTable<NSURL*, FSEventsDirectory*>* _directories;
-	std::shared_ptr<fs_events_t> _fsEvents;
+	FSEventStream* _fsEvents;
 }
 @end
 
@@ -101,7 +50,7 @@ namespace
 
 - (void)resetObservers
 {
-	_fsEvents.reset(new fs_events_t(_directories.keyEnumerator.allObjects, ^(NSURL* originalURL){
+	_fsEvents = [[FSEventStream alloc] initWithURLs:_directories.keyEnumerator.allObjects callback:^(NSURL* originalURL){
 		NSURL* url = originalURL;
 		while(true)
 		{
@@ -117,7 +66,7 @@ namespace
 
 			url = parentURL;
 		}
-	}));
+	}];
 }
 
 - (id)addObserverToDirectoryAtURL:(NSURL*)url usingBlock:(void(^)(NSURL*))handler

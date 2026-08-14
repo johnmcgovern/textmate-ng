@@ -1,5 +1,6 @@
 #import "FileItem.h"
 #import "SCMManager.h"
+#import "SCMManagerCxx.h"
 #import <OakAppKit/NSImage Additions.h>
 #import <io/path.h>
 #import <ns/ns.h>

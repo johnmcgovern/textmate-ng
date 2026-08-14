@@ -1,4 +1,5 @@
 #import "SCMManager.h"
+#import "SCMManagerCxx.h"
 #import "FSEventsManager.h"
 #import "drivers/api.h"
 #import <scm/scm.h>

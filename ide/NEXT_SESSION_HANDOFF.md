@@ -289,9 +289,19 @@ bridging header needs, so defining the class in Swift breaks every use as
 `__ObjC.X` vs `OakAppKit.X`. Splitting that header is a change 31 files see, and
 it unblocks more than one port — worth doing on purpose rather than mid-port.
 
-## Next: `FileBrowser` (4968) or `OakFilterList` (2757)
+## Next: `FileBrowser` (5196) or `OakFilterList` (2757)
 
-Neither is surveyed. What is already known:
+**`FileBrowser` is surveyed — read `ide/FILEBROWSER_PORT_PLAN.md` before
+starting.** It applies the rules below as a checklist and found four things worth
+knowing in advance: the framework has **no tests at all**, `SCMManager.h` is a
+public header carrying both a `std::map` property and a C++-typed block,
+`FSEventsManager` holds a `shared_ptr` **ivar**, and the `.rave` sources glob is
+missing `swift`. It also proposes an order.
+
+(The 4968 figure previously here counted `src/*.mm` only; with `src/OFB/` and the
+headers it is 5196.)
+
+`OakFilterList` is **not** surveyed. What is already known:
 
 - `FileBrowserViewController` declares `- (std::map<std::string, std::string>)variables`,
   so it has the `OakTextViewDelegate` shape of problem already, and

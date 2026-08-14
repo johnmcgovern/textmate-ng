@@ -2,6 +2,39 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v2026.7-alpha.10)
+
+**Line numbers are back.** So are the fold arrows and bookmark markers next to
+them. If you have been using TextMate-NG with an empty grey strip down the left
+of the editor, that was a bug, it was in every release this fork has ever made,
+and this is the one that fixes it.
+
+The cause was one line, in the code that draws the thin divider between the
+gutter and the text. It filled whatever area macOS asked it to fill rather than
+its own one-point-wide sliver, and on macOS 26 that area is the entire window —
+so the divider painted over the gutter on every redraw. The grey strip you were
+looking at was the divider. It is worth reporting anything else that looks
+blank-but-shouldn't-be: the same helper draws dividers in the file browser and
+around HTML output, so this fix may well have repaired something you had stopped
+noticing.
+
+**The rest of this release is invisible, as usual.** The project window's
+controller — the largest single file left in the migration, 2573 lines — and
+eight smaller pieces of the AppKit layer are now Swift. A port that changes
+behaviour has failed, so there is nothing to see. What is worth reporting, if it
+misbehaves, is anything the window controller is responsible for:
+
+* opening, closing, reordering and tearing off tabs, including dragging a tab
+  between two windows
+* the tab bar's context menu, and Go to Related File (⌥⌘↑)
+* saving, including Save As and the "save these documents?" sheet when closing
+* the file browser toggling, and session restore when you quit and reopen
+
+**Known limitations in this alpha:** unchanged. Software update and crash-report
+submission stay switched off while the fork has no server of its own, so a new
+build means downloading a new build. Finder thumbnails are still generic; Quick
+Look previews work.
+
 ## 2026-08-10 (v2026.7-alpha.9)
 
 **Another release with nothing you can see in it**, and for the same reason as

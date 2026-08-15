@@ -1,5 +1,6 @@
 #import "../src/FileBrowserViewController.h"
 #import "../src/FileItem.h"
+#import "../src/FileBrowserViewControllerSupport.h"
 #import <Preferences/Keys.h>
 
 // The framework's first tests. Written before any port, against the ObjC++, so
@@ -201,4 +202,47 @@ void test_file_browser_view_controller_keeps_its_delegate_accessors ()
 {
 	assert_responds(@selector(delegate));
 	assert_responds(@selector(setDelegate:));
+}
+
+// =========================================================
+// = The glob filter, now that it is reachable on its own  =
+// =========================================================
+//
+// Extracting the C++ ahead of the port turned the browser's visibility rule from
+// a private method that only ran with a live tree into a pure function of a
+// directory URL, so it can be tested rather than eyeballed.
+//
+// The assertions deliberately avoid the glob lists themselves: those come from
+// settings (.tm_properties and the bundled defaults), so what they exclude
+// depends on the machine the test runs on. What is pinned here is the branch a
+// port is most likely to inverse — hidden items are matched against the
+// *include* globs and everything else against the *exclude* globs, and a hidden
+// item whose name does not begin with a dot is rejected outright.
+
+void test_item_predicate_rejects_hidden_items_not_named_with_a_dot ()
+{
+	NSURL* dir = [NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES];
+	NSPredicate* predicate = [FileBrowserViewControllerSupport itemPredicateForDirectoryURL:dir];
+	OAK_ASSERT(predicate != nil);
+
+	FileItem* plain = [FileItem fileItemWithURL:[dir URLByAppendingPathComponent:@"plain.txt"]];
+	OAK_ASSERT(plain != nil);
+	OAK_ASSERT(!plain.hidden);
+	OAK_ASSERT([predicate evaluateWithObject:plain]);
+
+	// Hidden, but not a dotfile: rejected before any glob is consulted.
+	plain.hidden = YES;
+	OAK_ASSERT(![predicate evaluateWithObject:plain]);
+
+	// A dotfile is *not* rejected by that rule — it falls through to the include
+	// globs. What those globs then decide is a settings question and so is not
+	// asserted here; on this machine a dotfile in /tmp is excluded by them.
+}
+
+void test_is_binary_url_follows_the_binary_setting ()
+{
+	// No assertion about which globs are configured — only that the call works
+	// through the extracted boundary and answers for a plain text file.
+	NSURL* url = [[NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES] URLByAppendingPathComponent:@"plain.txt"];
+	OAK_ASSERT(![FileBrowserViewControllerSupport isBinaryURL:url]);
 }

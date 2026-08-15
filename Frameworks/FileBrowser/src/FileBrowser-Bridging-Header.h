@@ -68,3 +68,8 @@
 #import "FileBrowserNotifications.h"
 #import "FileBrowserDiskOperationsSupport.h"
 #import <OakAppKit/OakSound.h>
+
+// The C++ lifted out of FileBrowserViewController ahead of its port — the glob
+// filter that decides which children show, and the binary-file test. C++-free
+// signatures, so this is importable here.
+#import "FileBrowserViewControllerSupport.h"

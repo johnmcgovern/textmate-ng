@@ -1,5 +1,6 @@
 #import "FileBrowserViewController.h"
 #import "FileBrowserDiskOperations.h"
+#import "FileBrowserViewControllerSupport.h"
 #import "FileBrowserView.h"
 #import "FileBrowserOutlineView.h"
 #import "FileBrowserNotifications.h"
@@ -27,18 +28,6 @@
 #import <settings/settings.h>
 #import <text/ctype.h>
 #import <text/utf8.h>
-
-static bool is_binary (std::string const& path)
-{
-	if(path == NULL_STR)
-		return false;
-
-	settings_t const& settings = settings_for_path(path);
-	if(settings.has(kSettingsBinaryKey))
-		return path::glob_t(settings.get(kSettingsBinaryKey, "")).does_match(path);
-
-	return false;
-}
 
 static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray* rhs)
 {
@@ -432,7 +421,7 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 			[itemsToShowInFinder addObject:item];
 		else if(item.isDirectory && (treatPackageAsDirectory || !item.isPackage) || item.isLinkToDirectory && (treatPackageAsDirectory || !item.isLinkToPackage) || optionKeyDown && (item.isPackage || item.isLinkToDirectory))
 			[itemsToShowInFileBrowser addObject:item];
-		else if(item.isPackage || item.isLinkToPackage || item.URL.isFileURL && is_binary(item.URL.fileSystemRepresentation))
+		else if(item.isPackage || item.isLinkToPackage || item.URL.isFileURL && [FileBrowserViewControllerSupport isBinaryURL:item.URL])
 			[itemsToOpen addObject:item];
 		else
 			[itemsToOpenInTextMate addObject:item];
@@ -1476,41 +1465,9 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 
 - (NSPredicate*)itemPredicateForChildrenInParent:(FileItem*)parentOrNil
 {
-	NSPredicate* predicate = [NSPredicate predicateWithValue:YES];
-	if(!_showExcludedItems)
-	{
-		NSURL* directoryURL = (parentOrNil ?: self.fileItem).URL;
-		settings_t const settings = settings_for_path(NULL_STR, "", directoryURL.fileSystemRepresentation);
-		bool excludeMissingFiles = [directoryURL.scheme isEqual:@"scm"] ? false : settings.get(kSettingsExcludeSCMDeletedKey, false);
-
-		path::glob_list_t globs;
-		globs.add_exclude_glob(settings.get(kSettingsExcludeDirectoriesInBrowserKey), path::kPathItemDirectory);
-		globs.add_exclude_glob(settings.get(kSettingsExcludeDirectoriesKey),          path::kPathItemDirectory);
-		globs.add_exclude_glob(settings.get(kSettingsExcludeFilesInBrowserKey),       path::kPathItemFile);
-		globs.add_exclude_glob(settings.get(kSettingsExcludeFilesKey),                path::kPathItemFile);
-		globs.add_exclude_glob(settings.get(kSettingsExcludeInBrowserKey),            path::kPathItemAny);
-		globs.add_exclude_glob(settings.get(kSettingsExcludeKey),                     path::kPathItemAny);
-
-		globs.add_include_glob(settings.get(kSettingsIncludeDirectoriesInBrowserKey), path::kPathItemDirectory);
-		globs.add_include_glob(settings.get(kSettingsIncludeDirectoriesKey),          path::kPathItemDirectory);
-		globs.add_include_glob(settings.get(kSettingsIncludeFilesInBrowserKey),       path::kPathItemFile);
-		globs.add_include_glob(settings.get(kSettingsIncludeFilesKey),                path::kPathItemFile);
-		globs.add_include_glob(settings.get(kSettingsIncludeInBrowserKey),            path::kPathItemAny);
-		globs.add_include_glob(settings.get(kSettingsIncludeKey, "*"),                path::kPathItemAny);
-
-		predicate = [NSPredicate predicateWithBlock:^BOOL(FileItem* item, NSDictionary* bindings){
-			if(item.hidden && ![item.URL.lastPathComponent hasPrefix:@"."])
-				return NO;
-
-			if(excludeMissingFiles && item.isMissing)
-				return NO;
-
-			char const* path = item.URL.fileSystemRepresentation;
-			size_t itemType  = item.isDirectory ? path::kPathItemDirectory : path::kPathItemFile;
-			return item.hidden ? globs.include(path, itemType) : !globs.exclude(path, itemType);
-		}];
-	}
-	return predicate;
+	if(_showExcludedItems)
+		return [NSPredicate predicateWithValue:YES];
+	return [FileBrowserViewControllerSupport itemPredicateForDirectoryURL:(parentOrNil ?: self.fileItem).URL];
 }
 
 - (NSArray<FileItem*>*)arrangeChildren:(NSArray<FileItem*>*)children inParent:(FileItem*)parentOrNil

@@ -188,14 +188,37 @@ last. (Both of step 3's halves are done as of `53638c07`; only
   bundle** unless `ns.h` is in scope — `xctest_preamble.h`'s generic
   `to_s(_T const&)` binds instead and enumerates the string as a container.
 
-**All the `FileItem*` model files and the whole view layer are now Swift.**
+- `9957b2b7` / `be5453a2` — **FileBrowserDiskOperations ported** (530), in the
+  two-commit boundary-then-translation shape. The prep commit moved the
+  `(DiskOperations)` category declaration out of `FileBrowserViewController.h`:
+  the Swift has to *see* the still-ObjC++ class, so the bridging header imports
+  that header, and it must not also see declarations of the methods Swift
+  defines. `FBOperation` stays behind, on the bridging header's side.
+  **The rule-21 cascade the survey feared does not apply here** — measured, not
+  assumed: a Swift extension on the ObjC++ controller compiles, `self.fileItem`
+  in it resolves to the *Swift* FileItem (the `@class FileItem` forward
+  declaration unifies with it rather than colliding), and the C++-typed
+  `-variables` is dropped by the importer (rule 17).
+  Two fragments stayed ObjC++ in `FileBrowserDiskOperationsSupport`: the `path::`
+  arithmetic, and `-presentError:` — an override of NSResponder's method, which
+  **a Swift extension cannot provide** (rule 31). `-addButtons:` needed no shim
+  despite rule 16; it is only a loop of `-addButtonWithTitle:`.
+  Three translation traps, all caught before the app run: the
+  `resultingItemURL:` out-parameter of trash (undo moves the item back *from*
+  it — dropping it breaks undo silently), ObjC nil-messaging on the nil
+  `sourceURLs` array the new-file/new-folder undo passes, and `-[NSURL isEqual:]`
+  rather than Swift's normalising `URL ==`.
 
-**What actually remains:** `FileBrowserDiskOperations.mm` (530) and
-`FileBrowserViewController.mm` (2328, last). Also still ObjC++ by choice:
+**All the `FileItem*` model files, the whole view layer and the disk operations
+are now Swift.**
+
+**What actually remains:** `FileBrowserViewController.mm` (2328, last). Also
+still ObjC++ by choice:
 `FSEventsManager`/`SCMManager` (their C++ boundaries are already clear — a later
 Swift translation is optional), and the `*Support`/`*Cxx` files that hold the C++
 on purpose (`FSEventStream`, `SCMManager`, `SCMManagerCxx`, `FileItemLocations`,
-`FileItemSCMStatusSupport`, `FileItemObserverSupport`).
+`FileItemSCMStatusSupport`, `FileItemObserverSupport`,
+`FileBrowserDiskOperationsSupport`).
 
 **Build gotcha seen this session:** ad-hoc CodeSign of unrelated test bundles can
 fail with `invalid or unsupported format for signature` on a leftover `.cstemp`

@@ -2,7 +2,8 @@
 
 _Written 2026-08-15 at the end of the session that ported the whole FileBrowser
 view layer and the entire `FileItem*` model family to Swift, and updated later
-the same day when `FileBrowserView` finished the view layer. This is the
+the same day when `FileBrowserView` finished the view layer and
+`FileBrowserDiskOperations` left only the controller. This is the
 starting point for a fresh session; the per-commit detail and the reasoning
 behind each decision live in `ide/FILEBROWSER_PORT_PLAN.md`, and the 22
 cross-framework rules that predate this work are at the end of
@@ -11,9 +12,9 @@ not assumed._
 
 ## State you are starting from
 
-- `master`, HEAD `53638c07`, tree clean.
-- **620 tests across 36 bundles, green.** Re-measure, never increment — that
-  figure has been wrong in these docs before (rule 10). FileBrowser has **9** test
+- `master`, HEAD `be5453a2`, tree clean.
+- **628 tests across 36 bundles, green.** Re-measure, never increment — that
+  figure has been wrong in these docs before (rule 10). FileBrowser has **10** test
   files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before
   this port began.
 - The **first thing settled** was the survey's open question: `FileBrowserViewController`
@@ -22,16 +23,17 @@ not assumed._
 
 ### What is already Swift
 
-The entire view layer and the whole `FileItem*` model family:
+The entire view layer, the whole `FileItem*` model family, and the disk
+operations:
 
 `OFBHeaderView`, `OFBActionsView`, `FileBrowserOutlineView`, `OFBFinderTagsChooser`,
 `FileItemTableCellView`, `FileBrowserView`, `FileItem` (base),
-`FileItemMountedVolumes`, `FileItemSCMStatus`, `FileItemObserver`.
+`FileItemMountedVolumes`, `FileItemSCMStatus`, `FileItemObserver`,
+`FileBrowserDiskOperations` (a Swift extension on the still-ObjC++ controller).
 
 ### What is still ObjC++ (and why)
 
-- **Ports still to do:** `FileBrowserDiskOperations.mm` (530) and
-  `FileBrowserViewController.mm` (2328, the big one — do it last).
+- **The one port left:** `FileBrowserViewController.mm` (2328, the big one).
 - **ObjC++ by design (do not "finish" these without reason):**
   - `FSEventsManager.mm`, `SCMManager.mm` — model managers whose C++ boundaries
     were already made Swift-importable (`FSEventStream`, `SCMManagerCxx`). A Swift
@@ -39,8 +41,8 @@ The entire view layer and the whole `FileItem*` model family:
   - The `*Support` / `*Cxx` / globals files that hold C++ or exported globals on
     purpose: `FSEventStream.mm`, `SCMManagerCxx.h`, `FileItemLocations.mm`,
     `FileItemSCMStatusSupport.mm`, `FileItemObserverSupport.mm`,
-    `FileBrowserOutlineViewKeyBindings.mm`, `FileBrowserNotifications.mm`
-    (the notification-name `extern` consts — rule 19).
+    `FileBrowserDiskOperationsSupport.mm`, `FileBrowserOutlineViewKeyBindings.mm`,
+    `FileBrowserNotifications.mm` (the notification-name `extern` consts — rule 19).
 
 ## Build, test, run
 
@@ -66,22 +68,31 @@ files and a Finder tag, and check: the list populates, SCM badges and tag dots
 draw, a shell-created file live-reloads, the SCM button shows Uncommitted/Untracked,
 Computer shows the host + volumes, and rename selects the basename.
 
-## The next ports, specifically
+## The last port, specifically
 
-- **`FileBrowserDiskOperations.mm` (530), do first.** A category on `FileBrowserViewController`
-  (`performOperation:…`), so it stays paired with the controller. It calls
-  `FileItem`/`fileItemWithURL:` (now Swift — fine via the hand-decl) and sets
-  `parent.children`. 4 C++ hits per the survey — expect a small `-Cxx`/support
-  split (rule 25). The two `performOperation:` selectors are pinned by the
-  constructibility test already.
-- **`FileBrowserViewController.mm` (2328), last.** The survey's known hazards
-  still stand and are the reason it is last:
-  - **Rule 21 cascade on `FileBrowserViewController.h`.** `DocumentWindow`'s
-    bridging header imports `<FileBrowser/FileBrowserViewController.h>`, and this
-    framework's own bridging header must not reach it once Swift defines the class.
-    The `FBOperation` NS_OPTIONS (line 58) and the notification names need the
-    FindTypes.h-style split; `FileBrowserNotifications.h` already isolates the
-    notification consts.
+- **`FileBrowserViewController.mm` (2328).** Its known hazards, updated by what
+  the DiskOperations port measured:
+  - **The rule-21 cascade is real but smaller than the survey thought.** Two of
+    the three fears are now settled facts rather than risks: the bridging header
+    *already* imports `FileBrowserViewController.h` (DiskOperations needs it), a
+    `@class FileItem` forward declaration in it unifies with the Swift FileItem
+    instead of colliding, and the C++-typed `-variables` is dropped by the
+    importer. What genuinely has to change when **Swift defines the class**: that
+    import must go, and everything the Swift still needs from that header —
+    `FBOperation`, which DiskOperations' signatures use — needs the FindTypes.h
+    split into its own header. `FileBrowserNotifications.h` already isolates the
+    notification consts, and `FileBrowserDiskOperations.h` already isolates the
+    category declaration. `DocumentWindow`'s bridging header importing
+    `<FileBrowser/FileBrowserViewController.h>` stays fine; it does not define
+    the class.
+  - **DiskOperations is already a Swift extension on this class**, so when the
+    controller becomes Swift the extension needs nothing except that its
+    `@objc(...)` selector spellings stay — and `FileBrowserDiskOperations.h` can
+    then be deleted outright, since ObjC++ will no longer be calling in.
+  - **`-presentError:` lives in `FileBrowserDiskOperationsSupport.mm`** only
+    because a Swift *extension* cannot override an inherited method (rule 31).
+    Once Swift defines the class itself, that override can move into the class
+    body and the support category disappears; the `path::` half stays.
   - **`- (std::map<std::string,std::string>)variables` is pinned from outside**
     (`DocumentWindowSupport.mm:356`). It cannot change shape — it belongs on an
     ObjC++ category on the Swift class, exactly like `DocumentWindowController`'s
@@ -170,6 +181,37 @@ both are ways this repo's test harness lies to you.
     unrecognized selector` pointing at `xctest_preamble.h`, not at your test.
     `OakAppKit`'s tests get `ns.h` from their PCH; FileBrowser's do not. Compare
     strings with `-isEqualToString:` inside `OAK_ASSERT` instead.
+
+The next three are from `FileBrowserDiskOperations` (`be5453a2`), the first port
+here that changes files on disk rather than pixels.
+
+31. **A Swift extension can add methods to an ObjC class, but never override
+    one.** Porting a *category* is otherwise straightforward — the class can stay
+    ObjC++, `self`'s ObjC properties resolve (including to Swift types the module
+    defines), and the bridging header may import the class's header as long as it
+    does not also see the declarations of the methods Swift defines (split those
+    into their own header first). The exception is an inherited method:
+    `-presentError:` overrides NSResponder's, and no Swift extension can express
+    that, so it stays a small ObjC++ category. Check for overrides *before*
+    planning the split — they decide how much has to stay behind.
+
+32. **An out-parameter that looks like a result is often an input to undo.**
+    `-trashItemAtURL:resultingItemURL:` writes back where the item landed, and
+    that URL is the *only* record of it — undo moves the item back from there.
+    A Swift translation that declares `var resultingURL: NSURL?` and never
+    assigns it onward compiles, trashes correctly, passes every test that checks
+    the file is gone, and silently makes undo a no-op. Trace where each
+    out-parameter's value is read, not just where it is written.
+
+33. **ObjC nil-messaging is behaviour, and Swift's bounds checks are not.**
+    `-undoOperation:sourceURLs:…` is called with a **nil** sourceURLs array for
+    operations that have no sources; `srcURLs[i]` answered nil for every index,
+    and the results were collected with `if(srcURL)`. Translated literally to
+    `srcURLs[i]` on a Swift array, that is a trap at the first new-file undo.
+    Same family as rule 27: read what the ObjC did with nil, not what it looks
+    like it did. Related: use `-[NSURL isEqual:]`, not Swift's `URL ==`, wherever
+    the ObjC++ compared URLs — `URL ==` normalises, and these are compared
+    against FileItem URLs.
 
 ## One build gotcha that is not a code error
 

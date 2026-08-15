@@ -140,13 +140,48 @@ last.
   ObjC++ subclasses still inherit the Swift class and override -initWithURL: /
   -localizedName / -parentURL. Verified all three schemes in the app.
 
-Then the C++ ones (still to do): `FileItemSCMStatus` (iterates the scm map with
-`scm::status::` bitmasks and `path::is_child` — wants the `-Cxx`/support-file
-treatment; it is a FileItem subclass + SCMStatusObserver) and `FileItemObserver`
-(the FileItem(Observer) category — currently extends the Swift FileItem — plus
-observer classes, `path::parent` + the scm block). `FileItemMountedVolumes` is
-small and C++-free now. The Swift translation of FSEventsManager/SCMManager can
-go alongside these.
+- `ff399eba` — **FileItemMountedVolumes ported** (the "computer" data source).
+  C++-free; the first Swift subclass of the Swift FileItem. `makeObserverForURL:`
+  was a fresh @objc class method at this point (see below).
+
+- `2a371fbc` — **FileItemSCMStatus ported** (the "scm" data source), first `-Cxx`
+  split of a model file: the scm-map walk (unstaged/untracked URL computation)
+  moved verbatim to ObjC++ `FileItemSCMStatusSupport`; SCMStatusFileItem +
+  SCMStatusObserver are Swift on the C++-free SCMManager API. Importer names that
+  took iterating: `repositoryAtURL:` → `repository(at:)`, but
+  `addObserverToRepositoryAtURL:usingBlock:` → `addObserverToRepository(at:usingBlock:)`
+  (base kept, only trailing URL dropped), `+unstagedURLsInRepository:` →
+  `unstagedURLs(in:)`, and `SCMRepository.URL` reads as `.url`.
+
+- `4c9760ab` — **FileItemObserver ported: the last C++ model file.** The C++
+  deleted-files walk moved to `FileItemObserverSupport`; the observer classes are
+  Swift. Two bugs it cost, both worth remembering:
+  1. **Swift 6 off-main dispatch.** A nonisolated class can't hop to a background
+     queue and back while touching non-Sendable `self`. The fix that finally
+     worked: mark the observer classes `@MainActor` (the browser is all
+     main-thread), run only the directory *enumeration* in a **file-scope
+     `nonisolated async` function** the @MainActor code `await`s, and apply the
+     result on the main actor — so neither `self` nor a closure is ever sent
+     off-actor. `DispatchQueue.global {…}`, `Task.detached {…self…}`, and
+     `Task {…} + MainActor.run` all failed the sending checks first.
+  2. **A weak/strong ownership flip.** `URLObserverClient.urlObserver` must be
+     **strong** (the ObjC++ had no `weak`): the shared URLObserver is only weakly
+     held by the registry, so the client — retained by the file browser — is its
+     owner. Making it weak deallocated the observer before its async load
+     delivered, and **the directory silently showed empty**. The client↔observer
+     cycle is broken by `removeFromURLObserver`. This is exactly the kind of
+     ObjC-ownership detail a Swift port must preserve, not "improve".
+  Also: `makeObserverForURL:` now lives on FileItem (default → FileSystemObserver)
+  so the MountedVolumes/SCMStatus overrides are real `override`s.
+
+**All the `FileItem*` model files and the whole view layer are now Swift.**
+
+**What actually remains:** `FileBrowserDiskOperations.mm` (530) and
+`FileBrowserViewController.mm` (2328, last). Also still ObjC++ by choice:
+`FSEventsManager`/`SCMManager` (their C++ boundaries are already clear — a later
+Swift translation is optional), and the `*Support`/`*Cxx` files that hold the C++
+on purpose (`FSEventStream`, `SCMManager`, `SCMManagerCxx`, `FileItemLocations`,
+`FileItemSCMStatusSupport`, `FileItemObserverSupport`).
 
 **Build gotcha seen this session:** ad-hoc CodeSign of unrelated test bundles can
 fail with `invalid or unsupported format for signature` on a leftover `.cstemp`

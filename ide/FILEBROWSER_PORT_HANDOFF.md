@@ -12,7 +12,7 @@ not assumed._
 
 ## State you are starting from
 
-- `master`, HEAD `be5453a2`, tree clean.
+- `master`, HEAD `00a42e07`, tree clean.
 - **628 tests across 36 bundles, green.** Re-measure, never increment — that
   figure has been wrong in these docs before (rule 10). FileBrowser has **10** test
   files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before
@@ -69,6 +69,16 @@ draw, a shell-created file live-reloads, the SCM button shows Uncommitted/Untrac
 Computer shows the host + volumes, and rename selects the basename.
 
 ## The last port, specifically
+
+**It has now been surveyed** — the full measured checklist is in
+`ide/FILEBROWSER_PORT_PLAN.md` under "FileBrowserViewController — the survey",
+and `00a42e07` landed the header split it called for. The short version: no C++
+ivars, no variadics, no C++ block signatures, no exported globals — but
+**`+initialize`, which a Swift class cannot provide, is the one structural
+blocker left** and wants its own ObjC++ commit first (rule 24's shape). Then five
+`bind:`-observed key paths need `@objc dynamic` (rule 1), seven C++ clusters need
+homes rather than the single `…Support` file every earlier port got away with,
+and `-variables` stays on an ObjC++ category. Read the survey before starting.
 
 - **`FileBrowserViewController.mm` (2328).** Its known hazards, updated by what
   the DiskOperations port measured:

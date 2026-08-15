@@ -342,6 +342,82 @@ belongs in an ObjC++ category on the Swift class, exactly as
    reveal, new file/folder, rename, delete, the SCM badges, drag and drop. Three
    of the last four ports turned up something no test could reach.
 
+## FileBrowserViewController — the survey (2026-08-15, before any code)
+
+2329 lines, 137 methods, 40 of them actions, 13 private properties, 34 members in
+the public header. The checklist applied once, measured. `00a42e07` is the first
+prep commit that came out of it.
+
+**Cleared — these are *not* problems, checked rather than assumed:**
+- **No C++ ivars** (rule 20's `bundles::item_ptr` blocker). The class extension
+  holds nine ObjC ivars and three `NSInteger` counters, nothing more. There is no
+  DWScopeContext-style extraction to do first.
+- **No variadic calls** (rule 16) — no `addButtons:`, no `tmAlertWithMessageText:`.
+- **No exported globals defined here** (rule 19); the notification consts already
+  live in `FileBrowserNotifications.mm`.
+- **No C++ in any block signature this file passes or receives** (rule 15). The
+  framework has six `(^)` headers; the only C++ one is `SCMManagerCxx.h`, which
+  this file does not call.
+- **The class is constructible in a test process**, settled at the start of the
+  port, and 19 of its selectors are already pinned by
+  `t_file_browser_view_controller.mm`.
+
+**The four things that actually have to be solved:**
+
+1. **`+initialize` — a Swift class cannot provide one (rule 20), and this is now
+   the only structural blocker left.** It registers the services-menu send types
+   on NSApp and a user default seeded from Finder's `_FXSortFoldersFirst`.
+   Rule 24 is the worked precedent (`+load` → `+registerBuiltinClasses`): convert
+   it to explicit, lazy registration in **its own ObjC++ commit**, before any
+   Swift, so the suite and the app judge the behaviour change on its own. Note it
+   runs *before any instance exists*, so a `dispatch_once` from `-init` is the
+   shape — and `t_file_browser_view_controller.mm`'s `setup()` already documents
+   why it needs `NSApplicationLoad()`.
+
+2. **Rule 1 — five KVO-observed key paths, all reached by `bind:`.**
+   `canGoBack` and `canGoForward` (bound to the header's two nav buttons) with
+   `+keyPathsForValuesAffecting…` naming **`historyIndex`**, and
+   `fileItem.displayName` / `fileReference.image` (bound to the current-location
+   menu item's title and image). So `historyIndex`, `fileItem` and `fileReference`
+   must be `@objc dynamic`, and the two dependent-key class methods must survive
+   the port. Everything else is `valueForKeyPath:` *reads* over FileItem arrays,
+   which need nothing.
+
+3. **Seven C++ clusters, spread across the file rather than pooled** — this is the
+   real difference from every port so far, where one `…Support` file absorbed the
+   C++ (rule 25). Expect several, or an ObjC++ category that keeps the C++-heavy
+   methods together:
+   - `is_binary` (`path::glob_t` + settings) and the exclude/include
+     **`path::glob_list_t`** visibility filter (lines ~1469–1492, the biggest one)
+   - **`bundles::` three times**: the action-menu items
+     (`std::multimap<std::string, bundles::item_ptr, text::less_t>`), the new-file
+     grammar extension lookup, and `bundles::lookup` for running a command
+   - `std::map<SEL, std::string>` — the inactive key-equivalents table
+   - `-variables` (below), `to_s(NSEvent*)`, `path::device` in the drag handler,
+     and three throwaways (`std::clamp`, `std::set<NSInteger>`,
+     `std::vector<std::pair<BOOL, FileItem*>>`) that are plain translations.
+
+4. **`- (std::map<std::string,std::string>)variables` is pinned from outside** —
+   `DocumentWindowSupport.mm:353` calls it from `DocumentWindowController (Cxx)`.
+   Unchanged conclusion: it belongs on an ObjC++ category on the Swift class,
+   exactly like `DocumentWindowController`'s four.
+
+**The cross-module fact the earlier survey missed, and the reason the hand-decl
+header is load-bearing:** `DocumentWindow`'s *bridging header* imports
+`<FileBrowser/FileBrowserViewController.h>`, so **`DocumentWindowController.swift`
+is a cross-module Swift consumer** — it declares `@preconcurrency
+FileBrowserDelegate` and calls `newFile`, `newFolder`, `reload`, `deselectAll`,
+`outlineView`, `directoryURLForNewItems`, `path`, `selectedFileURLs`,
+`sessionState` and `setupViewWithState:`. Nothing in this framework is `public`,
+so none of it is reachable as a Swift type across modules; keeping
+`FileBrowserViewController.h` a hand-written ObjC declaration (rule 23) is what
+keeps DocumentWindow compiling untouched. That surface is what the rule-18
+selector test has to cover before the port, not just the action methods.
+
+**Suggested order from here:** the `+initialize` conversion (own commit) →
+extend the selector-surface test to the DocumentWindow-facing members → the port
+itself, split by section rather than in one commit, with an app run after each.
+
 ## One warning that is not about this framework
 
 `OakBackgroundFillView`'s overpaint bug (`6b419366`) made the *gutter* invisible

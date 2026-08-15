@@ -138,11 +138,7 @@
 @end
 
 @implementation SCMStatusFileItem
-+ (void)load
-{
-	[self registerClass:self forURLScheme:@"scm"];
-}
-
+// Registration moved to +[FileItem registerBuiltinClasses]; Swift has no +load.
 + (id)makeObserverForURL:(NSURL*)url usingBlock:(void(^)(NSArray<NSURL*>*))handler
 {
 	return [[SCMStatusObserver alloc] initWithURL:url usingBlock:handler];

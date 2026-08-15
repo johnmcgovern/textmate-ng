@@ -9,11 +9,7 @@
 @end
 
 @implementation MountedVolumesFileItem
-+ (void)load
-{
-	[self registerClass:self forURLScheme:@"computer"];
-}
-
+// Registration moved to +[FileItem registerBuiltinClasses]; Swift has no +load.
 + (id)makeObserverForURL:(NSURL*)url usingBlock:(void(^)(NSArray<NSURL*>*))handler
 {
 	return [[MountedVolumesObserver alloc] initWithBlock:handler];

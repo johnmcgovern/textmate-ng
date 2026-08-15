@@ -14,9 +14,23 @@ NSURL* const kURLLocationFavorites = [[NSURL alloc] initFileURLWithPath:[NSHomeD
 static NSMutableDictionary* SchemeToClass;
 
 @implementation FileItem
-+ (void)load
+// Was three separate +load methods (here, FileItemSCMStatus, FileItemMountedVolumes)
+// that each self-registered a URL scheme. Swift never runs +load, so to let this
+// class family become Swift the registration is explicit and lazy instead. The
+// subclasses live in other files with no shared header; NSClassFromString reaches
+// them without one, and -ObjC (load-bearing in this project) keeps them linked
+// even though nothing references their symbols. Runs once, before the first
+// lookup, which is the only reader — so there is no load-order dependency.
++ (void)registerBuiltinClasses
 {
-	[self registerClass:[FileItem class] forURLScheme:@"file"];
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		[self registerClass:[FileItem class] forURLScheme:@"file"];
+		if(Class klass = NSClassFromString(@"SCMStatusFileItem"))
+			[self registerClass:klass forURLScheme:@"scm"];
+		if(Class klass = NSClassFromString(@"MountedVolumesFileItem"))
+			[self registerClass:klass forURLScheme:@"computer"];
+	});
 }
 
 + (void)registerClass:(Class)klass forURLScheme:(NSString*)urlScheme
@@ -28,6 +42,7 @@ static NSMutableDictionary* SchemeToClass;
 
 + (Class)classForURL:(NSURL*)url
 {
+	[self registerBuiltinClasses];
 	return SchemeToClass[url.scheme];
 }
 

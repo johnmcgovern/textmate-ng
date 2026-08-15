@@ -21,3 +21,9 @@
 // +[NSImage imageNamed:inSameBundleAsClass:], for OFBActionsView's bundle-local
 // button images (SearchTemplate, FavoritesTemplate, SCMTemplate).
 #import <OakAppKit/NSImage Additions.h>
+
+// The outline view's delegate protocol (its class is defined in Swift, so only
+// the protocol half is safe to import here) and the C++ key-equivalent helper it
+// calls. Both are C++-free headers.
+#import "FileBrowserOutlineViewDelegate.h"
+#import "FileBrowserOutlineViewKeyBindings.h"

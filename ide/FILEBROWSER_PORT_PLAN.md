@@ -76,13 +76,28 @@ all work. What no test reaches (rule 8) was checked by hand, not assumed.
     override keeps the send/super control flow. Two more API renames surfaced:
     `rectOfRow` → `rect(ofRow:)`, `makeKeyWindow()` → `makeKey()`.
 
+- `14fcec1a` — **OFBFinderTagsChooser ported** (241 lines, the biggest leaf, but
+  no C++). Its private `OFBFinderTagImage : NSImage` was a subclass whose only
+  method was a factory returning a plain `NSImage`, so it collapsed to a private
+  drawing func. Bridging header gained `OakFinderTag.h` + `OakRolloverButton.h`;
+  the latter's `extern NSNotificationName` globals are **referenced** from Swift
+  (allowed — rule 19 forbids exporting, not calling) with the importer's
+  suffix-strip: `.OakRolloverButtonMouseDidEnter` / `…DidLeave`. Verified in the
+  app: swatches draw in the action menu, hover draws the + and updates the caption.
+
 **What is left, in the plan's order:** step 3, the rest of the leaves —
-`OFBFinderTagsChooser` (241), `FileItemTableCellView` (294, **bindings-heavy —
-rule 1**, grep its `bind:` calls and make every observed property `@objc
-dynamic`), the `FileItem*` model files, then `FileBrowserDiskOperations`; step 4,
-`FileBrowserViewController.mm` (2328) last. The Swift translation of
-FSEventsManager/SCMManager can go with the leaves — their C++ boundaries are
-already clear.
+`FileItemTableCellView` (294, **bindings-heavy — rule 1**, grep its `bind:` calls
+and make every observed property `@objc dynamic`), the `FileItem*` model files,
+then `FileBrowserDiskOperations`; step 4, `FileBrowserViewController.mm` (2328)
+last. The Swift translation of FSEventsManager/SCMManager can go with the leaves —
+their C++ boundaries are already clear.
+
+The four views ported so far share one shape worth naming: keep the class's `.h`
+as a hand-written ObjC decl (never in the bridging header), collapse C++/method-
+body oddments behind a small ObjC++ helper or a split protocol header, and pin
+the surface with an `instancesRespondToSelector:` test. `FileItemTableCellView`
+is the first that breaks the mold — it is `bind:`-heavy, so its port is about
+`@objc dynamic` on observed properties, not view construction.
 
 Two facts for the next session: the ObjC++ tests compile **ARC-off**, and this
 framework's public headers carry **no Foundation import** (they lean on the PCH,

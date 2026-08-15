@@ -66,7 +66,7 @@ typedef NS_OPTIONS(NSUInteger, FBOperation) {
 	FBOperationNewFolder = 0x0080,
 };
 
-@interface FileBrowserViewController (DiskOperations)
-- (NSArray<NSURL*>*)performOperation:(FBOperation)op withURLs:(NSDictionary<NSURL*, NSURL*>*)urls unique:(BOOL)makeUnique select:(BOOL)selectDestinationURLs;
-- (NSArray<NSURL*>*)performOperation:(FBOperation)op sourceURLs:(NSArray<NSURL*>*)srcURLs destinationURLs:(NSArray<NSURL*>*)destURLs unique:(BOOL)makeUnique select:(BOOL)selectDestinationURLs;
-@end
+// The (DiskOperations) category that used to be declared here now lives in
+// FileBrowserDiskOperations.h — this header has to stay importable from the
+// Swift bridging header, and Swift implements that category. FBOperation stays
+// because the Swift signatures need it.

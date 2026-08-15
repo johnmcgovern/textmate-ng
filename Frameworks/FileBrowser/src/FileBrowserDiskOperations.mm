@@ -1,4 +1,4 @@
-#import "FileBrowserViewController.h"
+#import "FileBrowserDiskOperations.h"
 #import "FileBrowserNotifications.h"
 #import "FileItem.h"
 #import <OakAppKit/OakSound.h>

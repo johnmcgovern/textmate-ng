@@ -13,7 +13,11 @@
 #import <Cocoa/Cocoa.h>
 
 // OakCreateNSBoxSeparator / OakAddAutoLayoutViewsToSuperview /
-// OakSetupKeyViewLoop, and the NSVisualEffectView chrome the header/actions
-// views are built from.
+// OakSetupKeyViewLoop / OakCreateActionPopUpButton, and the NSVisualEffectView
+// chrome the header/actions views are built from.
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/OakUIConstructionFunctions.h>
+
+// +[NSImage imageNamed:inSameBundleAsClass:], for OFBActionsView's bundle-local
+// button images (SearchTemplate, FavoritesTemplate, SCMTemplate).
+#import <OakAppKit/NSImage Additions.h>

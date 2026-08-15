@@ -34,11 +34,35 @@ all work. What no test reaches (rule 8) was checked by hand, not assumed.
   Note found in passing: **`-addObserverToFileAtURL:usingBlock:` has zero callers
   anywhere** — a later cleanup can just delete it.
 
-**What is left, in the plan's order:** step 3, the leaves (`FileBrowserView`,
-`FileBrowserOutlineView`, `OFB/*`, `FileItemTableCellView`), then
-`FileBrowserDiskOperations`; step 4, `FileBrowserViewController.mm` (2328) last.
-Neither manager nor the leaves are Swift yet — only their C++ boundaries are now
-clear. The Swift translation of FSEventsManager/SCMManager can go with the leaves.
+- `87048ee9` — **OFBHeaderView ported to Swift: the framework's first `.swift`,
+  and the build wiring is now stood up.** Chosen as the trailblazer because it is
+  one of the simplest classes (a code-built NSVisualEffectView, no logic), so the
+  port risked only the wiring. Verified in the app — the header renders and the
+  folder pop-up populates, i.e. the full ObjC++→Swift round trip works. What the
+  next leaf inherits, all now proven:
+  - `default.rave` has `swift` in both source globs.
+  - `src/FileBrowser-Bridging-Header.h` exists (prelude.cc + Cocoa + OakAppKit +
+    OakUIConstructionFunctions). Add to it what each new Swift file needs from ObjC.
+  - **No module/class-name collision** (no class is named `FileBrowser`), so the
+    framework's ObjC++ *could* `#import "FileBrowser-Swift.h"` directly like
+    OakAppKit does. This port chose the other arrangement instead — keep each
+    ported class's `.h` as a hand-written ObjC declaration (the
+    DocumentWindowController.h pattern) — for zero consumer churn and so tests can
+    import it. Either works; be consistent and never let the bridging header reach
+    a hand-decl `.h`.
+  - Gotcha paid: unannotated C globals import to Swift as returning **optional**
+    (`OakCreateNSBoxSeparator()` is `NSView?`) — force-unwrap, as
+    `SelectGrammarViewController.swift` does.
+
+**What is left, in the plan's order:** step 3, the rest of the leaves —
+`OFBActionsView` (72, the twin of the one just done, trivial next),
+`FileBrowserOutlineView` (103, has a small `std::string` key-handling bit),
+`OFBFinderTagsChooser` (241), `FileItemTableCellView` (294, **bindings-heavy —
+rule 1**, grep its `bind:` calls and make every observed property `@objc
+dynamic`), the `FileItem*` model files, then `FileBrowserDiskOperations`; step 4,
+`FileBrowserViewController.mm` (2328) last. The Swift translation of
+FSEventsManager/SCMManager can go with the leaves — their C++ boundaries are
+already clear.
 
 Two facts for the next session: the ObjC++ tests compile **ARC-off**, and this
 framework's public headers carry **no Foundation import** (they lean on the PCH,

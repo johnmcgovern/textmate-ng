@@ -42,3 +42,8 @@
 #import "FileItemLocations.h"
 #import <OakFoundation/OakFoundation.h>
 #import <Preferences/Keys.h>
+
+// The SCM data source (FileItemSCMStatus.swift): SCMManager/SCMRepository — the
+// C++-free public header — and the ObjC++ helper holding the scm-map walk.
+#import "SCMManager.h"
+#import "FileItemSCMStatusSupport.h"

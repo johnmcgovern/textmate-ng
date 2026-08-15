@@ -33,7 +33,7 @@ operations:
 
 ### What is still ObjC++ (and why)
 
-- **The one port left:** `FileBrowserViewController.mm` (2328, the big one).
+- **The one port left:** `FileBrowserViewController.mm` (2329, the big one).
 - **ObjC++ by design (do not "finish" these without reason):**
   - `FSEventsManager.mm`, `SCMManager.mm` — model managers whose C++ boundaries
     were already made Swift-importable (`FSEventStream`, `SCMManagerCxx`). A Swift
@@ -80,21 +80,21 @@ blocker left** and wants its own ObjC++ commit first (rule 24's shape). Then fiv
 homes rather than the single `…Support` file every earlier port got away with,
 and `-variables` stays on an ObjC++ category. Read the survey before starting.
 
-- **`FileBrowserViewController.mm` (2328).** Its known hazards, updated by what
-  the DiskOperations port measured:
-  - **The rule-21 cascade is real but smaller than the survey thought.** Two of
-    the three fears are now settled facts rather than risks: the bridging header
-    *already* imports `FileBrowserViewController.h` (DiskOperations needs it), a
-    `@class FileItem` forward declaration in it unifies with the Swift FileItem
-    instead of colliding, and the C++-typed `-variables` is dropped by the
-    importer. What genuinely has to change when **Swift defines the class**: that
-    import must go, and everything the Swift still needs from that header —
-    `FBOperation`, which DiskOperations' signatures use — needs the FindTypes.h
-    split into its own header. `FileBrowserNotifications.h` already isolates the
-    notification consts, and `FileBrowserDiskOperations.h` already isolates the
-    category declaration. `DocumentWindow`'s bridging header importing
-    `<FileBrowser/FileBrowserViewController.h>` stays fine; it does not define
-    the class.
+- **`FileBrowserViewController.mm` (2329).** Its known hazards, updated by what
+  the DiskOperations port and the survey measured:
+  - **The rule-21 cascade is real but smaller than the survey thought, and its
+    structural half is now done.** Three of the fears are settled facts rather
+    than risks: a `@class FileItem` forward declaration unifies with the Swift
+    FileItem instead of colliding, the C++-typed `-variables` is dropped by the
+    importer, and every type the Swift needs out of that header has been split
+    into exported companions — `FileBrowserTypes.h` (FBOperation +
+    FileBrowserDelegate), `FileBrowserNotifications.h` (the notification consts),
+    `FileBrowserDiskOperations.h` (the category declaration). So when **Swift
+    defines the class**, the bridging header change is deleting its one
+    `#import "FileBrowserViewController.h"` line. `DocumentWindow`'s bridging
+    header keeps importing `<FileBrowser/FileBrowserViewController.h>` — it does
+    not define the class, and that hand-decl is what keeps its *Swift* compiling
+    (see the survey's cross-module note).
   - **DiskOperations is already a Swift extension on this class**, so when the
     controller becomes Swift the extension needs nothing except that its
     `@objc(...)` selector spellings stay — and `FileBrowserDiskOperations.h` can

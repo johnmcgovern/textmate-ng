@@ -52,3 +52,13 @@
 // and the ObjC++ helper for the git-deleted-files walk.
 #import "FSEventsManager.h"
 #import "FileItemObserverSupport.h"
+
+// FileBrowserDiskOperations.swift extends FileBrowserViewController, which is
+// still ObjC++, so unlike every other class here its declaration *is* wanted.
+// The (DiskOperations) category it implements lives in
+// FileBrowserDiskOperations.h and is deliberately not imported — Swift defines
+// those methods. FBOperation comes from this header.
+#import "FileBrowserViewController.h"
+#import "FileBrowserNotifications.h"
+#import "FileBrowserDiskOperationsSupport.h"
+#import <OakAppKit/OakSound.h>

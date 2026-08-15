@@ -85,19 +85,38 @@ all work. What no test reaches (rule 8) was checked by hand, not assumed.
   suffix-strip: `.OakRolloverButtonMouseDidEnter` / `…DidLeave`. Verified in the
   app: swatches draw in the action menu, hover draws the + and updates the caption.
 
-**What is left, in the plan's order:** step 3, the rest of the leaves —
-`FileItemTableCellView` (294, **bindings-heavy — rule 1**, grep its `bind:` calls
-and make every observed property `@objc dynamic`), the `FileItem*` model files,
-then `FileBrowserDiskOperations`; step 4, `FileBrowserViewController.mm` (2328)
-last. The Swift translation of FSEventsManager/SCMManager can go with the leaves —
-their C++ boundaries are already clear.
+- `9c888b52` — **FileItemTableCellView ported: the first bindings-heavy leaf.**
+  Rule 1 in practice: the row's bindings observe key paths rooted at
+  `fileReference` (`fileReference.icon`, `fileReference.closable`) and the view
+  sets that property from `-observeValue`, so `fileReference` is **`@objc
+  dynamic`** — without it the Swift write skips the KVO swizzle and the icon/close
+  button never update. Everything else hung off `objectValue` (a FileItem, still
+  ObjC) so needed nothing. The `FileItem (FileItemWrapper)` category
+  (`editingAndDisplayName` + its dependent keys) stayed ObjC++ as
+  `FileItemEditingName` — it belongs to FileItem and the binding needs FileItem
+  itself to publish the key; it folds in when FileItem ports. Two facts paid:
+  OakCreateLabel/OakCreateCloseButton **C++ default args aren't imported** (pass
+  them all), and a **@MainActor class can't touch its state from a nonisolated
+  `deinit`** under Swift 6 → binding teardown runs in `MainActor.assumeIsolated`
+  (an NSView always deallocs on the main thread). Verified in the app: icons +
+  SCM badges render, a Finder tag draws its dot, and rename selects the basename.
 
-The four views ported so far share one shape worth naming: keep the class's `.h`
-as a hand-written ObjC decl (never in the bridging header), collapse C++/method-
-body oddments behind a small ObjC++ helper or a split protocol header, and pin
-the surface with an `instancesRespondToSelector:` test. `FileItemTableCellView`
-is the first that breaks the mold — it is `bind:`-heavy, so its port is about
-`@objc dynamic` on observed properties, not view construction.
+**What is left, in the plan's order:** step 3, the remaining model files —
+the `FileItem*` group (`FileItem` 209, `FileItemSCMStatus` 209 which now imports
+`SCMManagerCxx.h`, `FileItemObserver` 198, `FileItemMountedVolumes` 58), then
+`FileBrowserDiskOperations` (530); step 4, `FileBrowserViewController.mm` (2328)
+last. The Swift translation of FSEventsManager/SCMManager can go with these —
+their C++ boundaries are already clear. Note `FileItemEditingName` folds into
+FileItem when that ports, and porting FileItem is the trigger for the rule-11
+work on `FileItem.h` (currently pulled into the bridging header).
+
+The five views ported so far share one shape: keep the class's `.h` as a
+hand-written ObjC decl (never in the bridging header), collapse C++/method-body
+oddments behind a small ObjC++ helper or a split protocol header, and pin the
+surface with an `instancesRespondToSelector:` test. The model files ahead are a
+different kind of work — data/logic, not view construction — and several hold C++
+(`FileItemSCMStatus` iterates the scm map; `FileItem` may hold C++ state), so
+expect the DWScopeContext/`-Cxx` boundary treatment rather than hand-decl headers.
 
 Two facts for the next session: the ObjC++ tests compile **ARC-off**, and this
 framework's public headers carry **no Foundation import** (they lean on the PCH,

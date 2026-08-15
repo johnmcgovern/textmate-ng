@@ -101,22 +101,45 @@ all work. What no test reaches (rule 8) was checked by hand, not assumed.
   (an NSView always deallocs on the main thread). Verified in the app: icons +
   SCM badges render, a Finder tag draws its dot, and rename selects the basename.
 
-**What is left, in the plan's order:** step 3, the remaining model files —
-the `FileItem*` group (`FileItem` 209, `FileItemSCMStatus` 209 which now imports
-`SCMManagerCxx.h`, `FileItemObserver` 198, `FileItemMountedVolumes` 58), then
-`FileBrowserDiskOperations` (530); step 4, `FileBrowserViewController.mm` (2328)
-last. The Swift translation of FSEventsManager/SCMManager can go with these —
-their C++ boundaries are already clear. Note `FileItemEditingName` folds into
-FileItem when that ports, and porting FileItem is the trigger for the rule-11
-work on `FileItem.h` (currently pulled into the bridging header).
+- `2a8d36fb` — **Prep: FileItem +load registration replaced with explicit
+  registration.** The `FileItem*` family is a URL-scheme→class registry
+  (`file`→FileItem, `computer`→MountedVolumesFileItem, `scm`→SCMStatusFileItem),
+  and each class registered itself from `+load` — which Swift never runs. So the
+  registry is now `+[FileItem registerBuiltinClasses]` (dispatch_once, from
+  `+classForURL:`, using NSClassFromString so no shared header is needed; `-ObjC`
+  keeps the classes linked). Still ObjC++; verified all three schemes in the app.
+  This unblocks porting the family — but see the two further blockers below,
+  found while surveying, before starting.
 
-The five views ported so far share one shape: keep the class's `.h` as a
-hand-written ObjC decl (never in the bridging header), collapse C++/method-body
-oddments behind a small ObjC++ helper or a split protocol header, and pin the
-surface with an `instancesRespondToSelector:` test. The model files ahead are a
-different kind of work — data/logic, not view construction — and several hold C++
-(`FileItemSCMStatus` iterates the scm map; `FileItem` may hold C++ state), so
-expect the DWScopeContext/`-Cxx` boundary treatment rather than hand-decl headers.
+**What is left, in the plan's order:** step 3, the `FileItem*` family, then
+`FileBrowserDiskOperations` (530); step 4, `FileBrowserViewController.mm` (2328)
+last.
+
+**Before porting `FileItem` itself, two blockers beyond `+load` (now cleared):**
+1. **Rule 19 — exported globals.** `FileItem.h` declares
+   `extern NSURL* const kURLLocationComputer` / `…Favorites`, defined in
+   `FileItem.mm` and used by `FileBrowserViewController.mm`. Swift cannot *export*
+   a global, so these must move to a small ObjC++ file (a `FileItemLocations`
+   forwarder) that stays ObjC++, before FileItem becomes Swift.
+2. **Rule 11 — header split + the bridging-header entanglement.** `FileItem.h` is
+   currently pulled into the Swift bridging header (via `FileItemEditingName.h`,
+   which is a category on FileItem). Once Swift *defines* FileItem, the bridging
+   header must not see `FileItem.h`; anything the Swift needs from it (the globals
+   above, `OakFinderTag`) splits out, and `FileItemEditingName` folds into
+   `FileItem.swift`. This is the Find.h→FindTypes.h split, one level deeper.
+
+Then the C++ ones: `FileItemSCMStatus` (iterates the scm map with
+`scm::status::` bitmasks and `path::is_child` — wants the `-Cxx`/support-file
+treatment) and `FileItemObserver` (a category + observer classes, `path::parent`
++ the scm block). `FileItemMountedVolumes` is small and C++-free once `+load` is
+gone. The Swift translation of FSEventsManager/SCMManager can go alongside these.
+
+The five views ported so far share one shape: hand-written ObjC decl `.h` (never
+in the bridging header), C++/method-body oddments behind a small ObjC++ helper or
+a split header, and an `instancesRespondToSelector:` test. The model files are a
+different kind of work — data/logic and a class hierarchy with exported globals
+and C++ — so expect the DWScopeContext/`-Cxx` + rule-19 forwarder treatment, not
+the tidy hand-decl shape the views used.
 
 Two facts for the next session: the ObjC++ tests compile **ARC-off**, and this
 framework's public headers carry **no Foundation import** (they lean on the PCH,

@@ -32,3 +32,9 @@
 // notification names), for OFBFinderTagsChooser's swatch buttons.
 #import <OakAppKit/OakFinderTag.h>
 #import <OakAppKit/OakRolloverButton.h>
+
+// FileItemTableCellView: TMFileReference (the icon/closable source it observes)
+// and the FileItem(EditingName) binding support (which pulls in FileItem itself —
+// still ObjC, so importable here for now).
+#import <TMFileReference/TMFileReference.h>
+#import "FileItemEditingName.h"

@@ -131,19 +131,36 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 + (NSSet*)keyPathsForValuesAffectingCanGoBack    { return [NSSet setWithObjects:@"historyIndex", nil]; }
 + (NSSet*)keyPathsForValuesAffectingCanGoForward { return [NSSet setWithObjects:@"historyIndex", nil]; }
 
-+ (void)initialize
+// Was +initialize, which a Swift class cannot provide (rule 20), so it is now
+// explicit and lazy — the same conversion +load got in 2a8d36fb, and a prep step
+// rather than part of the port.
+//
+// The timing is unchanged in every way that is observable: +initialize fired on
+// the first message to the class, which in practice is the +alloc immediately
+// before -init (DocumentWindowController.swift:1588 is the only construction
+// site, and neither +restorableStateKeyPaths nor the two
+// +keyPathsForValuesAffecting… methods can be reached before an instance
+// exists). It must stay at the *top* of -init: -init itself reads
+// kUserDefaultsFoldersOnTopKey three lines later, and that read is the reason
+// the default is registered at all.
++ (void)registerDefaults
 {
-	[NSApplication.sharedApplication registerServicesMenuSendTypes:@[ NSFilenamesPboardType, NSURLPboardType ] returnTypes:@[ ]];
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		[NSApplication.sharedApplication registerServicesMenuSendTypes:@[ NSFilenamesPboardType, NSURLPboardType ] returnTypes:@[ ]];
 
-	[NSUserDefaults.standardUserDefaults registerDefaults:@{
-		kUserDefaultsFoldersOnTopKey: [[[NSUserDefaults alloc] initWithSuiteName:@"com.apple.finder"] objectForKey:@"_FXSortFoldersFirst"] ?: @NO,
-	}];
+		[NSUserDefaults.standardUserDefaults registerDefaults:@{
+			kUserDefaultsFoldersOnTopKey: [[[NSUserDefaults alloc] initWithSuiteName:@"com.apple.finder"] objectForKey:@"_FXSortFoldersFirst"] ?: @NO,
+		}];
+	});
 }
 
 - (instancetype)init
 {
 	if(self = [super init])
 	{
+		[FileBrowserViewController registerDefaults];
+
 		_fileItemObservers = [NSMutableDictionary dictionary];
 		_loadingURLs       = [NSMutableSet set];
 

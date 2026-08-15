@@ -1,4 +1,5 @@
 #import "../src/FileBrowserViewController.h"
+#import <Preferences/Keys.h>
 
 // The framework's first tests. Written before any port, against the ObjC++, so
 // that a green suite after the port means something — the order every port in
@@ -19,9 +20,9 @@
 
 void setup ()
 {
-	// +[FileBrowserViewController initialize] calls -registerServicesMenuSendTypes:
-	// on NSApp, and the controller observes user defaults; both want a real
-	// application object and main run loop to exist.
+	// +[FileBrowserViewController registerDefaults] calls
+	// -registerServicesMenuSendTypes: on NSApp, and the controller observes user
+	// defaults; both want a real application object and main run loop to exist.
 	NSApplicationLoad();
 }
 
@@ -90,4 +91,37 @@ void test_file_browser_view_controller_keeps_its_cxx_and_category_selectors ()
 	assert_responds(@selector(variables));
 	assert_responds(@selector(performOperation:withURLs:unique:select:));
 	assert_responds(@selector(performOperation:sourceURLs:destinationURLs:unique:select:));
+}
+
+// The registration that used to be +initialize (rule 20: a Swift class cannot
+// provide one, so it became explicit and lazy before the port). Two things have
+// to stay true and neither is visible to the compiler: that constructing a
+// controller performs it, and that it is idempotent — -init runs per instance
+// where +initialize ran once.
+//
+// This does not depend on running before the other tests in this bundle, even
+// though they construct controllers too: -init is the *only* caller of
+// +registerDefaults now that the runtime is not, so if that call were dropped
+// the key would never reach the registration domain in this process at all and
+// the assert below fails whatever the order. (Removing the key from the standard
+// domain first is not what makes it fail — that domain is a different one; it is
+// there so a value left by a previous run cannot mask the registration.)
+void test_file_browser_view_controller_registers_its_defaults_from_init ()
+{
+	OAK_ASSERT([FileBrowserViewController respondsToSelector:@selector(registerDefaults)]);
+
+	// foldersOnTop has no registered default until a controller exists.
+	[NSUserDefaults.standardUserDefaults removeObjectForKey:kUserDefaultsFoldersOnTopKey];
+
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+	OAK_ASSERT(controller != nil);
+
+	NSDictionary* registered = [NSUserDefaults.standardUserDefaults volatileDomainForName:NSRegistrationDomain];
+	OAK_ASSERT(registered[kUserDefaultsFoldersOnTopKey] != nil);
+
+	// A second instance must not fail or re-register differently.
+	id firstValue = registered[kUserDefaultsFoldersOnTopKey];
+	FileBrowserViewController* second = [FileBrowserViewController new];
+	OAK_ASSERT(second != nil);
+	OAK_ASSERT([[NSUserDefaults.standardUserDefaults volatileDomainForName:NSRegistrationDomain][kUserDefaultsFoldersOnTopKey] isEqual:firstValue]);
 }

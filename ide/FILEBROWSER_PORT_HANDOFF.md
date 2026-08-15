@@ -1,7 +1,8 @@
 # FileBrowser port — handoff
 
 _Written 2026-08-15 at the end of the session that ported the whole FileBrowser
-view layer and the entire `FileItem*` model family to Swift. This is the
+view layer and the entire `FileItem*` model family to Swift, and updated later
+the same day when `FileBrowserView` finished the view layer. This is the
 starting point for a fresh session; the per-commit detail and the reasoning
 behind each decision live in `ide/FILEBROWSER_PORT_PLAN.md`, and the 22
 cross-framework rules that predate this work are at the end of
@@ -10,12 +11,11 @@ not assumed._
 
 ## State you are starting from
 
-- `master`, HEAD `c2410969`, tree clean. 21 commits this session, from the survey
-  (`2bc08f5a`) through the model-file ports.
-- **617 tests across 36 bundles, green.** Re-measure, never increment — that
-  figure has been wrong in these docs before (rule 10). FileBrowser has **8** test
-  files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** at the
-  start of the session.
+- `master`, HEAD `53638c07`, tree clean.
+- **620 tests across 36 bundles, green.** Re-measure, never increment — that
+  figure has been wrong in these docs before (rule 10). FileBrowser has **9** test
+  files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before
+  this port began.
 - The **first thing settled** was the survey's open question: `FileBrowserViewController`
   **is** constructible in a test process. So this framework's coverage can use
   instances.
@@ -25,14 +25,12 @@ not assumed._
 The entire view layer and the whole `FileItem*` model family:
 
 `OFBHeaderView`, `OFBActionsView`, `FileBrowserOutlineView`, `OFBFinderTagsChooser`,
-`FileItemTableCellView`, `FileItem` (base), `FileItemMountedVolumes`,
-`FileItemSCMStatus`, `FileItemObserver`.
+`FileItemTableCellView`, `FileBrowserView`, `FileItem` (base),
+`FileItemMountedVolumes`, `FileItemSCMStatus`, `FileItemObserver`.
 
 ### What is still ObjC++ (and why)
 
-- **Ports still to do:** `FileBrowserView.mm` (74 — the container view that builds
-  the header/actions/outline/scroll; a leaf that was **skipped** and is the
-  easiest remaining port), `FileBrowserDiskOperations.mm` (530), and
+- **Ports still to do:** `FileBrowserDiskOperations.mm` (530) and
   `FileBrowserViewController.mm` (2328, the big one — do it last).
 - **ObjC++ by design (do not "finish" these without reason):**
   - `FSEventsManager.mm`, `SCMManager.mm` — model managers whose C++ boundaries
@@ -56,8 +54,9 @@ xcodebuild -project TextMate.xcodeproj -target TextMate -configuration Release b
 open -a "$PWD/build/Release/TextMate-NG.app" <some-git-repo>                                  # run it
 ```
 
-Re-seeding is only needed when a source file is **added or removed** (a `.mm`→
-`.swift` swap counts). Editing existing files does not need it.
+Re-seeding is needed when a source file is **added or removed** (a `.mm`→`.swift`
+swap counts) **and every time a test file's contents change** — see rule 29.
+Editing an existing `src/` file does not need it.
 
 **Run the app, every time (rule 8, and it earned its keep again).** The
 FileItemObserver port compiled, passed all 617 tests, and showed an **empty
@@ -69,12 +68,7 @@ Computer shows the host + volumes, and rename selects the basename.
 
 ## The next ports, specifically
 
-- **`FileBrowserView.mm` (leaf, do first).** A 74-line `NSView` that builds the
-  header/actions/outline/scroll in `-initWithFrame:`. No C++, no bindings. Its
-  `.h` forward-declares the OFB view types and exposes `headerView`/`outlineView`/
-  `actionsView`. Straight port on the wiring already stood up; keep `FileBrowserView.h`
-  a hand-decl (rule 23).
-- **`FileBrowserDiskOperations.mm` (530).** A category on `FileBrowserViewController`
+- **`FileBrowserDiskOperations.mm` (530), do first.** A category on `FileBrowserViewController`
   (`performOperation:…`), so it stays paired with the controller. It calls
   `FileItem`/`fileItemWithURL:` (now Swift — fine via the hand-decl) and sets
   `parent.children`. 4 C++ hits per the survey — expect a small `-Cxx`/support
@@ -154,6 +148,28 @@ Computer shows the host + volumes, and rename selects the basename.
     (`OakCreateActionPopUpButton(false)`); and `…AtURL:`/`…ForURL:` selectors trim
     the trailing `URL` inconsistently (`repositoryAtURL:` → `repository(at:)` but
     `addObserverToRepositoryAtURL:usingBlock:` → `addObserverToRepository(at:usingBlock:)`).
+
+The next two are from `FileBrowserView` (`53638c07`). Neither is about Swift —
+both are ways this repo's test harness lies to you.
+
+29. **Editing a test file needs a re-seed.** `seed_xcodeproj.rb` **inlines** every
+    `tests/t_*.mm` into `ide/gen/tests/<Bundle>_impl.mm` (with `#line` directives,
+    which is why failures still point at your file). Only that generated file is
+    in the project, so after editing a test `xcodebuild` finds nothing changed,
+    silently re-runs **the previous build's test code**, and reports the same
+    failure at the same line — which reads as "my fix did nothing". Re-run
+    `extract_specs.rb` + `seed_xcodeproj.rb` after any test edit, not just after
+    adding or removing files.
+
+30. **`to_s()` on an `NSString*` does not work in an ObjC++ test bundle** unless
+    `ns.h` is in scope, and nothing warns you. `ide/xctest_preamble.h` defines a
+    generic `to_s(_T const& container)` that for-in-enumerates its argument; with
+    `ns.h`'s `to_s(NSString*)` absent it binds to that template, compiles clean,
+    and dies at runtime with
+    `-[__NSCFConstantString countByEnumeratingWithState:objects:count:]:
+    unrecognized selector` pointing at `xctest_preamble.h`, not at your test.
+    `OakAppKit`'s tests get `ns.h` from their PCH; FileBrowser's do not. Compare
+    strings with `-isEqualToString:` inside `OAK_ASSERT` instead.
 
 ## One build gotcha that is not a code error
 

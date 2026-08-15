@@ -113,7 +113,8 @@ all work. What no test reaches (rule 8) was checked by hand, not assumed.
 
 **What is left, in the plan's order:** step 3, the `FileItem*` family, then
 `FileBrowserDiskOperations` (530); step 4, `FileBrowserViewController.mm` (2328)
-last.
+last. (Both of step 3's halves are done as of `53638c07`; only
+`FileBrowserDiskOperations` and the controller remain.)
 
 **Before porting `FileItem` itself, two blockers beyond `+load` (now cleared):**
 1. **Rule 19 — exported globals.** `FileItem.h` declares
@@ -173,6 +174,19 @@ last.
      ObjC-ownership detail a Swift port must preserve, not "improve".
   Also: `makeObserverForURL:` now lives on FileItem (default → FileSystemObserver)
   so the MountedVolumes/SCMStatus overrides are real `override`s.
+
+- `53638c07` — **FileBrowserView ported: the view layer is finished.** The 74-line
+  container the survey skipped; every view it builds was already Swift, so the
+  bridging header needed nothing. `NSAccessibilityGroup` is not declared on the
+  Swift class (Swift-6 main-actor isolation — OakTabBarView settled this: set the
+  role at runtime, which is what VoiceOver reads), and the `outlineView` property
+  keeps the ObjC++'s `NSOutlineView*` spelling so the hand-decl does not drift.
+  Two workflow facts it cost, now rules 29 and 30 in the handoff: **editing a test
+  file needs a re-seed** (the seed inlines test sources into
+  `ide/gen/tests/<Bundle>_impl.mm`, so xcodebuild re-runs the old test code and
+  says nothing), and **`to_s()` on an NSString does not work in an ObjC++ test
+  bundle** unless `ns.h` is in scope — `xctest_preamble.h`'s generic
+  `to_s(_T const&)` binds instead and enumerates the string as a container.
 
 **All the `FileItem*` model files and the whole view layer are now Swift.**
 

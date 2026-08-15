@@ -58,6 +58,15 @@ class FileItem: NSObject, QLPreviewItem {
 		return klass.init(URL: url)
 	}
 
+	// The watcher behind addObserverToDirectory (FileItemObserver.swift). The
+	// default handles file:// URLs; the scm/computer subclasses override it. In
+	// the class body rather than an extension so those overrides are legal.
+	@MainActor
+	@objc(makeObserverForURL:usingBlock:)
+	class func makeObserver(forURL url: NSURL, usingBlock handler: @escaping ([URL]) -> Void) -> Any? {
+		return url.isFileURL ? FileSystemObserver(URL: url, usingBlock: handler) : nil
+	}
+
 	// ==============
 	// = Properties =
 	// ==============

@@ -47,3 +47,8 @@
 // C++-free public header — and the ObjC++ helper holding the scm-map walk.
 #import "SCMManager.h"
 #import "FileItemSCMStatusSupport.h"
+
+// The directory observers (FileItemObserver.swift): FSEventsManager (C++-free)
+// and the ObjC++ helper for the git-deleted-files walk.
+#import "FSEventsManager.h"
+#import "FileItemObserverSupport.h"

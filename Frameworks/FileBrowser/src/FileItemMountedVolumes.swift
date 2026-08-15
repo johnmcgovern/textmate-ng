@@ -13,8 +13,9 @@ import AppKit
 // default still in FileItemObserver.mm.
 @objc(MountedVolumesFileItem)
 final class MountedVolumesFileItem: FileItem {
+	@MainActor
 	@objc(makeObserverForURL:usingBlock:)
-	class func makeObserver(forURL url: NSURL, usingBlock handler: @escaping ([URL]) -> Void) -> Any? {
+	override class func makeObserver(forURL url: NSURL, usingBlock handler: @escaping ([URL]) -> Void) -> Any? {
 		return MountedVolumesObserver(block: handler)
 	}
 

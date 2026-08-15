@@ -48,8 +48,9 @@ final class SCMStatusFileItem: FileItem {
 	private var repository: SCMRepository?
 	private var observer: Any?
 
+	@MainActor
 	@objc(makeObserverForURL:usingBlock:)
-	class func makeObserver(forURL url: NSURL, usingBlock handler: @escaping ([URL]) -> Void) -> Any? {
+	override class func makeObserver(forURL url: NSURL, usingBlock handler: @escaping ([URL]) -> Void) -> Any? {
 		return SCMStatusObserver(URL: url, usingBlock: handler)
 	}
 

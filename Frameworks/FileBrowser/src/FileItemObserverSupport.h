@@ -1,0 +1,14 @@
+// The one C++ fragment of the file-system observer, kept in ObjC++ so the rest
+// of FileItemObserver can be Swift.
+//
+// When the SCM status of a watched directory changes, this reports the files in
+// that directory that git now considers deleted — walking SCMRepository's status
+// (a std::map<std::string, scm::status::type> reached through SCMManagerCxx.h),
+// matching scm::status::deleted, and keeping only entries whose parent is the
+// directory. Real C++ (rule 6); the Swift FileSystemObserver calls it. The
+// signature is C++-free, so the bridging header can import this.
+#import "SCMManager.h"
+
+@interface FileItemObserverSupport : NSObject
++ (NSArray<NSURL*>*)deletedURLsInRepository:(SCMRepository*)repository forDirectoryURL:(NSURL*)url;
+@end

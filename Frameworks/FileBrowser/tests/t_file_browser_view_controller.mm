@@ -1,4 +1,5 @@
 #import "../src/FileBrowserViewController.h"
+#import "../src/FileItem.h"
 #import <Preferences/Keys.h>
 
 // The framework's first tests. Written before any port, against the ObjC++, so
@@ -124,4 +125,80 @@ void test_file_browser_view_controller_registers_its_defaults_from_init ()
 	FileBrowserViewController* second = [FileBrowserViewController new];
 	OAK_ASSERT(second != nil);
 	OAK_ASSERT([[NSUserDefaults.standardUserDefaults volatileDomainForName:NSRegistrationDomain][kUserDefaultsFoldersOnTopKey] isEqual:firstValue]);
+}
+
+// ===============================================================
+// = The KVO surface (rule 1), which the port has to keep alive  =
+// ===============================================================
+//
+// The header view's two nav buttons bind their enabled state to canGoBack /
+// canGoForward, and neither is ever set: both are derived from historyIndex
+// through +keyPathsForValuesAffecting…. In Swift that only keeps working if
+// historyIndex is `@objc dynamic` — without it the write skips the KVO swizzle,
+// no notification is posted, and the buttons stay whatever they were. Invisible
+// to the compiler and to every other test here.
+//
+// So this binds a real NSButton exactly as OFBHeaderView does, rather than
+// asserting the two class methods exist: the binding is the mechanism that has
+// to survive, and it fails for the missing-`dynamic` reason and no other. (A
+// hand-written observer class would say the same thing, but a test file cannot
+// declare one — the seed wraps each file's body in a C++ namespace.)
+//
+// historyIndex and fileItem are private, in the class extension; the bindings
+// reach them by key path through KVC, which is how the app reaches them too.
+
+void test_file_browser_view_controller_publishes_can_go_back_from_history_index ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+
+	NSButton* goBackButton    = [NSButton new];
+	NSButton* goForwardButton = [NSButton new];
+	[goBackButton    bind:NSEnabledBinding toObject:controller withKeyPath:@"canGoBack"    options:nil];
+	[goForwardButton bind:NSEnabledBinding toObject:controller withKeyPath:@"canGoForward" options:nil];
+
+	// historyIndex is 0 and history is empty, so neither direction is available.
+	OAK_ASSERT(!goBackButton.enabled);
+	OAK_ASSERT(!goForwardButton.enabled);
+
+	[controller setValue:@[ @{}, @{} ] forKey:@"history"];
+	[controller setValue:@1 forKey:@"historyIndex"];
+
+	// canGoBack is historyIndex > 0; canGoForward is historyIndex+1 < count.
+	OAK_ASSERT(goBackButton.enabled);
+	OAK_ASSERT(!goForwardButton.enabled);
+
+	[controller setValue:@0 forKey:@"historyIndex"];
+	OAK_ASSERT(!goBackButton.enabled);
+	OAK_ASSERT(goForwardButton.enabled);
+
+	[goBackButton    unbind:NSEnabledBinding];
+	[goForwardButton unbind:NSEnabledBinding];
+}
+
+// The current-location menu item binds its title to fileItem.displayName and its
+// image to fileReference.image, so fileItem carries the same requirement.
+void test_file_browser_view_controller_publishes_file_item ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+
+	NSMenuItem* menuItem = [[NSMenuItem alloc] initWithTitle:@"" action:NULL keyEquivalent:@""];
+	[menuItem bind:NSTitleBinding toObject:controller withKeyPath:@"fileItem.displayName" options:nil];
+
+	NSURL* url = [NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES];
+	FileItem* item = [FileItem fileItemWithURL:url];
+	OAK_ASSERT(item != nil);
+
+	[controller setValue:item forKey:@"fileItem"];
+	OAK_ASSERT([menuItem.title isEqualToString:item.displayName]);
+
+	[menuItem unbind:NSTitleBinding];
+}
+
+// The delegate is how DocumentWindowController receives openURLs / closeURL;
+// it is a property on the public header rather than an action, so nothing else
+// here would notice it going missing.
+void test_file_browser_view_controller_keeps_its_delegate_accessors ()
+{
+	assert_responds(@selector(delegate));
+	assert_responds(@selector(setDelegate:));
 }

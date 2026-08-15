@@ -414,9 +414,17 @@ so none of it is reachable as a Swift type across modules; keeping
 keeps DocumentWindow compiling untouched. That surface is what the rule-18
 selector test has to cover before the port, not just the action methods.
 
-**Suggested order from here:** the `+initialize` conversion (own commit) →
-extend the selector-surface test to the DocumentWindow-facing members → the port
-itself, split by section rather than in one commit, with an app run after each.
+**Prep done (2026-08-15), all three judged by the suite on their own:**
+`00a42e07` the FileBrowserTypes.h split, `8c98956d` the `+initialize` →
+`+registerDefaults` conversion (verified in the app: with a file selected, the
+Services menu is still populated, which is the half no test reaches), and
+`908a82da` the KVO surface, pinned by binding a real NSButton and NSMenuItem the
+way the app does — a missing `@objc dynamic` now fails a test.
+
+**Order from here:** extract the seven C++ clusters while the file is still
+ObjC++, in their own commits (step 2 of this plan's original order — the shape
+that made FSEventsManager and SCMManager tractable) → then the translation,
+split by section rather than in one commit, with an app run after each.
 
 ## One warning that is not about this framework
 

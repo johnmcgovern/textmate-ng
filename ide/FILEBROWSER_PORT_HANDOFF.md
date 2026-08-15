@@ -12,8 +12,8 @@ not assumed._
 
 ## State you are starting from
 
-- `master`, HEAD `00a42e07`, tree clean.
-- **628 tests across 36 bundles, green.** Re-measure, never increment — that
+- `master`, HEAD `908a82da`, tree clean.
+- **632 tests across 36 bundles, green.** Re-measure, never increment — that
   figure has been wrong in these docs before (rule 10). FileBrowser has **10** test
   files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before
   this port began.
@@ -70,15 +70,24 @@ Computer shows the host + volumes, and rename selects the basename.
 
 ## The last port, specifically
 
-**It has now been surveyed** — the full measured checklist is in
-`ide/FILEBROWSER_PORT_PLAN.md` under "FileBrowserViewController — the survey",
-and `00a42e07` landed the header split it called for. The short version: no C++
-ivars, no variadics, no C++ block signatures, no exported globals — but
-**`+initialize`, which a Swift class cannot provide, is the one structural
-blocker left** and wants its own ObjC++ commit first (rule 24's shape). Then five
-`bind:`-observed key paths need `@objc dynamic` (rule 1), seven C++ clusters need
-homes rather than the single `…Support` file every earlier port got away with,
-and `-variables` stays on an ObjC++ category. Read the survey before starting.
+**It has been surveyed and its prep is done** — the full measured checklist is
+in `ide/FILEBROWSER_PORT_PLAN.md` under "FileBrowserViewController — the
+survey". Three prep commits landed off the back of it, each judged by the suite
+on its own:
+
+- `00a42e07` — `FileBrowserTypes.h` split out (FBOperation + FileBrowserDelegate).
+- `8c98956d` — **`+initialize` is gone**, replaced by `+registerDefaults`
+  (dispatch_once from the top of `-init`). That was the last structural blocker;
+  a Swift class cannot provide `+initialize`.
+- `908a82da` — the KVO surface pinned by binding a real NSButton and NSMenuItem,
+  so a missing `@objc dynamic` fails a test instead of silently dead bindings.
+
+**What is left is the translation itself**, and one piece of boundary work
+before it: the survey found **seven C++ clusters spread across the file** rather
+than the single fragment every earlier port absorbed into one `…Support` file.
+Extract those while everything is still ObjC++, in their own commits — step 2 of
+this plan's original order, the shape that made FSEventsManager and SCMManager
+tractable. Then `-variables` stays on an ObjC++ category, and the rest is Swift.
 
 - **`FileBrowserViewController.mm` (2329).** Its known hazards, updated by what
   the DiskOperations port and the survey measured:
@@ -222,6 +231,17 @@ here that changes files on disk rather than pixels.
     like it did. Related: use `-[NSURL isEqual:]`, not Swift's `URL ==`, wherever
     the ObjC++ compared URLs — `URL ==` normalises, and these are compared
     against FileItem URLs.
+
+34. **A test file cannot declare an ObjC class.** `seed_xcodeproj.rb` wraps each
+    `tests/t_*.mm` body in a **C++ namespace** (hoisting its leading `#import`s
+    out), so an `@interface`/`@implementation` in one fails with "Objective-C
+    declarations may only appear in global scope" — pointing at your file, via
+    the `#line` directives, with nothing in your file to explain it. This bites
+    exactly when writing a KVO test, since ObjC KVO needs an observer object. The
+    better test anyway is to **bind a real control** the way the app does
+    (`t_file_browser_view_controller.mm` binds an NSButton's enabled state to
+    `canGoBack`): it exercises the mechanism that has to survive rather than a
+    proxy for it.
 
 ## One build gotcha that is not a code error
 

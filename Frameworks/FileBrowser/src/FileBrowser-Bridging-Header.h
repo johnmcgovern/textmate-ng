@@ -27,3 +27,8 @@
 // calls. Both are C++-free headers.
 #import "FileBrowserOutlineViewDelegate.h"
 #import "FileBrowserOutlineViewKeyBindings.h"
+
+// OakFinderTag / OakFinderTagManager and OakRolloverButton (with its rollover
+// notification names), for OFBFinderTagsChooser's swatch buttons.
+#import <OakAppKit/OakFinderTag.h>
+#import <OakAppKit/OakRolloverButton.h>

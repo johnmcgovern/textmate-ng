@@ -128,11 +128,31 @@ last.
    above, `OakFinderTag`) splits out, and `FileItemEditingName` folds into
    `FileItem.swift`. This is the Find.h→FindTypes.h split, one level deeper.
 
-Then the C++ ones: `FileItemSCMStatus` (iterates the scm map with
+- `c9dd10c7` — **FileItem base class ported to Swift.** Both blockers cleared:
+  the kURLLocation* globals moved to `FileItemLocations` (ObjC++, rule 19; Swift
+  only reads them), and `FileItem.h` is now a hand-decl kept out of the bridging
+  header (rule 11), with the `FileItemWrapper` category folded in as
+  `editingAndDisplayName`. Rule 1 throughout (the row cell binds to displayName /
+  canRename / toolTip / finderTags), and the seven `getter=is/has` booleans keep
+  their exact ObjC spellings via rule 4 because consumers reach them by property
+  name (`item.hidden`, `item.missing`). The scheme-registry static is
+  `nonisolated(unsafe)` (matching the ObjC++ main-thread-only contract). The two
+  ObjC++ subclasses still inherit the Swift class and override -initWithURL: /
+  -localizedName / -parentURL. Verified all three schemes in the app.
+
+Then the C++ ones (still to do): `FileItemSCMStatus` (iterates the scm map with
 `scm::status::` bitmasks and `path::is_child` — wants the `-Cxx`/support-file
-treatment) and `FileItemObserver` (a category + observer classes, `path::parent`
-+ the scm block). `FileItemMountedVolumes` is small and C++-free once `+load` is
-gone. The Swift translation of FSEventsManager/SCMManager can go alongside these.
+treatment; it is a FileItem subclass + SCMStatusObserver) and `FileItemObserver`
+(the FileItem(Observer) category — currently extends the Swift FileItem — plus
+observer classes, `path::parent` + the scm block). `FileItemMountedVolumes` is
+small and C++-free now. The Swift translation of FSEventsManager/SCMManager can
+go alongside these.
+
+**Build gotcha seen this session:** ad-hoc CodeSign of unrelated test bundles can
+fail with `invalid or unsupported format for signature` on a leftover `.cstemp`
+after many incremental `xcodebuild test` runs. It is not a code error — clear it
+with `find <DerivedData>/Build/Products -name '*.cstemp' -delete` (and
+`xattr -cr <…>/Build/Products/Debug`) and re-run.
 
 The five views ported so far share one shape: hand-written ObjC decl `.h` (never
 in the bridging header), C++/method-body oddments behind a small ObjC++ helper or

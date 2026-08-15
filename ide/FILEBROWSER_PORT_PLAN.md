@@ -54,9 +54,29 @@ all work. What no test reaches (rule 8) was checked by hand, not assumed.
     (`OakCreateNSBoxSeparator()` is `NSView?`) — force-unwrap, as
     `SelectGrammarViewController.swift` does.
 
+- `9e58f0a2` — **OFBActionsView ported.** The twin of OFBHeaderView. Two Swift-
+  importer facts it paid: a **C++ default argument is not imported**, so
+  `OakCreateActionPopUpButton(false)` passes it; a **factory-style class method
+  imports as an initializer**, so it is `NSImage(named:inSameBundleAsClass:)`, not
+  `imageNamed(_:...)`. Bridging header gained `<OakAppKit/NSImage Additions.h>`.
+
+- `c151b20b` — **FileBrowserOutlineView ported: the first leaf with real
+  structure.** Three things beyond the code-built views, each likely to recur:
+  - **Rule 11 header split.** Its header declared both the class and the
+    `FileBrowserOutlineViewDelegate` protocol; the protocol moved to its own
+    header (bridging-header-importable), re-exported from the class's hand-decl
+    header so consumers are unchanged.
+  - **Nominal vs structural delegates.** The ObjC++ forwarded via
+    `-respondsToSelector:`; Swift's `as? Protocol` is nominal, so the delegate
+    (FileBrowserViewController) had to *declare* `<FileBrowserOutlineViewDelegate>`
+    (it already implemented all five methods). **Watch for this on every ported
+    view whose ObjC++ delegate never declared conformance.**
+  - **C++ in a method body** (the `performKeyEquivalent:` key table) → moved
+    verbatim (rule 6) to an ObjC++ helper returning the matched SEL; the Swift
+    override keeps the send/super control flow. Two more API renames surfaced:
+    `rectOfRow` → `rect(ofRow:)`, `makeKeyWindow()` → `makeKey()`.
+
 **What is left, in the plan's order:** step 3, the rest of the leaves —
-`OFBActionsView` (72, the twin of the one just done, trivial next),
-`FileBrowserOutlineView` (103, has a small `std::string` key-handling bit),
 `OFBFinderTagsChooser` (241), `FileItemTableCellView` (294, **bindings-heavy —
 rule 1**, grep its `bind:` calls and make every observed property `@objc
 dynamic`), the `FileItem*` model files, then `FileBrowserDiskOperations`; step 4,

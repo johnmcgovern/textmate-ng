@@ -33,8 +33,12 @@
 #import <OakAppKit/OakFinderTag.h>
 #import <OakAppKit/OakRolloverButton.h>
 
-// FileItemTableCellView: TMFileReference (the icon/closable source it observes)
-// and the FileItem(EditingName) binding support (which pulls in FileItem itself —
-// still ObjC, so importable here for now).
+// FileItemTableCellView: TMFileReference, the icon/closable source it observes.
 #import <TMFileReference/TMFileReference.h>
-#import "FileItemEditingName.h"
+
+// What FileItem.swift reads (never FileItem.h itself — Swift defines that class):
+// the kURLLocation* globals, OakNotEmptyString, and the show-file-extensions
+// default key. OakFinderTag.h (above) supplies OakFinderTagManager.
+#import "FileItemLocations.h"
+#import <OakFoundation/OakFoundation.h>
+#import <Preferences/Keys.h>

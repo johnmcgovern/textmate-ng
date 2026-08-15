@@ -1,12 +1,16 @@
 #import "FileBrowserNotifications.h"
 
-@class FileBrowserViewController;
-@class FileItem;
+// FBOperation and FileBrowserDelegate moved to FileBrowserTypes.h so the Swift
+// half can import them without also importing the declaration of a class Swift
+// will define. FileBrowserTypes.h is exported alongside this header, and
+// imported here, so every consumer of this header is unchanged.
+//
+// Quoted, not <FileBrowser/FileBrowserTypes.h>: a target's farm include dirs are
+// its dependencies', not its own, so the angle form does not resolve from inside
+// this framework.
+#import "FileBrowserTypes.h"
 
-@protocol FileBrowserDelegate
-- (void)fileBrowser:(FileBrowserViewController*)fileBrowser openURLs:(NSArray*)someURLs;
-- (void)fileBrowser:(FileBrowserViewController*)fileBrowser closeURL:(NSURL*)anURL;
-@end
+@class FileItem;
 
 @interface FileBrowserViewController : NSViewController
 @property (nonatomic, weak) id <FileBrowserDelegate> delegate;
@@ -55,18 +59,7 @@
 - (void)rearrangeChildrenInParent:(FileItem*)item;
 @end
 
-typedef NS_OPTIONS(NSUInteger, FBOperation) {
-	FBOperationLink      = 0x0001,
-	FBOperationCopy      = 0x0002,
-	FBOperationDuplicate = 0x0004,
-	FBOperationMove      = 0x0008,
-	FBOperationRename    = 0x0010,
-	FBOperationTrash     = 0x0020,
-	FBOperationNewFile   = 0x0040,
-	FBOperationNewFolder = 0x0080,
-};
-
-// The (DiskOperations) category that used to be declared here now lives in
-// FileBrowserDiskOperations.h — this header has to stay importable from the
-// Swift bridging header, and Swift implements that category. FBOperation stays
-// because the Swift signatures need it.
+// The (DiskOperations) category that used to be declared here lives in
+// FileBrowserDiskOperations.h, and FBOperation itself in FileBrowserTypes.h
+// (imported above): Swift implements that category, so the bridging header must
+// see the option set but not the method declarations.

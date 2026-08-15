@@ -53,11 +53,17 @@
 #import "FSEventsManager.h"
 #import "FileItemObserverSupport.h"
 
+// FBOperation, which FileBrowserDiskOperations.swift's signatures are built
+// from. Imported in its own right, not smuggled in through
+// FileBrowserViewController.h below, so that when the controller becomes Swift
+// only that one line has to go.
+#import "FileBrowserTypes.h"
+
 // FileBrowserDiskOperations.swift extends FileBrowserViewController, which is
-// still ObjC++, so unlike every other class here its declaration *is* wanted.
-// The (DiskOperations) category it implements lives in
-// FileBrowserDiskOperations.h and is deliberately not imported — Swift defines
-// those methods. FBOperation comes from this header.
+// still ObjC++, so — uniquely, and only until it is ported — its declaration
+// *is* wanted here. The (DiskOperations) category it implements lives in
+// FileBrowserDiskOperations.h and is deliberately not imported: Swift defines
+// those methods.
 #import "FileBrowserViewController.h"
 #import "FileBrowserNotifications.h"
 #import "FileBrowserDiskOperationsSupport.h"

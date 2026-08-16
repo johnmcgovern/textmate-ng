@@ -41,6 +41,16 @@
 @property (nonatomic, readonly) BOOL canExpandPackages;
 @property (nonatomic, readonly) BOOL canExpandSymbolicLinks;
 
+// What the action methods operate on. selectedItems is the selection, or the
+// right-clicked row when that row is outside the selection; previewableItems is
+// the subset with a preview URL. Both are already readonly on the class
+// extension, so this re-declaration costs nothing.
+// nonnull, deliberately: both build and return an array unconditionally, and
+// without the annotation Swift sees `[FileItem]?` and every call site grows an
+// unwrap that means nothing.
+@property (nonatomic, readonly, nonnull) NSArray<FileItem*>* selectedItems;
+@property (nonatomic, readonly, nonnull) NSArray<FileItem*>* previewableItems;
+
 // Opens items in the editor — the shared tail of double-click, the Open action
 // and the cell's open button. Defined in the .mm with no declaration at all
 // (it is called only from below its definition), so it needs one here for the
@@ -57,5 +67,11 @@
 // implementation stays put and this declaration lets Swift reach it. It should
 // move to Swift with the action methods, and this line go with it.
 - (NSArray<NSURL*>*)URLsFromPasteboard:(NSPasteboard*)pboard NS_SWIFT_NAME(urlsFromPasteboard(_:));
+
+// Expands the first set of URLs and selects the second, once the tree has
+// loaded far enough to contain them. Used by the reveal actions.
+// Pinned for the same reason as -openItems:animate: — the importer renames this
+// to `expand(_:select:)`, which says less than the selector does (rule 28).
+- (void)expandURLs:(NSArray<NSURL*>*)expandURLs selectURLs:(NSArray<NSURL*>*)selectURLs NS_SWIFT_NAME(expandURLs(_:selectURLs:));
 
 @end

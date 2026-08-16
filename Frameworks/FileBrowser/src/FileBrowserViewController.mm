@@ -1,4 +1,8 @@
 #import "FileBrowserViewController.h"
+// The action methods this file's menu construction refers to by @selector, now
+// that they are Swift. Hand-written, and imported here rather than through the
+// bridging header — the FileBrowserDiskOperations.h arrangement exactly.
+#import "FileBrowserActions.h"
 #import "FileBrowserDiskOperations.h"
 #import "FileBrowserViewControllerSupport.h"
 #import "FileBrowserView.h"
@@ -599,46 +603,10 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 // = Action Methods =
 // ==================
 
-- (void)openSelectedItems:(id)sender
-{
-	[self openItems:self.selectedItems animate:YES];
-}
-
 - (void)openWithMenuAction:(id)sender
 {
 	if(NSURL* appURL = [sender representedObject])
 		[_openWithMenuDelegate openDocumentURLs:[self.previewableItems valueForKey:@"resolvedURL"] withApplicationURL:appURL];
-}
-
-- (void)showOriginal:(id)sender
-{
-	NSURL* resolvedURL = self.selectedItems.firstObject.resolvedURL;
-	NSURL* parentURL;
-	if([resolvedURL getResourceValue:&parentURL forKey:NSURLParentDirectoryURLKey error:nil])
-	{
-		[self goToURL:parentURL];
-		[self expandURLs:nil selectURLs:@[ resolvedURL ]];
-	}
-}
-
-- (void)showEnclosingFolder:(id)sender
-{
-	NSURL* url = self.selectedItems.firstObject.URL;
-	if(NSURL* enclosingFolder = url.URLByDeletingLastPathComponent)
-	{
-		[self goToURL:enclosingFolder];
-		[self expandURLs:nil selectURLs:@[ url ]];
-	}
-}
-
-- (void)showPackageContents:(id)sender
-{
-	[self goToURL:self.previewableItems.firstObject.resolvedURL];
-}
-
-- (void)showSelectedEntriesInFinder:(id)sender
-{
-	[NSWorkspace.sharedWorkspace activateFileViewerSelectingURLs:[self.previewableItems valueForKeyPath:@"resolvedURL"]];
 }
 
 - (NSURL*)newFile:(id)sender
@@ -683,55 +651,6 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 		}
 	}
 	return urls.firstObject;
-}
-
-- (void)editSelectedEntries:(id)sender
-{
-	NSArray<FileItem*>* items = self.previewableItems;
-	if(items.count == 1 && items.firstObject.canRename)
-	{
-		NSInteger row = [self.outlineView rowForItem:items.firstObject];
-		if(row != -1)
-		{
-			[NSApp activateIgnoringOtherApps:YES];
-			[self.outlineView.window makeKeyWindow];
-			[self.outlineView editColumn:0 row:row withEvent:nil select:YES];
-		}
-	}
-}
-
-- (void)addSelectedEntriesToFavorites:(id)sender
-{
-	NSURL* url = kURLLocationFavorites;
-	NSError* error;
-	if([NSFileManager.defaultManager createDirectoryAtURL:url withIntermediateDirectories:YES attributes:nil error:&error])
-	{
-		for(FileItem* item in self.previewableItems)
-		{
-			NSURL* linkURL = [url URLByAppendingPathComponent:item.localizedName];
-			if(![NSFileManager.defaultManager createSymbolicLinkAtURL:linkURL withDestinationURL:item.resolvedURL error:&error])
-				[self.view.window presentError:error];
-		}
-	}
-	else
-	{
-		[self.view.window presentError:error];
-	}
-}
-
-- (void)removeSelectedEntriesFromFavorites:(id)sender
-{
-	for(FileItem* item in self.previewableItems)
-	{
-		NSError* error;
-		if(![NSFileManager.defaultManager trashItemAtURL:item.URL resultingItemURL:nil error:&error])
-			[self.view.window presentError:error];
-	}
-}
-
-- (void)executeBundleCommand:(id)sender
-{
-	[FileBrowserViewControllerSupport executeBundleCommandWithUUIDString:[sender representedObject] firstResponder:self];
 }
 
 - (BOOL)writeItems:(NSArray<FileItem*>*)items toPasteboard:(NSPasteboard*)pboard
@@ -792,116 +711,6 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 	[self insertItemsFromPasteboardWithOperation:FBOperationLink];
 }
 
-- (void)duplicateSelectedEntries:(id)sender
-{
-	NSArray<FileItem*>* items = self.previewableItems;
-
-	NSMutableDictionary<NSURL*, NSURL*>* urls = [NSMutableDictionary dictionary];
-	if(items.count == 1)
-	{
-		if(NSURL* url = items.firstObject.URL)
-		{
-			NSString* base = url.lastPathComponent;
-			NSString* newBase;
-
-			NSRegularExpression* dateRegex   = [NSRegularExpression regularExpressionWithPattern:@"(\\b|_)[1-2][0-9]{3}(-|_|)(?!00|1[3-9])[0-1][0-9]\\2(?!00|3[2-9])[0-3][0-9](\\b|_)" options:0 error:nil];
-			NSRegularExpression* numberRegex = [NSRegularExpression regularExpressionWithPattern:@"^\\d{2,}" options:0 error:nil];
-
-			if(NSTextCheckingResult* match = [dateRegex firstMatchInString:base options:0 range:NSMakeRange(0, base.length)])
-			{
-				NSDateFormatter* dateFormatter = [[NSDateFormatter alloc] init];
-				dateFormatter.dateFormat = [NSString stringWithFormat:@"yyyy%1$@MM%1$@dd", [base substringWithRange:[match rangeAtIndex:2]]];
-				newBase = [base stringByReplacingCharactersInRange:match.range withString:[dateRegex replacementStringForResult:match inString:base offset:0 template:[NSString stringWithFormat:@"$1%@$3", [dateFormatter stringFromDate:NSDate.date]]]];
-			}
-			else if(NSTextCheckingResult* match = [numberRegex firstMatchInString:base options:0 range:NSMakeRange(0, base.length)])
-			{
-				std::set<NSInteger> set;
-				for(NSURL* otherURL in [NSFileManager.defaultManager contentsOfDirectoryAtURL:url.URLByDeletingLastPathComponent includingPropertiesForKeys:nil options:0 error:nil])
-				{
-					NSString* otherBase = otherURL.lastPathComponent;
-					if(NSTextCheckingResult* tmp = [numberRegex firstMatchInString:otherBase options:0 range:NSMakeRange(0, otherBase.length)])
-						set.insert([otherBase substringWithRange:tmp.range].integerValue);
-				}
-
-				NSInteger i = [base substringWithRange:match.range].integerValue + 1;
-				while(set.find(i) != set.end())
-					++i;
-
-				NSString* number = [NSString stringWithFormat:@"%0*ld", (int)match.range.length, i];
-				newBase = [base stringByReplacingCharactersInRange:match.range withString:number];
-			}
-
-			if(newBase && ![newBase isEqualToString:base])
-				urls[url] = [url.URLByDeletingLastPathComponent URLByAppendingPathComponent:newBase isDirectory:url.hasDirectoryPath];
-		}
-	}
-
-	if(urls.count == 0)
-	{
-		NSRegularExpression* regex = [NSRegularExpression regularExpressionWithPattern:@"^(.*?)(?: copy(?: \\d+)?)?(\\.\\w+)?$" options:0 error:nil];
-		for(FileItem* item in items)
-		{
-			NSString* base = item.URL.lastPathComponent;
-			NSString* name = [regex stringByReplacingMatchesInString:base options:0 range:NSMakeRange(0, base.length) withTemplate:@"$1 copy$2"];
-			urls[item.URL] = [item.URL.URLByDeletingLastPathComponent URLByAppendingPathComponent:name isDirectory:item.isDirectory];
-		}
-	}
-
-	[self performOperation:FBOperationDuplicate withURLs:urls unique:YES select:YES];
-	if(urls.count == 1 && self.outlineView.numberOfSelectedRows == 1)
-		[self.outlineView editColumn:0 row:self.outlineView.selectedRow withEvent:nil select:YES];
-}
-
-- (void)delete:(id)sender
-{
-	NSOutlineView* outlineView = self.outlineView;
-
-	NSIndexSet* selectedRowIndexes = outlineView.selectedRowIndexes;
-	NSInteger clickedRow = outlineView.clickedRow;
-
-	// User right-clicked a single item that is not part of the selection, only delete that item
-	if(clickedRow != -1 && ![selectedRowIndexes containsIndex:clickedRow])
-	{
-		FileItem* item = [outlineView itemAtRow:clickedRow];
-		if(NSURL* url = item.URL.filePathURL)
-			[self performOperation:FBOperationTrash sourceURLs:@[ url ] destinationURLs:nil unique:NO select:NO];
-	}
-	else
-	{
-		NSMutableArray<NSURL*>* urlsToTrash = [NSMutableArray array];
-		FileItem* selectItem;
-		FileItem* previousItem;
-
-		NSMutableArray<FileItem*>* stack = [self.fileItem.arrangedChildren mutableCopy];
-		while(FileItem* item = stack.firstObject)
-		{
-			[stack removeObjectAtIndex:0];
-
-			NSURL* url = item.URL.filePathURL;
-			if(url && [selectedRowIndexes containsIndex:[outlineView rowForItem:item]])
-			{
-				selectItem = previousItem;
-				[urlsToTrash addObject:url];
-			}
-			else
-			{
-				previousItem = item;
-				if([outlineView isItemExpanded:item])
-					stack = [[item.arrangedChildren arrayByAddingObjectsFromArray:stack] mutableCopy];
-			}
-		}
-
-		[self performOperation:FBOperationTrash sourceURLs:urlsToTrash destinationURLs:nil unique:NO select:NO];
-
-		NSInteger selectRow = [outlineView rowForItem:selectItem ?: self.fileItem.arrangedChildren.firstObject];
-		if(selectRow != -1)
-		{
-			[outlineView selectRowIndexes:[NSIndexSet indexSetWithIndex:selectRow] byExtendingSelection:NO];
-			[outlineView scrollRowToVisible:selectRow];
-		}
-	}
-}
-
 - (void)insertItemsFromPasteboardWithOperation:(FBOperation)operation
 {
 	if(NSURL* directoryURL = self.directoryURLForNewItems)
@@ -924,22 +733,6 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 - (NSArray<NSURL*>*)URLsFromPasteboard:(NSPasteboard*)pboard
 {
 	return [pboard readObjectsForClasses:@[ [NSURL class] ] options:nil];
-}
-
-- (void)didChangeFinderTag:(OFBFinderTagsChooser*)finderTagsChooser
-{
-	OakFinderTag* chosenTag = finderTagsChooser.chosenTag;
-	for(FileItem* item in self.previewableItems)
-	{
-		NSMutableArray<OakFinderTag*>* tags = [item.finderTags mutableCopy];
-		if(finderTagsChooser.removeChosenTag)
-			[tags removeObject:chosenTag];
-		else if(![tags containsObject:chosenTag])
-			[tags addObject:chosenTag];
-
-		[item.URL setResourceValue:[tags valueForKeyPath:@"displayName"] forKey:NSURLTagNamesKey error:nil];
-		item.finderTags = [OakFinderTagManager finderTagsForURL:item.URL];
-	}
 }
 
 - (BOOL)favoritesDirectoryContainsItems:(NSArray<FileItem*>*)items

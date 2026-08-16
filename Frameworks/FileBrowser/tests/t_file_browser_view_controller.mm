@@ -325,11 +325,32 @@ void test_controller_keeps_the_selectors_that_moved_to_swift ()
 		@selector(outlineView:didTrashURLs:),
 	};
 
+	// FileBrowserActions.h declares these for the .mm, so a *reference* to one
+	// from the menu construction is checked at compile time now — but that
+	// header is hand-written, so it cannot catch the Swift side drifting away
+	// from it. This still can.
+	SEL const actions[] = {
+		@selector(openSelectedItems:),
+		@selector(showOriginal:),
+		@selector(showEnclosingFolder:),
+		@selector(showPackageContents:),
+		@selector(showSelectedEntriesInFinder:),
+		@selector(editSelectedEntries:),
+		@selector(addSelectedEntriesToFavorites:),
+		@selector(removeSelectedEntriesFromFavorites:),
+		@selector(executeBundleCommand:),
+		@selector(duplicateSelectedEntries:),
+		@selector(delete:),
+		@selector(didChangeFinderTag:),
+	};
+
 	for(SEL selector : dataSource)
 		assert_responds(selector);
 	for(SEL selector : tableCells)
 		assert_responds(selector);
 	for(SEL selector : acceptingDrops)
+		assert_responds(selector);
+	for(SEL selector : actions)
 		assert_responds(selector);
 }
 

@@ -325,6 +325,23 @@ void test_controller_keeps_the_selectors_that_moved_to_swift ()
 		@selector(outlineView:didTrashURLs:),
 	};
 
+	// Quick Look. The three panel-control methods are inherited from an informal
+	// protocol on NSObject, so -instancesRespondToSelector: would answer YES for
+	// them even if this class implemented nothing — every object "responds".
+	// They are listed anyway for the record, but the ones that carry weight here
+	// are the four that are genuinely ours.
+	SEL const quickLook[] = {
+		@selector(toggleQuickLookPreview:),
+		@selector(numberOfPreviewItemsInPreviewPanel:),
+		@selector(previewPanel:previewItemAtIndex:),
+		@selector(previewPanel:sourceFrameOnScreenForPreviewItem:),
+		@selector(previewPanel:handleEvent:),
+		@selector(imageRectOfItem:),
+	};
+
+	for(SEL selector : quickLook)
+		assert_responds(selector);
+
 	SEL const pasteboard[] = {
 		@selector(writeItems:toPasteboard:),
 		@selector(cut:),

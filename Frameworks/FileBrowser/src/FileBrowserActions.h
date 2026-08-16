@@ -53,4 +53,10 @@
 - (void)paste:(id)sender;
 - (void)pasteNext:(id)sender;
 - (void)createLinkToPasteboardItems:(id)sender;
+
+// Quick Look. -toggleQuickLookPreview: is named by the action menu here and by
+// FileBrowserOutlineViewKeyBindings.mm; -imageRectOfItem: is called by
+// -openItems:animate:, which is still ObjC++.
+- (void)toggleQuickLookPreview:(id)sender;
+- (NSRect)imageRectOfItem:(FileItem*)item;
 @end

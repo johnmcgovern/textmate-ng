@@ -74,8 +74,16 @@
 // declaring something Swift defines.
 - (void)undo:(id)sender;
 - (void)redo:(id)sender;
-- (void)toggleQuickLookPreview:(id)sender;
 - (void)openWithMenuAction:(id)sender;
+
+// **The one readwrite property here, and it is deliberate.** The Quick Look
+// section owns this state — the ObjC++ set it in -beginPreviewPanelControl:,
+// cleared it in -endPreviewPanelControl: and refreshed it on an arrow key — and
+// that section is now Swift. Moving those writes is faithful; the readonly
+// convention exists to stop a peeled section *starting* to write state it only
+// read, which is not what this is. -previewableItems, which computes the value,
+// stays in the .mm as the accessor of a declared property.
+@property (nonatomic, nullable) NSArray<FileItem*>* previewItems;
 
 // Expands the first set of URLs and selects the second, once the tree has
 // loaded far enough to contain them. Used by the reveal actions.

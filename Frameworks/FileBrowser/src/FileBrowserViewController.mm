@@ -113,7 +113,6 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 @property (nonatomic) NSMutableSet<NSURL*>* selectedURLs;
 
 - (void)expandURLs:(NSArray<NSURL*>*)expandURLs selectURLs:(NSArray<NSURL*>*)selectURLs;
-- (NSRect)imageRectOfItem:(FileItem*)item;
 
 - (void)updateDisambiguationSuffixInParent:(FileItem*)item;
 
@@ -1581,76 +1580,6 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 - (NSArray<FileItem*>*)previewableItems
 {
 	return [self.selectedItems filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"previewItemURL != nil"]];
-}
-
-- (void)toggleQuickLookPreview:(id)sender
-{
-	if([QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible])
-			[[QLPreviewPanel sharedPreviewPanel] orderOut:nil];
-	else	[[QLPreviewPanel sharedPreviewPanel] makeKeyAndOrderFront:nil];
-}
-
-- (BOOL)acceptsPreviewPanelControl:(QLPreviewPanel*)previewPanel
-{
-	return YES;
-}
-
-- (void)beginPreviewPanelControl:(QLPreviewPanel*)previewPanel
-{
-	_previewItems = self.previewableItems;
-	previewPanel.delegate   = self;
-	previewPanel.dataSource = self;
-}
-
-- (void)endPreviewPanelControl:(QLPreviewPanel*)previewPanel
-{
-	_previewItems = nil;
-}
-
-- (NSInteger)numberOfPreviewItemsInPreviewPanel:(QLPreviewPanel*)previewPanel
-{
-	return _previewItems.count;
-}
-
-- (id <QLPreviewItem>)previewPanel:(QLPreviewPanel*)panel previewItemAtIndex:(NSInteger)index
-{
-	return _previewItems[index];
-}
-
-- (NSRect)previewPanel:(QLPreviewPanel*)previewPanel sourceFrameOnScreenForPreviewItem:(id <QLPreviewItem>)item
-{
-	return [self imageRectOfItem:item];
-}
-
-- (NSRect)imageRectOfItem:(FileItem*)item
-{
-	NSInteger row = [self.outlineView rowForItem:item];
-	if(row != -1)
-	{
-		FileItemTableCellView* view = [self.outlineView viewAtColumn:0 row:row makeIfNecessary:YES];
-		if([view isKindOfClass:[FileItemTableCellView class]])
-		{
-			NSButton* imageButton = view.openButton;
-			NSRect imageRect = NSIntersectionRect([imageButton convertRect:imageButton.bounds toView:nil], [self.outlineView convertRect:self.outlineView.visibleRect toView:nil]);
-			return NSIsEmptyRect(imageRect) ? NSZeroRect : [view.window convertRectToScreen:imageRect];
-		}
-	}
-	return NSZeroRect;
-}
-
-- (BOOL)previewPanel:(QLPreviewPanel*)previewPanel handleEvent:(NSEvent*)event
-{
-	NSString* eventString = [FileBrowserViewControllerSupport eventStringForEvent:event];
-	NSString* upArrow     = [NSString stringWithFormat:@"%C", (unichar)NSUpArrowFunctionKey];
-	NSString* downArrow   = [NSString stringWithFormat:@"%C", (unichar)NSDownArrowFunctionKey];
-	if((event.type == NSEventTypeKeyUp || event.type == NSEventTypeKeyDown) && ([eventString isEqualToString:upArrow] || [eventString isEqualToString:downArrow]))
-	{
-		[self.view.window sendEvent:event];
-		_previewItems = self.previewableItems;
-		[previewPanel reloadData];
-		return YES;
-	}
-	return NO;
 }
 
 // ============

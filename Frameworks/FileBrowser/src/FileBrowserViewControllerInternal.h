@@ -51,6 +51,12 @@
 @property (nonatomic, readonly, nonnull) NSArray<FileItem*>* selectedItems;
 @property (nonatomic, readonly, nonnull) NSArray<FileItem*>* previewableItems;
 
+// -validateMenuItem: reads both: showExcludedItems to title the Show/Hide
+// Invisible Files item, and activeUndoManager for the undo/redo titles and
+// their enabled state. Both are still ObjC++ below.
+@property (nonatomic, readonly) BOOL showExcludedItems;
+@property (nonatomic, readonly, nullable) NSUndoManager* activeUndoManager;
+
 // Opens items in the editor — the shared tail of double-click, the Open action
 // and the cell's open button. Defined in the .mm with no declaration at all
 // (it is called only from below its definition), so it needs one here for the
@@ -62,11 +68,14 @@
 // what the ObjC selector says.
 - (void)openItems:(NSArray<FileItem*>*)items animate:(BOOL)animateFlag NS_SWIFT_NAME(openItems(_:animate:));
 
-// The URLs on a pasteboard. Six callers: five are still in the ObjC++ action
-// methods, one is the drop handler that has already moved, so the
-// implementation stays put and this declaration lets Swift reach it. It should
-// move to Swift with the action methods, and this line go with it.
-- (NSArray<NSURL*>*)URLsFromPasteboard:(NSPasteboard*)pboard NS_SWIFT_NAME(urlsFromPasteboard(_:));
+// Reached by -validateMenuItem:, which is Swift, while these four are still
+// ObjC++ — the reverse of the usual direction. Safe to declare here precisely
+// because ObjC still *implements* them: the rule this header must not break is
+// declaring something Swift defines.
+- (void)undo:(id)sender;
+- (void)redo:(id)sender;
+- (void)toggleQuickLookPreview:(id)sender;
+- (void)openWithMenuAction:(id)sender;
 
 // Expands the first set of URLs and selects the second, once the tree has
 // loaded far enough to contain them. Used by the reveal actions.

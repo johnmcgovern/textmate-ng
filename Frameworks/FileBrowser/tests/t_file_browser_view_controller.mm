@@ -325,6 +325,24 @@ void test_controller_keeps_the_selectors_that_moved_to_swift ()
 		@selector(outlineView:didTrashURLs:),
 	};
 
+	SEL const pasteboard[] = {
+		@selector(writeItems:toPasteboard:),
+		@selector(cut:),
+		@selector(copy:),
+		@selector(copyAsPathname:),
+		@selector(paste:),
+		@selector(pasteNext:),
+		@selector(createLinkToPasteboardItems:),
+		@selector(insertItemsFromPasteboardWithOperation:),
+		@selector(URLsFromPasteboard:),
+		@selector(favoritesDirectoryContainsItems:),
+		@selector(canPaste),
+		@selector(validateMenuItem:),
+	};
+
+	for(SEL selector : pasteboard)
+		assert_responds(selector);
+
 	// FileBrowserActions.h declares these for the .mm, so a *reference* to one
 	// from the menu construction is checked at compile time now — but that
 	// header is hand-written, so it cannot catch the Swift side drifting away
@@ -352,6 +370,119 @@ void test_controller_keeps_the_selectors_that_moved_to_swift ()
 		assert_responds(selector);
 	for(SEL selector : actions)
 		assert_responds(selector);
+}
+
+// ==============================================================
+// = Menu validation, after it became Swift                     =
+// ==============================================================
+//
+// -validateMenuItem: is the largest method the port has moved, and unlike the
+// drop handlers it can be driven directly: build an NSMenuItem, give it an
+// action and this controller as its target, and ask.
+//
+// What is pinned here is the shape a translation is most likely to get wrong —
+// the two-step where an item is first hidden-and-disabled and *then* has its
+// title rewritten, and the `res && !hideAndDisable` that ties them together. On
+// a controller with no selection, every selection-requiring action must come
+// back NO **and** hidden; the two history actions must answer from canGoBack /
+// canGoForward rather than from the selection; and an item this controller does
+// not target must not be hidden even when it is disabled, which is the
+// `menuItem.target == self` half of that line.
+//
+// The dynamic titles are deliberately not asserted: they interpolate the
+// enclosing folder's localized name, which is a per-machine value (the same
+// discipline the glob tests follow).
+
+static NSMenuItem* menu_item_targeting (FileBrowserViewController* controller, SEL action)
+{
+	NSMenuItem* menuItem = [[NSMenuItem alloc] initWithTitle:@"" action:action keyEquivalent:@""];
+	menuItem.target = controller;
+	return menuItem;
+}
+
+void test_menu_validation_hides_selection_actions_with_no_selection ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+	OAK_ASSERT(controller.outlineView != nil);
+
+	// Nothing is selected, so every one of these is both disabled and hidden.
+	SEL const requiresSelection[] = {
+		@selector(openSelectedItems:), @selector(cut:), @selector(copy:),
+		@selector(copyAsPathname:), @selector(delete:),
+		@selector(duplicateSelectedEntries:), @selector(editSelectedEntries:),
+		@selector(showSelectedEntriesInFinder:),
+	};
+
+	for(SEL action : requiresSelection)
+	{
+		NSMenuItem* menuItem = menu_item_targeting(controller, action);
+		OAK_ASSERT(![controller validateMenuItem:menuItem]);
+		OAK_ASSERT(menuItem.hidden);
+	}
+}
+
+void test_menu_validation_answers_history_from_can_go_back ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+
+	NSMenuItem* back    = menu_item_targeting(controller, @selector(goBack:));
+	NSMenuItem* forward = menu_item_targeting(controller, @selector(goForward:));
+
+	// Empty history: neither direction is available, and neither is *hidden* —
+	// these two set `res` rather than hideAndDisable, which is the distinction
+	// the two-step in this method turns on.
+	OAK_ASSERT(![controller validateMenuItem:back]);
+	OAK_ASSERT(![controller validateMenuItem:forward]);
+	OAK_ASSERT(!back.hidden);
+	OAK_ASSERT(!forward.hidden);
+
+	[controller setValue:@[ @{}, @{} ] forKey:@"history"];
+	[controller setValue:@1 forKey:@"historyIndex"];
+
+	OAK_ASSERT([controller validateMenuItem:back]);
+	OAK_ASSERT(![controller validateMenuItem:forward]);
+}
+
+// The `&& menuItem.target == self` half: an item this controller does not own is
+// still answered, but must never be hidden by it. AppKit shares one menu across
+// responders, so hiding someone else's item is a real bug and an easy one to
+// drop in translation.
+void test_menu_validation_does_not_hide_items_it_does_not_target ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+
+	NSMenuItem* foreign = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(cut:) keyEquivalent:@""];
+	foreign.target = nil;
+
+	OAK_ASSERT(![controller validateMenuItem:foreign]);
+	OAK_ASSERT(!foreign.hidden);
+}
+
+// The dynamic titles interpolate names into a format string, and the port found
+// out the hard way that this is where Swift bites: FileItem.localizedName is
+// declared `String!`, and interpolating an implicitly unwrapped optional puts
+// the literal text `Optional("committed.txt")` into the menu. The whole suite
+// was green while the context menu read `Copy "Optional("committed.txt")"` —
+// only opening the app showed it.
+//
+// So this pins the shape rather than the text: the name that gets interpolated
+// is a per-machine value, but "no Optional( in a user-visible title" is not.
+void test_menu_validation_titles_have_no_optional_wrapper ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+
+	// directoryURLForNewItems falls back to fileItem.URL, which is enough to
+	// reach the dynamic-title half of -validateMenuItem: without a live tree.
+	NSURL* dir = [NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES];
+	FileItem* item = [FileItem fileItemWithURL:dir];
+	OAK_ASSERT(item != nil);
+	[controller setValue:item forKey:@"fileItem"];
+
+	NSMenuItem* menuItem = menu_item_targeting(controller, @selector(newFolder:));
+	OAK_ASSERT([controller validateMenuItem:menuItem]);
+
+	OAK_ASSERT([menuItem.title hasPrefix:@"New Folder in "]);
+	OAK_ASSERT(![menuItem.title containsString:@"Optional("]);
 }
 
 // ===========================================================

@@ -78,3 +78,9 @@
 // see the header). Temporary, and it goes away with the class extension when
 // the controller itself becomes Swift.
 #import "FileBrowserViewControllerInternal.h"
+
+// -updateTitle: and -setDynamicTitle:, which the peeled -validateMenuItem: uses
+// to retitle menu items. The header carries C++-typed selectors alongside them,
+// which is fine here for the same reason it is fine in BundleMenu's bridging
+// header: the importer drops what it cannot express and leaves the rest.
+#import <OakAppKit/NSMenuItem Additions.h>

@@ -44,4 +44,13 @@
 - (void)duplicateSelectedEntries:(id)sender;
 - (void)delete:(id)sender;
 - (void)didChangeFinderTag:(OFBFinderTagsChooser*)finderTagsChooser;
+
+// The pasteboard family. Same reason as the rest: the action menu names these
+// with @selector, and the inactive-key-equivalent table keys on them too.
+- (void)cut:(id)sender;
+- (void)copy:(id)sender;
+- (void)copyAsPathname:(id)sender;
+- (void)paste:(id)sender;
+- (void)pasteNext:(id)sender;
+- (void)createLinkToPasteboardItems:(id)sender;
 @end

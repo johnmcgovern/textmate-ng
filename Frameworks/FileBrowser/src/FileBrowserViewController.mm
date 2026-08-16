@@ -22,9 +22,7 @@
 #import <TMFileReference/TMFileReference.h>
 #import <Preferences/Keys.h>
 #import <io/path.h>
-#import <ns/ns.h>
 #import <text/format.h>
-#import <text/utf8.h>
 
 static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray* rhs)
 {
@@ -2153,8 +2151,10 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 
 - (BOOL)previewPanel:(QLPreviewPanel*)previewPanel handleEvent:(NSEvent*)event
 {
-	std::string const eventString = to_s(event);
-	if((event.type == NSEventTypeKeyUp || event.type == NSEventTypeKeyDown) && (eventString == utf8::to_s(NSUpArrowFunctionKey) || eventString == utf8::to_s(NSDownArrowFunctionKey)))
+	NSString* eventString = [FileBrowserViewControllerSupport eventStringForEvent:event];
+	NSString* upArrow     = [NSString stringWithFormat:@"%C", (unichar)NSUpArrowFunctionKey];
+	NSString* downArrow   = [NSString stringWithFormat:@"%C", (unichar)NSDownArrowFunctionKey];
+	if((event.type == NSEventTypeKeyUp || event.type == NSEventTypeKeyDown) && ([eventString isEqualToString:upArrow] || [eventString isEqualToString:downArrow]))
 	{
 		[self.view.window sendEvent:event];
 		_previewItems = self.previewableItems;
@@ -2196,14 +2196,14 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 	NSPasteboard* pboard  = info.draggingPasteboard;
 	NSArray* draggedPaths = [pboard propertyListForType:NSFilenamesPboardType];
 
-	dev_t targetDevice   = path::device(dropURL.fileSystemRepresentation);
+	dev_t targetDevice   = [FileBrowserViewControllerSupport deviceForURL:dropURL];
 	BOOL linkOperation   = (NSApp.currentEvent.modifierFlags & NSEventModifierFlagControl) == NSEventModifierFlagControl;
 	BOOL toggleOperation = (NSApp.currentEvent.modifierFlags & NSEventModifierFlagOption) == NSEventModifierFlagOption;
 
 	// We accept the drop as long as it is valid for at least one of the items
 	for(NSString* draggedPath in draggedPaths)
 	{
-		BOOL sameSource = (path::device(draggedPath.fileSystemRepresentation) == targetDevice);
+		BOOL sameSource = ([FileBrowserViewControllerSupport deviceForPath:draggedPath] == targetDevice);
 		NSDragOperation operation = linkOperation ? NSDragOperationLink : ((sameSource != toggleOperation) ? NSDragOperationMove : NSDragOperationCopy);
 
 		// Can’t move into same location

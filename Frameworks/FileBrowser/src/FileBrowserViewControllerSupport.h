@@ -56,4 +56,25 @@
 // bundle claims that scope. nil when no bundle does — the caller keeps its own
 // default rather than having one imposed here.
 + (NSString*)pathExtensionForNewFileInDirectoryURL:(NSURL*)directoryURL;
+
+// The device a path lives on, which is how the drag handler decides move vs
+// copy: a drag within one device moves, across devices copies (and the option
+// key inverts it).
+//
+// `dev_t` looks like it belongs on the other side of this boundary, but it is
+// plain C — an int32_t from <sys/types.h> — so it imports into Swift as-is.
+// Returning it, rather than a same-device BOOL over a pair of paths, is what
+// lets the caller keep stat-ing the drop target once for the whole drag instead
+// of once per dragged item.
+// Two spellings, deliberately: -[NSURL fileSystemRepresentation] and
+// -[NSString fileSystemRepresentation] are different methods, and the drag
+// handler used one of each. Rather than route both through a single signature
+// and assume they agree on every path, each caller keeps the conversion it had.
++ (dev_t)deviceForPath:(NSString*)path;
++ (dev_t)deviceForURL:(NSURL*)url;
+
+// The key-equivalent string of an event, per ns::to_s(NSEvent*) — modifier
+// prefixes and all. The comparison against it stays with the caller, which is
+// the only thing that knows an arrow key means "move the Quick Look selection".
++ (NSString*)eventStringForEvent:(NSEvent*)event;
 @end

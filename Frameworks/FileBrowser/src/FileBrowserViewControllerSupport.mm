@@ -103,4 +103,19 @@ static bool is_binary (std::string const& path)
 
 	return pathExtension;
 }
+
++ (dev_t)deviceForPath:(NSString*)path
+{
+	return path::device(path.fileSystemRepresentation);
+}
+
++ (dev_t)deviceForURL:(NSURL*)url
+{
+	return path::device(url.fileSystemRepresentation);
+}
+
++ (NSString*)eventStringForEvent:(NSEvent*)event
+{
+	return to_ns(to_s(event));
+}
 @end

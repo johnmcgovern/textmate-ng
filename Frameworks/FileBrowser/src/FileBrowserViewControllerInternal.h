@@ -52,4 +52,10 @@
 // what the ObjC selector says.
 - (void)openItems:(NSArray<FileItem*>*)items animate:(BOOL)animateFlag NS_SWIFT_NAME(openItems(_:animate:));
 
+// The URLs on a pasteboard. Six callers: five are still in the ObjC++ action
+// methods, one is the drop handler that has already moved, so the
+// implementation stays put and this declaration lets Swift reach it. It should
+// move to Swift with the action methods, and this line go with it.
+- (NSArray<NSURL*>*)URLsFromPasteboard:(NSPasteboard*)pboard NS_SWIFT_NAME(urlsFromPasteboard(_:));
+
 @end

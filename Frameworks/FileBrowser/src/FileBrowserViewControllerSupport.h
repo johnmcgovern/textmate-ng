@@ -70,8 +70,14 @@
 // -[NSString fileSystemRepresentation] are different methods, and the drag
 // handler used one of each. Rather than route both through a single signature
 // and assume they agree on every path, each caller keeps the conversion it had.
+//
+// NS_SWIFT_NAME on the second one only, and that asymmetry is the point: the
+// importer leaves `deviceForPath:` alone but trims the trailing URL off its
+// sibling, so the pair arrives in Swift as device(forPath:) / device(for:)
+// (rule 28). Pinning restores the symmetry. Safe to pin here — both were added
+// this session and nothing outside this framework calls either.
 + (dev_t)deviceForPath:(NSString*)path;
-+ (dev_t)deviceForURL:(NSURL*)url;
++ (dev_t)deviceForURL:(NSURL*)url NS_SWIFT_NAME(device(forURL:));
 
 // The key-equivalent string of an event, per ns::to_s(NSEvent*) — modifier
 // prefixes and all. The comparison against it stays with the caller, which is

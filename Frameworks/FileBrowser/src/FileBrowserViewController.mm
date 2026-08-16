@@ -2098,71 +2098,11 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 	return [pboard writeObjects:urls];
 }
 
-// ===================
 // = Accepting Drops =
-// ===================
-
-- (NSDragOperation)outlineView:(NSOutlineView*)outlineView validateDrop:(id <NSDraggingInfo>)info proposedItem:(FileItem*)item proposedChildIndex:(NSInteger)childIndex
-{
-	NSURL* dropURL = (item ?: self.fileItem).resolvedURL.filePathURL;
-	if(![self.outlineView isExpandable:item] || !dropURL || ![NSFileManager.defaultManager fileExistsAtPath:dropURL.path])
-		return NSDragOperationNone;
-
-	NSPasteboard* pboard  = info.draggingPasteboard;
-	NSArray* draggedPaths = [pboard propertyListForType:NSFilenamesPboardType];
-
-	dev_t targetDevice   = [FileBrowserViewControllerSupport deviceForURL:dropURL];
-	BOOL linkOperation   = (NSApp.currentEvent.modifierFlags & NSEventModifierFlagControl) == NSEventModifierFlagControl;
-	BOOL toggleOperation = (NSApp.currentEvent.modifierFlags & NSEventModifierFlagOption) == NSEventModifierFlagOption;
-
-	// We accept the drop as long as it is valid for at least one of the items
-	for(NSString* draggedPath in draggedPaths)
-	{
-		BOOL sameSource = ([FileBrowserViewControllerSupport deviceForPath:draggedPath] == targetDevice);
-		NSDragOperation operation = linkOperation ? NSDragOperationLink : ((sameSource != toggleOperation) ? NSDragOperationMove : NSDragOperationCopy);
-
-		// Can’t move into same location
-		NSString* parentPath = draggedPath.stringByDeletingLastPathComponent;
-		if(operation == NSDragOperationMove && [parentPath isEqualToString:dropURL.path])
-			continue;
-
-		[outlineView setDropItem:item dropChildIndex:NSOutlineViewDropOnItemIndex];
-		return operation;
-	}
-	return NSDragOperationNone;
-}
-
-static NSDragOperation filter (NSDragOperation mask)
-{
-	return (mask & NSDragOperationMove) ? NSDragOperationMove : ((mask & NSDragOperationCopy) ? NSDragOperationCopy : ((mask & NSDragOperationLink) ? NSDragOperationLink : 0));
-}
-
-- (BOOL)outlineView:(NSOutlineView*)outlineView acceptDrop:(id <NSDraggingInfo>)info item:(FileItem*)item childIndex:(NSInteger)childIndex
-{
-	FileItem* newParent = item ?: self.fileItem;
-
-	NSDragOperation op = filter(info.draggingSourceOperationMask);
-	if(op == 0 || ![self.outlineView isExpandable:newParent] || !newParent.resolvedURL.isFileURL)
-		return NO;
-
-	NSMutableDictionary<NSURL*, NSURL*>* urls = [NSMutableDictionary dictionary];
-	for(NSURL* url in [self URLsFromPasteboard:info.draggingPasteboard])
-		urls[url] = [newParent.resolvedURL URLByAppendingPathComponent:url.lastPathComponent isDirectory:op != NSDragOperationLink && url.hasDirectoryPath];
-
-	switch(op)
-	{
-		case NSDragOperationLink: [self performOperation:FBOperationLink withURLs:urls unique:NO select:NO]; break;
-		case NSDragOperationCopy: [self performOperation:FBOperationCopy withURLs:urls unique:NO select:NO]; break;
-		case NSDragOperationMove: [self performOperation:FBOperationMove withURLs:urls unique:NO select:NO]; break;
-	}
-
-	return YES;
-}
-
-- (void)outlineView:(NSOutlineView*)outlineView didTrashURLs:(NSArray<NSURL*>*)someURLs
-{
-	[self performOperation:FBOperationTrash sourceURLs:someURLs destinationURLs:nil unique:NO select:NO];
-}
+//
+// validateDrop / acceptDrop and the outline view's didTrashURLs: report are
+// Swift, in FileBrowserAcceptDrop.swift, along with the operation-mask filter
+// that used to be a file-static here.
 
 // =============
 // = Undo/Redo =

@@ -279,6 +279,60 @@ void test_outline_view_data_source_survives_a_nil_root ()
 	OAK_ASSERT([dataSource outlineView:outlineView child:0 ofItem:nil] == nil);
 }
 
+// ==============================================================
+// = Every selector that has moved to Swift so far (rule 18)    =
+// ==============================================================
+//
+// The port is peeling this class one section at a time into Swift extensions,
+// and every method that has left is reached **by selector** — AppKit through
+// the data source and delegate conformances, FileBrowserOutlineView through
+// FileBrowserOutlineViewDelegate, and the cell's buttons through target/action.
+// The conformances stay declared on the class extension in the .mm, so the
+// compiler checks none of this: a Swift @objc(...) that drifts by one character
+// still builds, and the browser simply stops populating, stops opening files or
+// stops accepting drops.
+//
+// Some of these have real behavioural tests below; several cannot have one
+// here at all. -outlineView:validateDrop:… and -acceptDrop: need an
+// NSDraggingInfo, and a test file cannot declare a class to mock one (rule 34 —
+// the seed wraps each file's body in a C++ namespace). For those, this is the
+// only automated guard there is, and the app run does the rest.
+//
+// The list grows with each peeled section; a section that lands without adding
+// its selectors here has skipped the cheapest check it will ever get.
+void test_controller_keeps_the_selectors_that_moved_to_swift ()
+{
+	SEL const dataSource[] = {
+		@selector(outlineView:numberOfChildrenOfItem:),
+		@selector(outlineView:child:ofItem:),
+		@selector(outlineView:isItemExpandable:),
+		@selector(outlineView:isGroupItem:),
+		@selector(outlineView:shouldSelectItem:),
+		@selector(outlineView:objectValueForTableColumn:byItem:),
+		@selector(outlineView:pasteboardWriterForItem:),
+	};
+
+	SEL const tableCells[] = {
+		@selector(outlineView:viewForTableColumn:item:),
+		@selector(takeItemToOpenFrom:),
+		@selector(takeItemToCloseFrom:),
+		@selector(control:textShouldEndEditing:),
+	};
+
+	SEL const acceptingDrops[] = {
+		@selector(outlineView:validateDrop:proposedItem:proposedChildIndex:),
+		@selector(outlineView:acceptDrop:item:childIndex:),
+		@selector(outlineView:didTrashURLs:),
+	};
+
+	for(SEL selector : dataSource)
+		assert_responds(selector);
+	for(SEL selector : tableCells)
+		assert_responds(selector);
+	for(SEL selector : acceptingDrops)
+		assert_responds(selector);
+}
+
 // ===========================================================
 // = The table cell constructor, after it became Swift       =
 // ===========================================================

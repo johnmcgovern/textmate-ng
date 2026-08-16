@@ -1,46 +1,74 @@
 # FileBrowser port — handoff
 
-_Written 2026-08-15, rewritten at the end of the session that finished the C++
-extraction — the controller now has no C++ boundary left to move, only the
-translation itself. This is the starting point for a fresh session; the
-per-commit detail and the reasoning behind each decision live in
+_Written 2026-08-15, rewritten 2026-08-16 at the end of the session that took
+the controller from 2280 lines to 1709 by peeling five sections into Swift
+extensions. The C++ extraction was finished the session before; what is left is
+translation. This is the starting point for a fresh session; the per-commit
+detail and the reasoning behind each decision live in
 `ide/FILEBROWSER_PORT_PLAN.md`, and the 22 cross-framework rules that predate
 this work are at the end of `ide/FIND_PORT_HANDOFF.md`. Read those two first.
 Everything below was measured, not assumed._
 
 ## State you are starting from
 
-- `master`, HEAD `6266b9a8`, tree clean. **Not pushed** — the three extraction
-  commits are local.
-- **636 tests across 36 bundles, green.** Re-measure, never increment — that
+- `master`, HEAD `2b34881a`, tree clean. **Not pushed** — everything from
+  `1e9f53de` onward is local.
+- **642 tests across 36 bundles, green.** Re-measure, never increment — that
   figure has been wrong in these docs before (rule 10). FileBrowser has **10** test
   files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before
   this port began.
-- **Nothing is unverified.** `53a7b1e6`'s outstanding visual check was done at
-  the start of this session and passed in full — list populates, `.git` hidden,
-  Show Invisible Files reveals it and hiding restores it, SCM badges, Finder tag
-  dot, live reload, SCM Status, Computer, rename-selects-basename, back
-  navigation. Screen capture works on this machine again; the failure recorded
-  in the previous handoff was transient.
+- **Nothing is unverified.** Every commit was checked in the running app, and
+  where a path could not be reached from the tools (a modifier held across a
+  synthetic drag, a drop on the Dock's Trash) the commit says so rather than
+  implying coverage.
 - The **first thing settled** was the survey's open question: `FileBrowserViewController`
   **is** constructible in a test process. So this framework's coverage can use
   instances.
+- `FileBrowserViewController.mm` is **1709 lines, 99 methods**, down from 2280
+  and ~134.
+
+### How this port is being done — read this before writing any code
+
+A class cannot be half-translated: its *definition* flips from ObjC++ to Swift
+in one commit. But its **methods** can leave a section at a time, as Swift
+extensions on the still-ObjC++ class — which is what `FileBrowserDiskOperations`
+already was, and what five more sections did this session. Each peel is its own
+commit, judged by the suite *and* an app run before the next one starts.
+
+That has already paid for itself twice over: the first peel crashed the test
+process on a nil root (rule 33) and the last one put `Optional("committed.txt")`
+into the context menu (rule 44). Both were one suspect in a 60-line commit
+rather than one of hundreds of new lines in a class-wide flip.
+
+**Three headers, three different jobs. Confusing them is the main way to lose
+an hour here:**
+
+| header | who imports it | may declare |
+| --- | --- | --- |
+| `FileBrowserViewControllerInternal.h` | the **bridging header** | private state and methods **ObjC still implements** — readonly properties, and ObjC++ methods Swift calls. **Never** anything Swift defines, and **never a protocol conformance** (rule 42). |
+| `FileBrowserActions.h` | the **.mm only** | methods **Swift defines** that the ObjC++ still names by `@selector`. Never goes in the bridging header (rule 43). |
+| `FileBrowserViewControllerSupport.h` | the bridging header | the permanent ObjC++ C++ boundary — unchanged by the peel. |
+
+Both temporary headers disappear at the flip. If either survives it, something
+was missed.
 
 ### What is already Swift
 
-The entire view layer, the whole `FileItem*` model family, and the disk
-operations:
+The entire view layer, the whole `FileItem*` model family, the disk operations,
+and — as extensions on the still-ObjC++ controller — five of its sections:
 
 `OFBHeaderView`, `OFBActionsView`, `FileBrowserOutlineView`, `OFBFinderTagsChooser`,
 `FileItemTableCellView`, `FileBrowserView`, `FileItem` (base),
 `FileItemMountedVolumes`, `FileItemSCMStatus`, `FileItemObserver`,
-`FileBrowserDiskOperations` (a Swift extension on the still-ObjC++ controller).
+`FileBrowserDiskOperations`, `FileBrowserOutlineViewDataSource`,
+`FileBrowserTableCells`, `FileBrowserAcceptDrop`, `FileBrowserActions`,
+`FileBrowserPasteboard`, `FileBrowserMenuValidation`.
 
 ### What is still ObjC++ (and why)
 
-- **The one port left:** `FileBrowserViewController.mm` (2280 after all four
-  extractions, the big one), plus its `FileBrowserViewControllerSupport.{h,mm}`
-  (121 lines of .mm), which is ObjC++ **permanently** — that is the point of it.
+- **The one port left:** `FileBrowserViewController.mm` (1709), plus its
+  `FileBrowserViewControllerSupport.{h,mm}`, which is ObjC++ **permanently** —
+  that is the point of it.
 - **ObjC++ by design (do not "finish" these without reason):**
   - `FSEventsManager.mm`, `SCMManager.mm` — model managers whose C++ boundaries
     were already made Swift-importable (`FSEventStream`, `SCMManagerCxx`). A Swift
@@ -118,8 +146,33 @@ As of `6266b9a8` (2280 lines) every remaining hit is one of two kinds, and
 | `-variables` (~1207–1218) | `std::map` return, `path::escape`, `text::join` | Pinned from outside (`DocumentWindowSupport.mm`). Belongs on an ObjC++ category on the Swift class, exactly like `DocumentWindowController`'s four C++-typed selectors. |
 | ~34/68, ~820, ~1113, ~1192, ~1498 | `new NSInteger[]`/`delete[]`, `std::set<NSInteger>`, `std::clamp` ×2, `std::vector<std::pair<BOOL, FileItem*>>` | Local scratch with no C++ dependency — translates straight to Swift when its method does. Do **not** build a support method for these. |
 
-So the next session starts the translation itself, split by section rather than
-in one commit, with an app run after each.
+## What is left to peel, and what actually blocks the rest
+
+The section survey in the plan sorted methods by ivars, overrides and accessors.
+**It missed a fourth blocker and so its "84 eligible" is optimistic** — see rule
+41. This table is the corrected picture, re-measure it rather than trusting the
+numbers:
+
+| section | can move now | blocked | by what |
+| --- | --- | --- | --- |
+| **QuickLook** | 9 | — | nothing, since `2b34881a` freed `_previewItems`. **Do this next.** |
+| **Loading/Expanding Items** | 14 | — | nothing, since the counters and loading sets are properties |
+| **Action Menu** (`-updateMenu:`) | 2 | — | nothing, since `_openWithMenuDelegate` is a property |
+| History / Location / `From FileBrowserView` | — | ~19 | **accessors** for declared properties: a Swift extension cannot supply storage or its accessors |
+| Public-header actions (`newFile:`, `newFolder:`, `goToURL:`, `reload:`, …) | — | ~20 | **header visibility** (rule 41) |
+| `-init`, `-dealloc`, `-loadView`, `-scrollWheel:`, restorable state, `-undoManager`, `-validRequestorForSendType:` | — | 8 | **overrides** (rule 31) |
+| `-variables` | — | 1 | C++ signature pinned from `DocumentWindowSupport.mm` |
+
+So: **three sections left to peel (25 methods), then the flip.** After those,
+what remains in the `.mm` is only the four blocked kinds — which is the right
+shape for the flip, because none of them can leave any earlier.
+
+At the flip: Swift defines the class, `FileBrowserViewController.h` becomes a
+hand-written declaration (rule 23) and leaves the bridging header,
+`FileBrowserActions.h` and `FileBrowserViewControllerInternal.h` are deleted,
+`FileBrowserDiskOperations.h` is deleted, `-presentError:` moves from
+`FileBrowserDiskOperationsSupport.mm` into the class body (rule 31 stops
+applying), and `-variables` becomes an ObjC++ category.
 
 ### What the support class now holds, and one thing about it that is permanent
 
@@ -360,6 +413,71 @@ figure was wrong in each direction.
     in the commit and check it in the app instead of inventing a test that
     exercises AppKit.
 
+The next five are from the five peel commits (`30a3e668` … `a20346be`) and the
+promotion (`2b34881a`). The first three are all one theme: **what a header is
+allowed to say depends on who imports it.**
+
+41. **A method declared in the class's own public header cannot be defined in
+    Swift while the class is still ObjC++.** `FileBrowserViewController.h` is in
+    the bridging header — it must be, since Swift extends the class — so
+    defining one of its declared methods in a Swift extension gives that
+    selector two declarations and collides. `FileBrowserDiskOperations.h` got
+    around this by moving its declarations to a header the bridging header does
+    not see; that only works when **no outside consumer needs them**, and
+    `newFile:`/`newFolder:`/`goToURL:` and the rest are called by
+    `DocumentWindowController.swift` through the public header. So roughly
+    twenty methods cannot peel at all and must wait for the flip. Check header
+    visibility when planning a section, not just ivars and overrides.
+
+42. **Never declare a protocol conformance in a header the bridging header
+    imports.** The obvious way to let a peeled section assign `self` to a
+    delegate property is to re-state the conformance in the internal header.
+    Legal ObjC, and it breaks the build: once Swift can see *both* the protocol
+    and the conformance, the imported protocol member counts as a previous
+    declaration of that selector, and the witness fails with "method
+    'control(_:textShouldEndEditing:)' … conflicts with previous declaration".
+    The data source section only compiles because its `NSOutlineViewDataSource`
+    conformance stays invisible in the `.mm`. Let the **Swift extension** declare
+    the conformance instead — which then forces the witness `public`, an
+    artifact of imported ObjC classes being public in Swift that widens nothing.
+
+43. **The generated `-Swift.h` is not importable in this framework's `.mm`, and
+    the previous handoff was wrong to suggest it might be.** It said FileBrowser
+    "could self-import `FileBrowser-Swift.h`" because, unlike Find, no class here
+    is named after the module. That is not the binding constraint: the generated
+    header declares every class the framework's Swift defines, and the `.mm` also
+    imports the **hand-written** headers for those same classes (`FileItem.h`,
+    `FileBrowserView.h`, `FileBrowserOutlineView.h` — rule 23), so clang rejects
+    the duplicate interfaces. Hand-write a category header instead
+    (`FileBrowserActions.h`) and import it only from the `.mm`. Worth doing
+    rather than tolerating the warnings: without it, every `@selector` in the
+    menu construction becomes `-Wundeclared-selector`, which is the
+    silently-dead-menu-item failure of rule 18.
+
+44. **Unannotated ObjC types import as implicitly unwrapped optionals, and
+    interpolating one prints the wrapper.** `FileItem.localizedName` is
+    `String!`, so `"Copy “\(item.localizedName)”"` put the literal text
+    `Copy "Optional("committed.txt")"` into the context menu — with the whole
+    suite green. The same shape traps instead of printing when the value feeds a
+    force-unwrap: `(item ?? fileItem).arrangedChildren` took the test process
+    down on the very first peel. **Read the ObjC declaration's nullability
+    before translating a line that uses the value**, and prefer annotating the
+    header (`nonnull` on `selectedItems`/`previewableItems` removed a
+    meaningless unwrap from every call site) over coping at each use.
+    Interpolation is the dangerous one, because nothing fails.
+
+45. **Promote ivars to properties as its own prep commit, before the sections
+    that need them.** A Swift extension cannot see an ObjC instance variable at
+    all, so nine ivars in a `{ … }` block were pinning twenty-two otherwise
+    ordinary methods into the `.mm`. Promoting them is mechanical and provably
+    faithful: auto-synthesis backs each property with an ivar of exactly the
+    name it had, so every `_foo` still resolves and a mismatch is a compile
+    error rather than a silent rebinding. Copy the ownership across unchanged
+    (rule 27) — a promotion is not the moment to reconsider a weak/strong
+    choice. Expect the suite to be **unchanged in both directions**; the app run
+    is the only real check, so pick the checks that exercise the promoted
+    storage specifically.
+
 ## One build gotcha that is not a code error
 
 Ad-hoc CodeSign of **unrelated** test bundles sometimes fails with
@@ -378,14 +496,31 @@ xattr -cr "$DD/Build/Products/Debug"
 Screen capture (and the accessibility API with it) stopped responding on this
 machine mid-session once — `screenshot` returned "permission missing or
 SCContentFilter failure" and System Events could not see the app's windows,
-while the app itself was running fine. **It was transient**: capture worked
-normally the following session with no intervention, which is how `53a7b1e6`'s
-outstanding check got done. If it happens again, rule 8 still applies: the run
-cannot be skipped, it just has to be done by a human looking at the screen. Say
-so in the commit message when it is not done, as `53a7b1e6` did, and do not
-stack work on top of the unverified commit.
+while the app itself was running fine. **It is intermittent, not a one-off**: it
+cleared with no intervention, came back mid-session on 2026-08-16, and cleared
+again. Do not spend time diagnosing it. When it happens rule 8 still applies —
+the run cannot be skipped, it just has to be done by a human looking at the
+screen, and `30a3e668` was verified exactly that way. Say so in the commit
+message, and do not stack work on top of an unverified commit.
 
-Two smaller things about driving the app that cost time this session:
+Five smaller things about driving the app, each of which cost time:
+
+- **`open -a` on a running app does not relaunch it.** It activates the existing
+  instance, so you verify the *old* binary and conclude your fix did not work.
+  Quit first, confirm with `pgrep`, then open. This wasted a full cycle on the
+  `Optional(…)` fix, which was already correct.
+- **The app cannot quit while a context menu or field editor is open**, and
+  `osascript … to quit` reports nothing while it waits. Escape does not always
+  dismiss a field editor either; clicking another row commits the edit, which
+  for a rename means renaming to whatever is in the field.
+- **A second click on an already-selected row starts a rename**, so a
+  click-then-⌘C sequence can send the keystroke to a field editor instead of the
+  browser. Watch what has focus before sending keys.
+- **Some overlay apps intercept clicks** (Grammarly did, on the disclosure
+  triangle). Drive the outline view from the keyboard — left/right arrows
+  collapse and expand — when a click is refused.
+
+Two more, from the drag work:
 
 - **A synthetic drag needs to be slow and finely stepped.** A press, three
   moves and a release highlights the drop row but the drop does not happen —

@@ -464,6 +464,48 @@ is what makes that answer distinguishable from the caller's `@"txt"` fallback),
 arrow keys moving a live Quick Look panel, and a same-device drag *moving*
 rather than copying.
 
+### The peel, as it actually went (2026-08-16, six commits)
+
+`30a3e668` outline view data source (7 methods) → `583c8436` table cells (4) →
+`89769f2c` drop handlers (3) → `8cb0d7d5` twelve action methods →
+`a20346be` the pasteboard family and `-validateMenuItem:` (12) → `2b34881a` the
+ivar promotion. 2280 lines to 1709.
+
+**The section survey in this file is wrong in one way that matters**, and the
+handoff's table supersedes it: it sorted methods by ivars, overrides and
+accessors, and never asked whether a method is *declared in
+FileBrowserViewController.h*. Anything that is cannot be defined in Swift while
+the class is ObjC++, because that header is necessarily in the bridging header
+(rule 41). That is about twenty methods — `newFile:`, `newFolder:`, `goToURL:`,
+`reload:` and the rest of the public action surface — which the survey counted
+as eligible and which in fact cannot move until the flip.
+
+**What the peel-one-section-at-a-time discipline actually bought**, stated
+plainly because it is the argument for doing the rest the same way:
+
+- The first section crashed the test process on its first build — `fileItem`
+  imports as `FileItem!` and `(item ?? fileItem).arrangedChildren` traps where
+  the ObjC++ messaged nil and answered 0. One suspect in a 60-line commit.
+- The last section shipped `Copy "Optional("committed.txt")"` into the context
+  menu past 641 green tests, because interpolating an implicitly unwrapped
+  optional prints the wrapper. Only the app run showed it.
+- Neither is the kind of thing a class-wide flip would have surfaced one at a
+  time.
+
+Two things were investigated and deliberately **not** changed, which is worth
+recording so nobody re-opens them:
+
+- **Paste and Move Items Here do not show their dynamic titles**, while Create
+  Link does. `-setDynamicTitle:` writes only `title`, `-setInactiveKeyEquivalent:`
+  renders into `attributedTitle`, and AppKit prefers the latter;
+  `-updateTitle:` re-applies the activation string and `-setDynamicTitle:` does
+  not. The first two are in the inactive-key-equivalent table and the third is
+  not. The ObjC++ called the same OakAppKit methods for the same items, so this
+  predates the port. It is an OakAppKit bug, not a port bug.
+- **`NSFilenamesPboardType` is `nonswift`** in AppKit's apinotes, so Swift
+  spells it by raw value. Not modernised to `PasteboardType.fileURL` on the way
+  past: that changes which drags the browser accepts.
+
 ## One warning that is not about this framework
 
 `OakBackgroundFillView`'s overpaint bug (`6b419366`) made the *gutter* invisible

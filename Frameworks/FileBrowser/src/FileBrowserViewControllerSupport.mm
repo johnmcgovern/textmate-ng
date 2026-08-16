@@ -1,7 +1,9 @@
 #import "FileBrowserViewControllerSupport.h"
 #import "FileItem.h"
+#import <OakCommand/OakCommand.h>
 #import <Preferences/Keys.h>
 #import <bundles/bundles.h>
+#import <command/parser.h>
 #import <io/path.h>
 #import <ns/ns.h>
 #import <regexp/glob.h>
@@ -75,5 +77,30 @@ static bool is_binary (std::string const& path)
 		[res addObject:item];
 	}
 	return res;
+}
+
++ (void)executeBundleCommandWithUUIDString:(NSString*)uuidString firstResponder:(NSResponder*)firstResponder
+{
+	if(bundles::item_ptr item = bundles::lookup(to_s(uuidString)))
+	{
+		// TODO For commands that have ‘input = document’ we should provide the document
+		OakCommand* command = [[OakCommand alloc] initWithBundleCommand:parse_command(item)];
+		command.firstResponder = firstResponder;
+		[command executeWithInput:nil variables:item->bundle_variables() outputHandler:nil];
+	}
+}
+
++ (NSString*)pathExtensionForNewFileInDirectoryURL:(NSURL*)directoryURL
+{
+	NSString* pathExtension;
+
+	std::string fileType = settings_for_path(NULL_STR, "attr.untitled", directoryURL.fileSystemRepresentation).get(kSettingsFileTypeKey, "text.plain");
+	for(auto item : bundles::query(bundles::kFieldGrammarScope, fileType))
+	{
+		if(NSString* ext = to_ns(item->value_for_field(bundles::kFieldGrammarExtension)))
+			pathExtension = ext;
+	}
+
+	return pathExtension;
 }
 @end

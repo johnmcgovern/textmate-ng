@@ -19,14 +19,11 @@
 #import <OakAppKit/OakFinderTag.h>
 #import <OakAppKit/OakZoomingIcon.h>
 #import <OakFoundation/OakFoundation.h>
-#import <OakCommand/OakCommand.h>
 #import <TMFileReference/TMFileReference.h>
 #import <Preferences/Keys.h>
-#import <bundles/bundles.h>
+#import <io/path.h>
 #import <ns/ns.h>
-#import <regexp/glob.h>
-#import <settings/settings.h>
-#import <text/ctype.h>
+#import <text/format.h>
 #import <text/utf8.h>
 
 static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray* rhs)
@@ -653,13 +650,8 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 		return nil;
 
 	NSString* pathExtension = @"txt";
-
-	std::string fileType = settings_for_path(NULL_STR, "attr.untitled", directoryURL.fileSystemRepresentation).get(kSettingsFileTypeKey, "text.plain");
-	for(auto item : bundles::query(bundles::kFieldGrammarScope, fileType))
-	{
-		if(NSString* ext = to_ns(item->value_for_field(bundles::kFieldGrammarExtension)))
-			pathExtension = ext;
-	}
+	if(NSString* ext = [FileBrowserViewControllerSupport pathExtensionForNewFileInDirectoryURL:directoryURL])
+		pathExtension = ext;
 
 	NSURL* newFileURL = [[directoryURL URLByAppendingPathComponent:@"untitled" isDirectory:NO] URLByAppendingPathExtension:pathExtension];
 	NSArray<NSURL*>* urls = [self performOperation:FBOperationNewFile sourceURLs:nil destinationURLs:@[ newFileURL ] unique:YES select:YES];
@@ -741,13 +733,7 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 
 - (void)executeBundleCommand:(id)sender
 {
-	if(bundles::item_ptr item = bundles::lookup(to_s([sender representedObject])))
-	{
-		// TODO For commands that have ‘input = document’ we should provide the document
-		OakCommand* command = [[OakCommand alloc] initWithBundleCommand:parse_command(item)];
-		command.firstResponder = self;
-		[command executeWithInput:nil variables:item->bundle_variables() outputHandler:nil];
-	}
+	[FileBrowserViewControllerSupport executeBundleCommandWithUUIDString:[sender representedObject] firstResponder:self];
 }
 
 - (BOOL)writeItems:(NSArray<FileItem*>*)items toPasteboard:(NSPasteboard*)pboard

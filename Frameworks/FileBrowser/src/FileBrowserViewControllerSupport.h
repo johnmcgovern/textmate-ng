@@ -36,4 +36,24 @@
 // command back up by; `action` is the caller's, since this class has no opinion
 // about which selector runs them.
 + (NSArray<NSMenuItem*>*)actionMenuItemsWithAction:(SEL)action;
+
+// Runs one of those items: `bundles::lookup` on the UUID the menu item carries,
+// then OakCommand.
+//
+// This is the cluster that can never be Swift, rather than merely inconvenient
+// to translate — OakCommand's own API is C++-typed on both sides
+// (-initWithBundleCommand: takes a `bundle_command_t const&`, and
+// -executeWithInput:variables:outputHandler: a `std::map`), so the call has to
+// be made from ObjC++ wherever the controller ends up. `firstResponder` is the
+// controller, which OakCommand holds weakly.
+//
+// A UUID that resolves to nothing is a no-op, exactly as the lookup's null
+// item_ptr was.
++ (void)executeBundleCommandWithUUIDString:(NSString*)uuidString firstResponder:(NSResponder*)firstResponder;
+
+// The path extension a new untitled file should get: the `attr.untitled`
+// fileType setting for the directory, then the grammar extension of whichever
+// bundle claims that scope. nil when no bundle does — the caller keeps its own
+// default rather than having one imposed here.
++ (NSString*)pathExtensionForNewFileInDirectoryURL:(NSURL*)directoryURL;
 @end

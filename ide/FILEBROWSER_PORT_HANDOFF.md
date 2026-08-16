@@ -41,7 +41,7 @@ operations:
 
 ### What is still ObjC++ (and why)
 
-- **The one port left:** `FileBrowserViewController.mm` (2329, the big one).
+- **The one port left:** `FileBrowserViewController.mm` (2303 after the first extraction, the big one).
 - **ObjC++ by design (do not "finish" these without reason):**
   - `FSEventsManager.mm`, `SCMManager.mm` — model managers whose C++ boundaries
     were already made Swift-importable (`FSEventStream`, `SCMManagerCxx`). A Swift
@@ -137,7 +137,7 @@ Three notes on that table:
 Only after that is the translation itself worth starting, split by section
 rather than in one commit, with an app run after each.
 
-- **`FileBrowserViewController.mm` (2329).** Its known hazards, updated by what
+- **`FileBrowserViewController.mm` (2303).** Its known hazards, updated by what
   the DiskOperations port and the survey measured:
   - **The rule-21 cascade is real but smaller than the survey thought, and its
     structural half is now done.** Three of the fears are settled facts rather

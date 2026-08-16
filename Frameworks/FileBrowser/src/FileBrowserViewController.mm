@@ -1994,64 +1994,11 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 // of the port. The conformance stays on the class extension above; AppKit
 // reaches them by selector.
 
-// ===============================
 // = Table cell view constructor =
-// ===============================
-
-- (NSView*)outlineView:(NSOutlineView*)outlineView viewForTableColumn:(NSTableColumn*)tableColumn item:(FileItem*)item
-{
-	FileItemTableCellView* res = [outlineView makeViewWithIdentifier:tableColumn.identifier owner:self];
-	if(!res)
-	{
-		res = [[FileItemTableCellView alloc] init];
-		res.identifier  = tableColumn.identifier;
-		res.openButton.target  = self;
-		res.openButton.action  = @selector(takeItemToOpenFrom:);
-		res.closeButton.target = self;
-		res.closeButton.action = @selector(takeItemToCloseFrom:);
-		res.textField.delegate = self;
-	}
-	return res;
-}
-
-- (void)takeItemToOpenFrom:(id)sender
-{
-	NSInteger row = [self.outlineView rowForView:sender];
-	if(row != -1)
-	{
-		FileItem* item = [self.outlineView itemAtRow:row];
-		[self openItems:@[ item ] animate:YES];
-	}
-}
-
-- (void)takeItemToCloseFrom:(id)sender
-{
-	NSInteger row = [self.outlineView rowForView:sender];
-	if(row != -1)
-	{
-		FileItem* item = [self.outlineView itemAtRow:row];
-		[self.delegate fileBrowser:self closeURL:item.URL];
-	}
-}
-
-- (BOOL)control:(NSTextField*)textField textShouldEndEditing:(NSText*)fieldEditor
-{
-	NSInteger row = [self.outlineView rowForView:textField];
-	if(row == -1)
-		return NO;
-
-	FileItem* item = [self.outlineView itemAtRow:row];
-	NSURL* newURL = [[item.URL URLByDeletingLastPathComponent] URLByAppendingPathComponent:fieldEditor.string isDirectory:item.isDirectory];
-	if(![item.URL isEqual:newURL])
-	{
-		// Because of the animation we need to run this after field editor has been removed
-		dispatch_async(dispatch_get_main_queue(), ^{
-			[self performOperation:FBOperationRename withURLs:@{ item.URL: newURL } unique:NO select:YES];
-		});
-	}
-
-	return YES;
-}
+//
+// The cell constructor, its two button actions and the rename commit are Swift,
+// in FileBrowserTableCells.swift. The buttons' target/action are wired there
+// too, so nothing in this file refers to them any more.
 
 // =============
 // = QuickLook =

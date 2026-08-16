@@ -1,5 +1,6 @@
 #import "../src/FileBrowserViewController.h"
 #import "../src/FileItem.h"
+#import "../src/FileItemTableCellView.h"
 #import "../src/FileBrowserViewControllerSupport.h"
 #import <Preferences/Keys.h>
 
@@ -276,6 +277,53 @@ void test_outline_view_data_source_survives_a_nil_root ()
 	// Out of range against a nil root answers nil rather than trapping, which is
 	// what the ObjC++ subscript did.
 	OAK_ASSERT([dataSource outlineView:outlineView child:0 ofItem:nil] == nil);
+}
+
+// ===========================================================
+// = The table cell constructor, after it became Swift       =
+// ===========================================================
+//
+// The cell's two buttons are wired here by name — target set to the controller,
+// action set to a selector — and nothing about that is checked by the compiler.
+// If either selector drifts in the Swift (rule 18) or the target assignment is
+// dropped, the buttons render exactly as before and simply do nothing when
+// clicked. t_file_item_table_cell_view.mm pins the *view's* half of this (that
+// -init still produces the two buttons); this pins the controller's half.
+//
+// The text field's delegate matters for the same reason: it is what makes a
+// finished rename commit, and it only resolves because the Swift extension
+// declares the NSTextFieldDelegate conformance itself.
+
+void test_table_cell_view_is_constructed_and_wired ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+	NSOutlineView* outlineView = controller.outlineView;
+	OAK_ASSERT(outlineView != nil);
+
+	NSTableColumn* column = outlineView.tableColumns.firstObject;
+	OAK_ASSERT(column != nil);
+
+	FileItem* item = [FileItem fileItemWithURL:[NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES]];
+	OAK_ASSERT(item != nil);
+
+	id <NSOutlineViewDelegate> delegate = (id <NSOutlineViewDelegate>)controller;
+	NSView* view = [delegate outlineView:outlineView viewForTableColumn:column item:item];
+	OAK_ASSERT(view != nil);
+	OAK_ASSERT([view isKindOfClass:[FileItemTableCellView class]]);
+
+	FileItemTableCellView* cell = (FileItemTableCellView*)view;
+	OAK_ASSERT([(NSString*)cell.identifier isEqualToString:(NSString*)column.identifier]);
+
+	OAK_ASSERT(cell.openButton != nil);
+	OAK_ASSERT(cell.openButton.target == controller);
+	OAK_ASSERT(cell.openButton.action == @selector(takeItemToOpenFrom:));
+
+	OAK_ASSERT(cell.closeButton != nil);
+	OAK_ASSERT(cell.closeButton.target == controller);
+	OAK_ASSERT(cell.closeButton.action == @selector(takeItemToCloseFrom:));
+
+	OAK_ASSERT(cell.textField != nil);
+	OAK_ASSERT(cell.textField.delegate == (id <NSTextFieldDelegate>)controller);
 }
 
 // ==========================================================

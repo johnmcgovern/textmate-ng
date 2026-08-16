@@ -21,6 +21,18 @@
 // again. If it is still here after the port, something was missed.
 #import "FileBrowserViewController.h"
 
+// **Do not add protocol conformances here.** Re-stating one that the class
+// extension already declares is legal ObjC, but it makes the conformance
+// *visible to Swift*, and then a peeled section implementing one of the
+// protocol's optional methods fails to compile: the imported protocol member
+// counts as a previous declaration of that selector
+// ("method 'control(_:textShouldEndEditing:)' … conflicts with previous
+// declaration"). The data source section only works because its
+// NSOutlineViewDataSource conformance stays invisible in the .mm.
+//
+// Where a peeled section needs Swift to know about a conformance — because it
+// assigns `self` to a delegate property — the Swift extension declares that
+// conformance itself, as FileBrowserTableCells.swift does for NSTextFieldDelegate.
 @interface FileBrowserViewController (Internal)
 
 // Read by the NSOutlineViewDataSource section (-outlineView:isItemExpandable:).
@@ -28,5 +40,16 @@
 // in the controller, which reload the outline view.
 @property (nonatomic, readonly) BOOL canExpandPackages;
 @property (nonatomic, readonly) BOOL canExpandSymbolicLinks;
+
+// Opens items in the editor — the shared tail of double-click, the Open action
+// and the cell's open button. Defined in the .mm with no declaration at all
+// (it is called only from below its definition), so it needs one here for the
+// table-cell section to reach it. Three of its four callers are still ObjC++.
+//
+// NS_SWIFT_NAME is not decoration: the importer renames this to `open(_:animate:)`
+// on its own (rule 28 — it drops the "Items" and leaves a name that collides
+// with every other `open` in scope). Pinning it keeps the Swift call site saying
+// what the ObjC selector says.
+- (void)openItems:(NSArray<FileItem*>*)items animate:(BOOL)animateFlag NS_SWIFT_NAME(openItems(_:animate:));
 
 @end

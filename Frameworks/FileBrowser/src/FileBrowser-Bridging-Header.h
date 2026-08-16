@@ -73,3 +73,8 @@
 // filter that decides which children show, and the binary-file test. C++-free
 // signatures, so this is importable here.
 #import "FileBrowserViewControllerSupport.h"
+
+// The private controller state a peeled-off Swift section reads (readonly —
+// see the header). Temporary, and it goes away with the class extension when
+// the controller itself becomes Swift.
+#import "FileBrowserViewControllerInternal.h"

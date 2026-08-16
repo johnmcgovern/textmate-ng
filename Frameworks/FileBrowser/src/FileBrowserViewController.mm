@@ -1987,44 +1987,12 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 	return [res copy];
 }
 
-// ===========================
 // = NSOutlineViewDataSource =
-// ===========================
-
-- (NSInteger)outlineView:(NSOutlineView*)outlineView numberOfChildrenOfItem:(FileItem*)item
-{
-	return (item ?: _fileItem).arrangedChildren.count;
-}
-
-- (id)outlineView:(NSOutlineView*)outlineView child:(NSInteger)childIndex ofItem:(FileItem*)item
-{
-	return (item ?: _fileItem).arrangedChildren[childIndex];
-}
-
-- (BOOL)outlineView:(NSOutlineView*)outlineView isItemExpandable:(FileItem*)item
-{
-	return item.isDirectory && (_canExpandPackages || !item.isPackage) || (_canExpandSymbolicLinks && item.isLinkToDirectory && (_canExpandPackages || !item.isLinkToPackage));
-}
-
-- (BOOL)outlineView:(NSOutlineView*)outlineView isGroupItem:(FileItem*)item
-{
-	return [item.URL.scheme isEqualToString:@"scm"];
-}
-
-- (BOOL)outlineView:(NSOutlineView*)outlineView shouldSelectItem:(FileItem*)item
-{
-	return item.URL.isFileURL;
-}
-
-- (id)outlineView:(NSOutlineView*)outlineView objectValueForTableColumn:(NSTableColumn*)tableColumn byItem:(FileItem*)item
-{
-	return item;
-}
-
-- (id <NSPasteboardWriting>)outlineView:(NSOutlineView*)outlineView pasteboardWriterForItem:(FileItem*)item
-{
-	return item.URL.filePathURL;
-}
+//
+// The seven data-source/delegate methods are Swift, in
+// FileBrowserOutlineViewDataSource.swift — the first section peeled off ahead
+// of the port. The conformance stays on the class extension above; AppKit
+// reaches them by selector.
 
 // ===============================
 // = Table cell view constructor =

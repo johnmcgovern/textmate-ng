@@ -247,6 +247,37 @@ void test_is_binary_url_follows_the_binary_setting ()
 	OAK_ASSERT(![FileBrowserViewControllerSupport isBinaryURL:url]);
 }
 
+// =========================================================
+// = The outline view data source, after it became Swift   =
+// =========================================================
+//
+// The seven data-source methods are the first section peeled off the controller
+// into a Swift extension. Six of them are one line and nothing here would tell
+// you if they broke; the two that resolve "the item asked about, or the root"
+// are a different matter, because `fileItem` imports as an implicitly unwrapped
+// optional and the root is nil on a controller that has not been given a URL.
+//
+// That is not a theoretical state — AppKit asks for the row count while the
+// view is being set up, and the first draft of the Swift trapped there and took
+// the whole test process down with it. This pins it directly rather than
+// leaving it to be caught side-on by the menu test that happened to find it.
+
+void test_outline_view_data_source_survives_a_nil_root ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+	NSOutlineView* outlineView = controller.outlineView;
+	OAK_ASSERT(outlineView != nil);
+
+	// No URL has been set, so fileItem is nil — the ObjC++ answered 0 by
+	// messaging nil, and the Swift has to answer 0 rather than trap.
+	id <NSOutlineViewDataSource> dataSource = (id <NSOutlineViewDataSource>)controller;
+	OAK_ASSERT([dataSource outlineView:outlineView numberOfChildrenOfItem:nil] == 0);
+
+	// Out of range against a nil root answers nil rather than trapping, which is
+	// what the ObjC++ subscript did.
+	OAK_ASSERT([dataSource outlineView:outlineView child:0 ofItem:nil] == nil);
+}
+
 // ==========================================================
 // = The action menu's two C++ clusters, after the second   =
 // = extraction commit                                      =

@@ -73,20 +73,32 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 }
 
 @interface FileBrowserViewController () <NSMenuDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate, FileBrowserOutlineViewDelegate, NSTextFieldDelegate, QLPreviewPanelDataSource, OakUserDefaultsObserver>
-{
-	NSUndoManager* _fileBrowserUndoManager;
-	NSArray<FileItem*>* _previewItems;
-	OakOpenWithMenuDelegate* _openWithMenuDelegate;
 
-	NSMutableDictionary<NSURL*, id>* _fileItemObservers;
+// These nine were instance variables in a `{ … }` block until the port needed
+// them. A Swift extension cannot see an ObjC ivar at all, so every method
+// touching one was stuck in this file no matter how ordinary it was — the
+// QuickLook section, the whole expand/collapse counter family and the async
+// loading bookkeeping, twenty-two methods between them.
+//
+// As properties they are reachable, because FileBrowserViewControllerInternal.h
+// can re-declare them readonly for the sections that need them. Nothing else
+// changes: auto-synthesis backs each one with an ivar of exactly the name it
+// had, so every `_foo` in this file still resolves to the same storage, and the
+// ownership is the ivars' own — strong, unannotated, per rule 27, not a
+// judgement about what it ought to be.
+@property (nonatomic) NSUndoManager* fileBrowserUndoManager;
+@property (nonatomic) NSArray<FileItem*>* previewItems;
+@property (nonatomic) OakOpenWithMenuDelegate* openWithMenuDelegate;
 
-	NSMutableSet<NSURL*>* _loadingURLs;
-	NSArray<void(^)()>* _loadingURLsCompletionHandlers;
+@property (nonatomic) NSMutableDictionary<NSURL*, id>* fileItemObservers;
 
-	NSInteger _expandingChildrenCounter;
-	NSInteger _collapsingChildrenCounter;
-	NSInteger _nestedCollapsingChildrenCounter;
-}
+@property (nonatomic) NSMutableSet<NSURL*>* loadingURLs;
+@property (nonatomic) NSArray<void(^)()>* loadingURLsCompletionHandlers;
+
+@property (nonatomic) NSInteger expandingChildrenCounter;
+@property (nonatomic) NSInteger collapsingChildrenCounter;
+@property (nonatomic) NSInteger nestedCollapsingChildrenCounter;
+
 @property (nonatomic) BOOL canExpandSymbolicLinks;
 @property (nonatomic) BOOL canExpandPackages;
 @property (nonatomic) BOOL sortDirectoriesBeforeFiles;

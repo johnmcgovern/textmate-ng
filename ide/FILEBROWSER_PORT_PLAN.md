@@ -421,10 +421,24 @@ Services menu is still populated, which is the half no test reaches), and
 `908a82da` the KVO surface, pinned by binding a real NSButton and NSMenuItem the
 way the app does — a missing `@objc dynamic` now fails a test.
 
-**Order from here:** extract the seven C++ clusters while the file is still
-ObjC++, in their own commits (step 2 of this plan's original order — the shape
-that made FSEventsManager and SCMManager tractable) → then the translation,
-split by section rather than in one commit, with an app run after each.
+**Order from here:** extract the C++ clusters while the file is still ObjC++, in
+their own commits (step 2 of this plan's original order — the shape that made
+FSEventsManager and SCMManager tractable) → then the translation, split by
+section rather than in one commit, with an app run after each.
+
+`53a7b1e6` did the first extraction: the two settings-driven fragments (the
+exclude/include glob filter and `is_binary`) into
+`FileBrowserViewControllerSupport`. It also showed what these extractions are
+worth beyond the port — the visibility rule went from a private method that only
+ran with a live tree to a pure function of a directory URL, and got its first
+test in the same commit (rule 35). The current cluster-by-cluster inventory,
+with the method each lives in, is in `ide/FILEBROWSER_PORT_HANDOFF.md`;
+re-measure it rather than trusting the line numbers, since they move as each
+extraction lands.
+
+**`53a7b1e6` is the one commit here not verified in the running app** — screen
+capture failed on this machine partway through the session. Confirm the browser
+before building on it.
 
 ## One warning that is not about this framework
 

@@ -1,22 +1,30 @@
 # FileBrowser port — handoff
 
-_Written 2026-08-15 at the end of the session that ported the whole FileBrowser
-view layer and the entire `FileItem*` model family to Swift, and updated later
-the same day when `FileBrowserView` finished the view layer and
-`FileBrowserDiskOperations` left only the controller. This is the
-starting point for a fresh session; the per-commit detail and the reasoning
-behind each decision live in `ide/FILEBROWSER_PORT_PLAN.md`, and the 22
-cross-framework rules that predate this work are at the end of
-`ide/FIND_PORT_HANDOFF.md`. Read those two first. Everything below was measured,
-not assumed._
+_Written 2026-08-15, rewritten at the end of the session that finished the view
+layer (`FileBrowserView`), ported `FileBrowserDiskOperations`, and did all the
+prep for the one file left. This is the starting point for a fresh session; the
+per-commit detail and the reasoning behind each decision live in
+`ide/FILEBROWSER_PORT_PLAN.md`, and the 22 cross-framework rules that predate
+this work are at the end of `ide/FIND_PORT_HANDOFF.md`. Read those two first.
+Everything below was measured, not assumed._
 
 ## State you are starting from
 
-- `master`, HEAD `908a82da`, tree clean.
-- **632 tests across 36 bundles, green.** Re-measure, never increment — that
+- `master`, HEAD `53a7b1e6`, tree clean.
+- **634 tests across 36 bundles, green.** Re-measure, never increment — that
   figure has been wrong in these docs before (rule 10). FileBrowser has **10** test
   files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before
   this port began.
+
+> **Do this first.** `53a7b1e6` (the settings/glob extraction) is the one commit
+> in this whole port that was **not** verified in the running app: screen capture
+> and the accessibility API both stopped responding on this machine partway
+> through the session, so the visual half of rule 8 could not be done. The suite
+> is green and the extracted logic gained direct tests, but nobody has *seen* the
+> browser since. Open the app on a git repo and check the list populates, `.git`
+> stays hidden, and **View → Show Invisibles** reveals it — that is exactly the
+> code path `53a7b1e6` moved. If capture is still broken, look at the screen
+> yourself; do not stack more commits on an unverified one.
 - The **first thing settled** was the survey's open question: `FileBrowserViewController`
   **is** constructible in a test process. So this framework's coverage can use
   instances.
@@ -72,8 +80,8 @@ Computer shows the host + volumes, and rename selects the basename.
 
 **It has been surveyed and its prep is done** — the full measured checklist is
 in `ide/FILEBROWSER_PORT_PLAN.md` under "FileBrowserViewController — the
-survey". Three prep commits landed off the back of it, each judged by the suite
-on its own:
+survey". Four commits landed off the back of it, each judged by the suite on its
+own:
 
 - `00a42e07` — `FileBrowserTypes.h` split out (FBOperation + FileBrowserDelegate).
 - `8c98956d` — **`+initialize` is gone**, replaced by `+registerDefaults`
@@ -81,13 +89,53 @@ on its own:
   a Swift class cannot provide `+initialize`.
 - `908a82da` — the KVO surface pinned by binding a real NSButton and NSMenuItem,
   so a missing `@objc dynamic` fails a test instead of silently dead bindings.
+- `53a7b1e6` — the first C++ extraction (see below), and the only commit in this
+  port not verified in the running app.
 
-**What is left is the translation itself**, and one piece of boundary work
-before it: the survey found **seven C++ clusters spread across the file** rather
-than the single fragment every earlier port absorbed into one `…Support` file.
-Extract those while everything is still ObjC++, in their own commits — step 2 of
-this plan's original order, the shape that made FSEventsManager and SCMManager
-tractable. Then `-variables` stays on an ObjC++ category, and the rest is Swift.
+**What is left is the C++ extraction, then the translation.** The survey found
+the C++ spread across the file rather than pooled in one fragment, so it comes
+out a cluster at a time while everything is still ObjC++ and the existing suite
+judges each move — step 2 of this plan's original order, the shape that made
+FSEventsManager and SCMManager tractable.
+
+`53a7b1e6` did the first one (the two settings-driven fragments: the exclude/
+include glob filter and `is_binary`, now
+`FileBrowserViewControllerSupport.{h,mm}`). **Re-measure before trusting this
+list** (rule 10) — line numbers move as each extraction lands:
+
+```bash
+grep -n 'std::\|[a-z_]\+::[a-z_]' Frameworks/FileBrowser/src/FileBrowserViewController.mm
+```
+
+As of `53a7b1e6` (2303 lines), what is left, by the method it lives in:
+
+| where | lines | what |
+| --- | --- | --- |
+| `-updateMenu:` | 534, 586–587 | `std::map<SEL, std::string>` inactive key-equivalents table, **and** `std::multimap<std::string, bundles::item_ptr, text::less_t>` + `bundles::query` for the action-menu items |
+| `-newFile:` | 666–669 | `settings_for_path` for the untitled file type, then `bundles::query` for its grammar extension |
+| `-executeBundleCommand:` | 753 | `bundles::lookup` on the sender's represented object |
+| `-previewPanel:handleEvent:` | 2179 | `to_s(NSEvent*)` for the key-equivalent string |
+| `-outlineView:validateDrop:…` | 2222, 2229 | `path::device` twice — same-device decides copy vs move |
+| `-variables` | 1230–1241 | `std::map` return, `path::escape`, `text::join` |
+| — | 843, 1136, 1215, 1521 | `std::set<NSInteger>`, `std::clamp` ×2, `std::vector<std::pair<BOOL, FileItem*>>` |
+
+Three notes on that table:
+
+- **`bundles::item_ptr` is the rule-20 blocker**, and it appears in three
+  separate methods. It cannot cross into Swift; each use needs an ObjC-shaped
+  boundary (return the resolved `NSMenuItem`s / the extension string / run the
+  command), not a translated one.
+- **The last row is not extraction work** — `std::clamp`, `std::set<NSInteger>`
+  and the `std::vector<std::pair<…>>` are local scratch with no C++ dependency,
+  so they translate straight to Swift when their method does. Do not build a
+  support method for them.
+- **`-variables` is the exception that stays.** It is pinned from outside
+  (`DocumentWindowSupport.mm:353`), so it belongs on an ObjC++ category on the
+  Swift class — exactly like `DocumentWindowController`'s four C++-typed
+  selectors — rather than moving into the support class.
+
+Only after that is the translation itself worth starting, split by section
+rather than in one commit, with an app run after each.
 
 - **`FileBrowserViewController.mm` (2329).** Its known hazards, updated by what
   the DiskOperations port and the survey measured:
@@ -243,6 +291,24 @@ here that changes files on disk rather than pixels.
     `canGoBack`): it exercises the mechanism that has to survive rather than a
     proxy for it.
 
+35. **Extracting the C++ usually makes it testable — take the test while it is
+    cheap.** The browser's visibility rule was a private method that only ran
+    with a live tree, so nothing covered it; moved out behind a C++-free
+    signature it became a pure function of a directory URL, and the branch a port
+    is most likely to invert (hidden items go through the *include* globs,
+    everything else through *exclude*) got its first test in the same commit.
+    Two disciplines that go with it:
+    - **Assert the verbatim move, do not eyeball it** (rule 6, made concrete):
+      check the moved text is a substring of `git show HEAD:<file>`, and if you
+      re-indent afterwards, check that the re-indent changed nothing but leading
+      tabs. Both are three lines of script and they turn "I moved it carefully"
+      into a fact.
+    - **Do not assert values that come from `settings_for_path`.** They are read
+      from `.tm_properties` and the bundled defaults, so they differ per machine.
+      A first draft of the glob test asserted that a dotfile in `/tmp` passes the
+      include globs; it does not on this machine. Assert the logic you moved, not
+      the configuration it reads.
+
 ## One build gotcha that is not a code error
 
 Ad-hoc CodeSign of **unrelated** test bundles sometimes fails with
@@ -255,3 +321,13 @@ DD=/Users/jmcgovern/Library/Developer/Xcode/DerivedData/TextMate-foaewfrsjpmklbg
 find "$DD/Build/Products" -name '*.cstemp' -delete
 xattr -cr "$DD/Build/Products/Debug"
 ```
+
+## One environment note, not about the code either
+
+Screen capture (and the accessibility API with it) stopped responding on this
+machine mid-session — `screenshot` returned "permission missing or
+SCContentFilter failure" and System Events could not see the app's windows,
+while the app itself was running fine. If that happens again, rule 8 still
+applies: the run cannot be skipped, it just has to be done by a human looking at
+the screen. Say so in the commit message when it is not done, as `53a7b1e6`
+does, and do not stack work on top of the unverified commit.

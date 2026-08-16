@@ -531,25 +531,24 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 
 	MBCreateMenu(items, menu);
 
-	std::map<SEL, std::string> inactiveKeyEquivalents = {
-		{ @selector(openSelectedItems:),        "@" + utf8::to_s(NSDownArrowFunctionKey) },
-		{ @selector(editSelectedEntries:),      "" + utf8::to_s(NSCarriageReturnCharacter) },
-		{ @selector(duplicateSelectedEntries:), "@d" },
-		{ @selector(toggleQuickLookPreview:),   " " },
-		{ @selector(delete:),                   "@" + utf8::to_s(NSDeleteCharacter) },
-		{ @selector(copy:),                     "@c" },
-		{ @selector(copyAsPathname:),           "~@c" },
-		{ @selector(paste:),                    "@v" },
-		{ @selector(pasteNext:),                "~@v" },
-		{ @selector(undo:),                     "@z" },
-		{ @selector(redo:),                     "@Z" },
+	NSDictionary<NSString*, NSString*>* inactiveKeyEquivalents = @{
+		NSStringFromSelector(@selector(openSelectedItems:)):        [NSString stringWithFormat:@"@%C", (unichar)NSDownArrowFunctionKey],
+		NSStringFromSelector(@selector(editSelectedEntries:)):      [NSString stringWithFormat:@"%C", (unichar)NSCarriageReturnCharacter],
+		NSStringFromSelector(@selector(duplicateSelectedEntries:)): @"@d",
+		NSStringFromSelector(@selector(toggleQuickLookPreview:)):   @" ",
+		NSStringFromSelector(@selector(delete:)):                   [NSString stringWithFormat:@"@%C", (unichar)NSDeleteCharacter],
+		NSStringFromSelector(@selector(copy:)):                     @"@c",
+		NSStringFromSelector(@selector(copyAsPathname:)):           @"~@c",
+		NSStringFromSelector(@selector(paste:)):                    @"@v",
+		NSStringFromSelector(@selector(pasteNext:)):                @"~@v",
+		NSStringFromSelector(@selector(undo:)):                     @"@z",
+		NSStringFromSelector(@selector(redo:)):                     @"@Z",
 	};
 
 	for(NSMenuItem* menuItem in menu.itemArray)
 	{
-		auto it = inactiveKeyEquivalents.find(menuItem.action);
-		if(it != inactiveKeyEquivalents.end())
-			[menuItem setInactiveKeyEquivalentCxxString:it->second];
+		if(NSString* keyEquivalent = menuItem.action ? inactiveKeyEquivalents[NSStringFromSelector(menuItem.action)] : nil)
+			[menuItem setInactiveKeyEquivalent:keyEquivalent];
 	}
 
 	if(self.previewableItems.count == 0)
@@ -583,17 +582,9 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 		// = Bundle Items =
 		// ================
 
-		std::multimap<std::string, bundles::item_ptr, text::less_t> sorted;
-		for(auto const& item : bundles::query(bundles::kFieldSemanticClass, "callback.file-browser.action-menu"))
-			sorted.emplace(item->name(), item);
-
 		NSInteger i = [menu indexOfItem:insertBundleItemsMenuItem];
-		for(auto pair : sorted)
-		{
-			NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:to_ns(pair.first) action:@selector(executeBundleCommand:) keyEquivalent:@""];
-			item.representedObject = to_ns(pair.second->uuid());
+		for(NSMenuItem* item in [FileBrowserViewControllerSupport actionMenuItemsWithAction:@selector(executeBundleCommand:)])
 			[menu insertItem:item atIndex:++i];
-		}
 	}
 
 	for(NSMenuItem* menuItem in menu.itemArray)

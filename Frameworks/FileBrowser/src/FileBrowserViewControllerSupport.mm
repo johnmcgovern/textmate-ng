@@ -1,9 +1,12 @@
 #import "FileBrowserViewControllerSupport.h"
 #import "FileItem.h"
 #import <Preferences/Keys.h>
+#import <bundles/bundles.h>
 #import <io/path.h>
+#import <ns/ns.h>
 #import <regexp/glob.h>
 #import <settings/settings.h>
+#import <text/ctype.h>
 
 static bool is_binary (std::string const& path)
 {
@@ -56,5 +59,21 @@ static bool is_binary (std::string const& path)
 + (BOOL)isBinaryURL:(NSURL*)url
 {
 	return is_binary(url.fileSystemRepresentation);
+}
+
++ (NSArray<NSMenuItem*>*)actionMenuItemsWithAction:(SEL)action
+{
+	std::multimap<std::string, bundles::item_ptr, text::less_t> sorted;
+	for(auto const& item : bundles::query(bundles::kFieldSemanticClass, "callback.file-browser.action-menu"))
+		sorted.emplace(item->name(), item);
+
+	NSMutableArray<NSMenuItem*>* res = [NSMutableArray array];
+	for(auto pair : sorted)
+	{
+		NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:to_ns(pair.first) action:action keyEquivalent:@""];
+		item.representedObject = to_ns(pair.second->uuid());
+		[res addObject:item];
+	}
+	return res;
 }
 @end

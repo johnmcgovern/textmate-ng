@@ -246,3 +246,91 @@ void test_is_binary_url_follows_the_binary_setting ()
 	NSURL* url = [[NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES] URLByAppendingPathComponent:@"plain.txt"];
 	OAK_ASSERT(![FileBrowserViewControllerSupport isBinaryURL:url]);
 }
+
+// ==========================================================
+// = The action menu's two C++ clusters, after the second   =
+// = extraction commit                                      =
+// ==========================================================
+//
+// The inactive key equivalents were a std::map<SEL, std::string> whose values
+// were built with utf8::to_s() and applied with -setInactiveKeyEquivalentCxxString:.
+// They are now an NSDictionary applied with -setInactiveKeyEquivalent:, which is
+// the same code path one conversion earlier (it is literally
+// `…CxxString:to_s(arg)`), so what has to be pinned is not the mechanism but the
+// *bytes*: "@" followed by U+F701 for Open, a bare U+000D for Rename. A wrong
+// format specifier or a wrong NSEvent constant compiles and renders a plausible
+// but different glyph, which no other test and no compiler would catch.
+//
+// Rather than assert the rendered glyphs — which would pin OakAppKit's rendering
+// rather than this table — each item is compared against a reference NSMenuItem
+// given the intended string as an independent literal.
+
+static NSMenuItem* menu_item_with_action (NSMenu* menu, SEL action)
+{
+	for(NSMenuItem* menuItem in menu.itemArray)
+	{
+		if(menuItem.action == action)
+			return menuItem;
+	}
+	return nil;
+}
+
+static NSMenuItem* reference_item_with_title (NSString* title, NSString* keyEquivalent)
+{
+	NSMenuItem* res = [[NSMenuItem alloc] initWithTitle:title action:NULL keyEquivalent:@""];
+	[res setInactiveKeyEquivalent:keyEquivalent];
+	return res;
+}
+
+void test_action_menu_keeps_its_inactive_key_equivalents ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+
+	NSMenu* menu = [[NSMenu alloc] initWithTitle:@""];
+	[(id <NSMenuDelegate>)controller menuNeedsUpdate:menu];
+
+	// "Open" carries no kRequiresSelectionTag, so it survives an empty selection.
+	NSMenuItem* open = menu_item_with_action(menu, @selector(openSelectedItems:));
+	OAK_ASSERT(open != nil);
+	OAK_ASSERT([open.attributedTitle.string isEqualToString:reference_item_with_title(@"Open", @"@").attributedTitle.string]);
+
+	NSMenuItem* rename = menu_item_with_action(menu, @selector(editSelectedEntries:));
+	OAK_ASSERT(rename != nil);
+	OAK_ASSERT([rename.attributedTitle.string isEqualToString:reference_item_with_title(@"Rename", @"\r").attributedTitle.string]);
+
+	// A plain ASCII one, to catch the table being dropped altogether.
+	NSMenuItem* duplicate = menu_item_with_action(menu, @selector(duplicateSelectedEntries:));
+	OAK_ASSERT(duplicate != nil);
+	OAK_ASSERT([duplicate.attributedTitle.string isEqualToString:reference_item_with_title(@"Duplicate", @"@d").attributedTitle.string]);
+}
+
+// The bundle-contributed action-menu items. `bundles::item_ptr` is the rule-20
+// type that cannot cross into Swift, so the boundary returns finished
+// NSMenuItems; what matters is that nothing of the C++ leaks through it and that
+// -executeBundleCommand: still finds a UUID string where it looks.
+//
+// **Know what this does and does not cover.** No bundle index is loaded in a
+// test process — measured, not assumed: asserting `items.count != 0` here fails.
+// So the loop below is vacuous as things stand, and what actually runs is the
+// call itself: that the boundary is reachable, returns an array rather than
+// throwing, and hands back nothing C++-shaped. The per-item assertions are
+// there for the day a fixture bundle is loaded, and the populated menu is
+// covered by the app run (rule 8) rather than by this.
+//
+// Which bundles are installed is a per-machine question either way, so the
+// *contents* are not asserted — nor the text::less_t ordering, which is
+// strcasecmp and would disagree with any NSString comparator on a non-ASCII
+// bundle name.
+void test_bundle_action_menu_items_are_shaped_for_the_menu ()
+{
+	NSArray<NSMenuItem*>* items = [FileBrowserViewControllerSupport actionMenuItemsWithAction:@selector(executeBundleCommand:)];
+	OAK_ASSERT(items != nil);
+
+	for(NSMenuItem* item in items)
+	{
+		OAK_ASSERT(item.action == @selector(executeBundleCommand:));
+		OAK_ASSERT(item.title.length != 0);
+		OAK_ASSERT([item.representedObject isKindOfClass:[NSString class]]);
+		OAK_ASSERT([item.representedObject length] != 0);
+	}
+}

@@ -25,4 +25,15 @@
 // Whether a file is binary per the `binary` setting's glob (e.g. `*.pdf`), which
 // decides whether double-clicking opens it in TextMate or hands it to Finder.
 + (BOOL)isBinaryURL:(NSURL*)url;
+
+// The action-menu items contributed by bundles (semantic class
+// `callback.file-browser.action-menu`), sorted by name with `text::less_t`.
+//
+// The boundary hands back *finished* NSMenuItems rather than the bundle items
+// behind them: `bundles::item_ptr` is the rule-20 type that cannot cross into
+// Swift, so nothing here may return one. Each item carries its bundle's UUID
+// string as `representedObject`, which is what -executeBundleCommand: looks the
+// command back up by; `action` is the caller's, since this class has no opinion
+// about which selector runs them.
++ (NSArray<NSMenuItem*>*)actionMenuItemsWithAction:(SEL)action;
 @end

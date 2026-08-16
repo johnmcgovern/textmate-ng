@@ -421,24 +421,48 @@ Services menu is still populated, which is the half no test reaches), and
 `908a82da` the KVO surface, pinned by binding a real NSButton and NSMenuItem the
 way the app does — a missing `@objc dynamic` now fails a test.
 
-**Order from here:** extract the C++ clusters while the file is still ObjC++, in
-their own commits (step 2 of this plan's original order — the shape that made
-FSEventsManager and SCMManager tractable) → then the translation, split by
+**Order from here:** ~~extract the C++ clusters while the file is still ObjC++,
+in their own commits~~ (done — see below) → then the translation, split by
 section rather than in one commit, with an app run after each.
 
-`53a7b1e6` did the first extraction: the two settings-driven fragments (the
-exclude/include glob filter and `is_binary`) into
-`FileBrowserViewControllerSupport`. It also showed what these extractions are
-worth beyond the port — the visibility rule went from a private method that only
-ran with a live tree to a pure function of a directory URL, and got its first
-test in the same commit (rule 35). The current cluster-by-cluster inventory,
-with the method each lives in, is in `ide/FILEBROWSER_PORT_HANDOFF.md`;
-re-measure it rather than trusting the line numbers, since they move as each
-extraction lands.
+### The extraction, as it actually went (2026-08-15, four commits)
 
-**`53a7b1e6` is the one commit here not verified in the running app** — screen
-capture failed on this machine partway through the session. Confirm the browser
-before building on it.
+`53a7b1e6` did the first: the two settings-driven fragments (the exclude/include
+glob filter and `is_binary`) into `FileBrowserViewControllerSupport`. It also
+showed what these extractions are worth beyond the port — the visibility rule
+went from a private method that only ran with a live tree to a pure function of
+a directory URL, and got its first test in the same commit (rule 35).
+
+`b4fb22e7` emptied `-updateMenu:`. `b3ba8abf` took the other two `bundles::`
+uses, after which the controller had no `bundles::` and no settings read at all.
+`6266b9a8` took `path::device` ×2 and `to_s(NSEvent*)` — the last boundary.
+
+**The survey's "seven C++ clusters" was wrong in both directions, and the two
+errors are the useful part of this record:**
+
+- **One was not a cluster.** The inactive key-equivalents table needed no
+  boundary — OakAppKit already had an NSString `-setInactiveKeyEquivalent:` from
+  BundleMenu's port, on the identical code path, so the C++ went away with an
+  in-place rewrite (rule 36).
+- **One was worse than a cluster.** `-executeBundleCommand:` cannot be Swift at
+  all, and not for the rule-20 reason the survey assumed. `OakCommand`'s own API
+  is C++-typed on both sides (`bundle_command_t const&`, `std::map`), so the
+  call must be made from ObjC++ wherever the controller lands (rule 37).
+
+Dropping the now-dead imports was part of each commit and twice broke the build
+on headers the file had never imported — `<io/path.h>` and `<text/format.h>`
+were arriving transitively through the C++ headers that left. That cleanup is
+the only real proof an extraction was complete (rule 38).
+
+**All four are verified in the running app**, including `53a7b1e6`, whose check
+was outstanding for a session because screen capture had failed on this machine;
+it was transient and the check passed in full afterwards. What the app run
+covers that the suite cannot: the rendered key equivalents, a bundle command
+actually running from the action menu, `untitled.rb` proving the grammar lookup
+(a fixture `.tm_properties` setting `[attr.untitled] fileType = "source.ruby"`
+is what makes that answer distinguishable from the caller's `@"txt"` fallback),
+arrow keys moving a live Quick Look panel, and a same-device drag *moving*
+rather than copying.
 
 ## One warning that is not about this framework
 

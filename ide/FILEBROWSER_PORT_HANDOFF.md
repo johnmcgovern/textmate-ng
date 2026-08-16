@@ -1,8 +1,8 @@
 # FileBrowser port — handoff
 
-_Written 2026-08-15, rewritten at the end of the session that finished the view
-layer (`FileBrowserView`), ported `FileBrowserDiskOperations`, and did all the
-prep for the one file left. This is the starting point for a fresh session; the
+_Written 2026-08-15, rewritten at the end of the session that finished the C++
+extraction — the controller now has no C++ boundary left to move, only the
+translation itself. This is the starting point for a fresh session; the
 per-commit detail and the reasoning behind each decision live in
 `ide/FILEBROWSER_PORT_PLAN.md`, and the 22 cross-framework rules that predate
 this work are at the end of `ide/FIND_PORT_HANDOFF.md`. Read those two first.
@@ -10,21 +10,18 @@ Everything below was measured, not assumed._
 
 ## State you are starting from
 
-- `master`, HEAD `53a7b1e6`, tree clean.
-- **634 tests across 36 bundles, green.** Re-measure, never increment — that
+- `master`, HEAD `6266b9a8`, tree clean. **Not pushed** — the three extraction
+  commits are local.
+- **636 tests across 36 bundles, green.** Re-measure, never increment — that
   figure has been wrong in these docs before (rule 10). FileBrowser has **10** test
   files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before
   this port began.
-
-> **Do this first.** `53a7b1e6` (the settings/glob extraction) is the one commit
-> in this whole port that was **not** verified in the running app: screen capture
-> and the accessibility API both stopped responding on this machine partway
-> through the session, so the visual half of rule 8 could not be done. The suite
-> is green and the extracted logic gained direct tests, but nobody has *seen* the
-> browser since. Open the app on a git repo and check the list populates, `.git`
-> stays hidden, and **View → Show Invisibles** reveals it — that is exactly the
-> code path `53a7b1e6` moved. If capture is still broken, look at the screen
-> yourself; do not stack more commits on an unverified one.
+- **Nothing is unverified.** `53a7b1e6`'s outstanding visual check was done at
+  the start of this session and passed in full — list populates, `.git` hidden,
+  Show Invisible Files reveals it and hiding restores it, SCM badges, Finder tag
+  dot, live reload, SCM Status, Computer, rename-selects-basename, back
+  navigation. Screen capture works on this machine again; the failure recorded
+  in the previous handoff was transient.
 - The **first thing settled** was the survey's open question: `FileBrowserViewController`
   **is** constructible in a test process. So this framework's coverage can use
   instances.
@@ -41,7 +38,9 @@ operations:
 
 ### What is still ObjC++ (and why)
 
-- **The one port left:** `FileBrowserViewController.mm` (2303 after the first extraction, the big one).
+- **The one port left:** `FileBrowserViewController.mm` (2280 after all four
+  extractions, the big one), plus its `FileBrowserViewControllerSupport.{h,mm}`
+  (121 lines of .mm), which is ObjC++ **permanently** — that is the point of it.
 - **ObjC++ by design (do not "finish" these without reason):**
   - `FSEventsManager.mm`, `SCMManager.mm` — model managers whose C++ boundaries
     were already made Swift-importable (`FSEventStream`, `SCMManagerCxx`). A Swift
@@ -92,52 +91,53 @@ own:
 - `53a7b1e6` — the first C++ extraction (see below), and the only commit in this
   port not verified in the running app.
 
-**What is left is the C++ extraction, then the translation.** The survey found
-the C++ spread across the file rather than pooled in one fragment, so it comes
-out a cluster at a time while everything is still ObjC++ and the existing suite
-judges each move — step 2 of this plan's original order, the shape that made
-FSEventsManager and SCMManager tractable.
+**The C++ extraction is done. What is left is the translation.** The survey
+found the C++ spread across the file rather than pooled in one fragment, so it
+came out a cluster at a time while everything was still ObjC++ and the existing
+suite judged each move — step 2 of this plan's original order, the shape that
+made FSEventsManager and SCMManager tractable. Four commits did it:
 
-`53a7b1e6` did the first one (the two settings-driven fragments: the exclude/
-include glob filter and `is_binary`, now
-`FileBrowserViewControllerSupport.{h,mm}`). **Re-measure before trusting this
-list** (rule 10) — line numbers move as each extraction lands:
+- `53a7b1e6` — the settings/glob pair (exclude/include filter, `is_binary`).
+- `b4fb22e7` — the action menu. Emptied `-updateMenu:` of C++ entirely.
+- `b3ba8abf` — the remaining two `bundles::` uses (new-file extension, command
+  runner). After this the controller had no `bundles::` and no settings read.
+- `6266b9a8` — `path::device` ×2 and `to_s(NSEvent*)`.
+
+**Re-measure before trusting anything below** (rule 10), and note the grep in
+the previous handoff was too narrow — it misses `new`/`delete`:
 
 ```bash
-grep -n 'std::\|[a-z_]\+::[a-z_]' Frameworks/FileBrowser/src/FileBrowserViewController.mm
+grep -n 'std::\|[a-z_]\+::[a-z_]\|\bnew \|delete \[\]' Frameworks/FileBrowser/src/FileBrowserViewController.mm
 ```
 
-As of `53a7b1e6` (2303 lines), what is left, by the method it lives in:
+As of `6266b9a8` (2280 lines) every remaining hit is one of two kinds, and
+**neither is extraction work**:
 
-| where | lines | what |
+| where | what | why it stays |
 | --- | --- | --- |
-| `-updateMenu:` | 534, 586–587 | `std::map<SEL, std::string>` inactive key-equivalents table, **and** `std::multimap<std::string, bundles::item_ptr, text::less_t>` + `bundles::query` for the action-menu items |
-| `-newFile:` | 666–669 | `settings_for_path` for the untitled file type, then `bundles::query` for its grammar extension |
-| `-executeBundleCommand:` | 753 | `bundles::lookup` on the sender's represented object |
-| `-previewPanel:handleEvent:` | 2179 | `to_s(NSEvent*)` for the key-equivalent string |
-| `-outlineView:validateDrop:…` | 2222, 2229 | `path::device` twice — same-device decides copy vs move |
-| `-variables` | 1230–1241 | `std::map` return, `path::escape`, `text::join` |
-| — | 843, 1136, 1215, 1521 | `std::set<NSInteger>`, `std::clamp` ×2, `std::vector<std::pair<BOOL, FileItem*>>` |
+| `-variables` (~1207–1218) | `std::map` return, `path::escape`, `text::join` | Pinned from outside (`DocumentWindowSupport.mm`). Belongs on an ObjC++ category on the Swift class, exactly like `DocumentWindowController`'s four C++-typed selectors. |
+| ~34/68, ~820, ~1113, ~1192, ~1498 | `new NSInteger[]`/`delete[]`, `std::set<NSInteger>`, `std::clamp` ×2, `std::vector<std::pair<BOOL, FileItem*>>` | Local scratch with no C++ dependency — translates straight to Swift when its method does. Do **not** build a support method for these. |
 
-Three notes on that table:
+So the next session starts the translation itself, split by section rather than
+in one commit, with an app run after each.
 
-- **`bundles::item_ptr` is the rule-20 blocker**, and it appears in three
-  separate methods. It cannot cross into Swift; each use needs an ObjC-shaped
-  boundary (return the resolved `NSMenuItem`s / the extension string / run the
-  command), not a translated one.
-- **The last row is not extraction work** — `std::clamp`, `std::set<NSInteger>`
-  and the `std::vector<std::pair<…>>` are local scratch with no C++ dependency,
-  so they translate straight to Swift when their method does. Do not build a
-  support method for them.
-- **`-variables` is the exception that stays.** It is pinned from outside
-  (`DocumentWindowSupport.mm:353`), so it belongs on an ObjC++ category on the
-  Swift class — exactly like `DocumentWindowController`'s four C++-typed
-  selectors — rather than moving into the support class.
+### What the support class now holds, and one thing about it that is permanent
 
-Only after that is the translation itself worth starting, split by section
-rather than in one commit, with an app run after each.
+`FileBrowserViewControllerSupport` has seven class methods: the glob predicate,
+`isBinaryURL:`, `actionMenuItemsWithAction:`,
+`executeBundleCommandWithUUIDString:firstResponder:`,
+`pathExtensionForNewFileInDirectoryURL:`, `deviceForPath:`/`deviceForURL:`, and
+`eventStringForEvent:`.
 
-- **`FileBrowserViewController.mm` (2303).** Its known hazards, updated by what
+**`-executeBundleCommand:` can never be Swift**, and the survey did not catch
+this. It is not that `bundles::item_ptr` is awkward to carry (rule 20) — it is
+that the *callee* is C++-typed on both sides: `OakCommand`'s
+`-initWithBundleCommand:` takes a `bundle_command_t const&` and
+`-executeWithInput:variables:outputHandler:` a `std::map`. Wherever the
+controller ends up, that call is made from ObjC++. It lives in the support
+class now; when the controller becomes Swift it stays there unchanged.
+
+- **`FileBrowserViewController.mm` (2280).** Its known hazards, updated by what
   the DiskOperations port and the survey measured:
   - **The rule-21 cascade is real but smaller than the survey thought, and its
     structural half is now done.** Three of the fears are settled facts rather
@@ -309,6 +309,57 @@ here that changes files on disk rather than pixels.
       include globs; it does not on this machine. Assert the logic you moved, not
       the configuration it reads.
 
+The next five are from the three extraction commits (`b4fb22e7`, `b3ba8abf`,
+`6266b9a8`). The first two are both ways the survey's "seven C++ clusters"
+figure was wrong in each direction.
+
+36. **Before extracting a C++ container, check whether the thing it feeds
+    already has an ObjC-shaped API.** The inactive key-equivalents table looked
+    like a cluster to move: a `std::map<SEL, std::string>` applied with
+    `-setInactiveKeyEquivalentCxxString:`. But OakAppKit grew an NSString
+    spelling when BundleMenu was ported, and it is literally
+    `…CxxString:to_s(arg)` — the same code path one conversion earlier. So the
+    C++ disappeared with an in-place rewrite and no support method. A framework
+    this far into a port has consumers that were *already* de-C++'d for someone
+    else; grep for an NSString sibling before designing a boundary.
+
+37. **Some C++ cannot be extracted at all, because the callee is C++-typed on
+    both sides.** Rule 20 is about types that cannot cross into Swift; this is
+    worse and reads the same at a glance. `-executeBundleCommand:` fails not on
+    `bundles::item_ptr` but on `OakCommand`, whose own API takes a
+    `bundle_command_t const&` and a `std::map`. No boundary makes that method
+    Swift — it can only *move*, into ObjC++ that stays ObjC++. Check the
+    signatures of what a fragment calls, not just the types it names.
+
+38. **Delete the dead imports as part of the extraction, and expect the build to
+    fail on something the file never imported.** Removing `<bundles/bundles.h>`,
+    `<settings/settings.h>` and `<regexp/glob.h>` broke the build on `path::` at
+    three sites: `<io/path.h>` had been arriving transitively through them for
+    years. Same for `text::join`. This is worth doing *before* the translation
+    rather than after — a Swift file cannot inherit an include, so every one of
+    these would otherwise surface as a mystery at the worst moment. The cleanup
+    is also the only proof the extraction was complete: an import that is still
+    needed is C++ you did not move.
+
+39. **Check whether a C-looking type is actually C++ before designing around
+    it.** `path::device` returns `dev_t`, which looks like it belongs on the far
+    side of a boundary but is an `int32_t` from `<sys/types.h>` — it imports
+    into Swift as-is. Returning it kept the drop target stat-ed once per drag
+    instead of once per dragged item. The boundary that avoids a C++ type is not
+    automatically the boundary you want.
+
+40. **A test that cannot fail is worth nothing — prove each new one can.** Both
+    disciplines came up in the same commit. The key-equivalent test was
+    mutation-checked (swap `NSDownArrowFunctionKey` for its Up counterpart; it
+    must fail, and it does). The bundle-items test was probed the same way and
+    turned out **vacuous**: no bundle index loads in a test process, so
+    `items.count != 0` fails and its per-item loop never runs. That is written
+    into the test file rather than quietly left, because the next reader will
+    otherwise trust it to cover the menu. Where the suite genuinely cannot
+    reach — a drag session, a live `QLPreviewPanel`, a bundle command — say so
+    in the commit and check it in the app instead of inventing a test that
+    exercises AppKit.
+
 ## One build gotcha that is not a code error
 
 Ad-hoc CodeSign of **unrelated** test bundles sometimes fails with
@@ -325,9 +376,22 @@ xattr -cr "$DD/Build/Products/Debug"
 ## One environment note, not about the code either
 
 Screen capture (and the accessibility API with it) stopped responding on this
-machine mid-session — `screenshot` returned "permission missing or
+machine mid-session once — `screenshot` returned "permission missing or
 SCContentFilter failure" and System Events could not see the app's windows,
-while the app itself was running fine. If that happens again, rule 8 still
-applies: the run cannot be skipped, it just has to be done by a human looking at
-the screen. Say so in the commit message when it is not done, as `53a7b1e6`
-does, and do not stack work on top of the unverified commit.
+while the app itself was running fine. **It was transient**: capture worked
+normally the following session with no intervention, which is how `53a7b1e6`'s
+outstanding check got done. If it happens again, rule 8 still applies: the run
+cannot be skipped, it just has to be done by a human looking at the screen. Say
+so in the commit message when it is not done, as `53a7b1e6` did, and do not
+stack work on top of the unverified commit.
+
+Two smaller things about driving the app that cost time this session:
+
+- **A synthetic drag needs to be slow and finely stepped.** A press, three
+  moves and a release highlights the drop row but the drop does not happen —
+  the file stays put and it reads as "validateDrop: rejected it". Eight or so
+  moves with a pause before the release completes it. Check the *disk*, not the
+  outline view, before believing either result.
+- **Quitting can hang on an unsaved untitled document** left over from testing
+  New File. `osascript … to quit` blocks on the save sheet with no output; look
+  at the screen rather than assuming the app is wedged.

@@ -35,7 +35,7 @@ extension FileBrowserViewController {
 		// is the same query and the same key.
 		if let parentURL = try? (resolvedURL as URL).resourceValues(forKeys: [ .parentDirectoryURLKey ]).parentDirectory {
 			go(to: parentURL)
-			expandURLs(nil, selectURLs: [ resolvedURL as URL ])
+			expandURLs(nil, selectURLs: [ resolvedURL ])
 		}
 	}
 
@@ -44,7 +44,7 @@ extension FileBrowserViewController {
 		guard let url = selectedItems.first?.URL,
 		      let enclosingFolder = url.deletingLastPathComponent else { return }
 		go(to: enclosingFolder as URL)
-		expandURLs(nil, selectURLs: [ url as URL ])
+		expandURLs(nil, selectURLs: [ url ])
 	}
 
 	@objc(showPackageContents:)

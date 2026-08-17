@@ -85,10 +85,24 @@
 // stays in the .mm as the accessor of a declared property.
 @property (nonatomic, nullable) NSArray<FileItem*>* previewItems;
 
-// Expands the first set of URLs and selects the second, once the tree has
-// loaded far enough to contain them. Used by the reveal actions.
-// Pinned for the same reason as -openItems:animate: — the importer renames this
-// to `expand(_:select:)`, which says less than the selector does (rule 28).
-- (void)expandURLs:(NSArray<NSURL*>*)expandURLs selectURLs:(NSArray<NSURL*>*)selectURLs NS_SWIFT_NAME(expandURLs(_:selectURLs:));
+// The loading/expanding section's own state, same justification as
+// previewItems: the section that reads and writes all of this is the one that
+// moved, so these are not a peeled section reaching into someone else's storage.
+//
+// The split between readonly and readwrite here is not decoration. The two
+// containers are only ever *mutated* — objects added and removed — so readonly
+// is enough and says so; the rest are **assigned**, which readonly would not
+// allow. -setFileItem: stays in the .mm and re-assigns the observers dictionary
+// and both URL sets, so those keep their readwrite declarations there too.
+@property (nonatomic, readonly, nullable) NSMutableDictionary<NSURL*, id>* fileItemObservers;
+@property (nonatomic, readonly, nullable) NSMutableSet<NSURL*>* loadingURLs;
+
+@property (nonatomic, nullable) NSArray<void(^)(void)>* loadingURLsCompletionHandlers;
+@property (nonatomic, nullable) NSMutableSet<NSURL*>* expandedURLs;
+@property (nonatomic, nullable) NSMutableSet<NSURL*>* selectedURLs;
+
+@property (nonatomic) NSInteger expandingChildrenCounter;
+@property (nonatomic) NSInteger collapsingChildrenCounter;
+@property (nonatomic) NSInteger nestedCollapsingChildrenCounter;
 
 @end

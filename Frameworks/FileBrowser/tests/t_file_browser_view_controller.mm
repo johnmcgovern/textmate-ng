@@ -325,6 +325,25 @@ void test_controller_keeps_the_selectors_that_moved_to_swift ()
 		@selector(outlineView:didTrashURLs:),
 	};
 
+	SEL const loading[] = {
+		@selector(outlineViewItemDidExpand:),
+		@selector(loadChildrenForItem:expandChildren:),
+		@selector(findItemForURL:),
+		@selector(didReceiveURLs:forItemWithURL:expandChildren:),
+		@selector(checkLoadCompletionHandlers),
+		@selector(expandURLs:selectURLs:),
+		@selector(outlineView:willExpandItem:expandChildren:),
+		@selector(outlineView:didExpandItem:expandChildren:),
+		@selector(outlineView:willCollapseItem:collapseChildren:),
+		@selector(outlineView:didCollapseItem:collapseChildren:),
+		@selector(outlineViewItemWillCollapse:),
+		@selector(outlineViewItemDidCollapse:),
+		@selector(outlineViewSelectionDidChange:),
+	};
+
+	for(SEL selector : loading)
+		assert_responds(selector);
+
 	// Quick Look. The three panel-control methods are inherited from an informal
 	// protocol on NSObject, so -instancesRespondToSelector: would answer YES for
 	// them even if this class implemented nothing — every object "responds".
@@ -500,6 +519,38 @@ void test_menu_validation_titles_have_no_optional_wrapper ()
 
 	OAK_ASSERT([menuItem.title hasPrefix:@"New Folder in "]);
 	OAK_ASSERT(![menuItem.title containsString:@"Optional("]);
+}
+
+// ==============================================================
+// = The load-completion handlers, after the loading section    =
+// = became Swift                                               =
+// ==============================================================
+//
+// -expandURLs:selectURLs: appends a handler to a list that -checkLoadCompletionHandlers
+// drains once nothing is loading, and it calls that check itself at the end. On
+// a fresh controller nothing is loading, so the handler runs and the list is
+// empty again by the time the call returns.
+//
+// **What this pins, precisely: that the drain happens at all.** Drop the
+// -checkLoadCompletionHandlers call from the end of -expandURLs:selectURLs: and
+// the handler sits in the list forever, the browser never re-centres its
+// selection after a load, and nothing else here notices — mutation-checked.
+//
+// It does *not* pin the other detail worth knowing about that method: the list
+// is read into a local and cleared **before** the handlers run, so a handler
+// that starts another load does not lose its own handler. Clearing afterwards
+// would still pass this test, because on a fresh controller no handler starts
+// anything. That case needs a live tree, and the app run is what covers it.
+void test_expand_urls_drains_its_completion_handlers ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+	OAK_ASSERT([controller valueForKey:@"loadingURLsCompletionHandlers"] == nil);
+
+	[controller expandURLs:nil selectURLs:nil];
+
+	// Drained, not merely appended to: nothing is loading on a fresh controller,
+	// so -checkLoadCompletionHandlers ran at the end of the call and cleared it.
+	OAK_ASSERT([controller valueForKey:@"loadingURLsCompletionHandlers"] == nil);
 }
 
 // ===========================================================

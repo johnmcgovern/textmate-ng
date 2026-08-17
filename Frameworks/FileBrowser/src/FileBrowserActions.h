@@ -59,4 +59,13 @@
 // -openItems:animate:, which is still ObjC++.
 - (void)toggleQuickLookPreview:(id)sender;
 - (NSRect)imageRectOfItem:(FileItem*)item;
+
+// Expands the first set of URLs and selects the second once the tree has loaded
+// far enough to contain them. Five callers remain in the .mm — the history
+// restore, the two session-state readers and -selectURL:withParentURL:.
+- (void)expandURLs:(NSArray<NSURL*>*)expandURLs selectURLs:(NSArray<NSURL*>*)selectURLs;
+
+// Called by -setFileItem:, which stays in the .mm as the setter of a declared
+// property and so is the last ObjC++ caller of the loading section.
+- (void)loadChildrenForItem:(FileItem*)item expandChildren:(BOOL)flag;
 @end

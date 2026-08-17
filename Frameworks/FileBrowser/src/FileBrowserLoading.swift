@@ -9,20 +9,17 @@ import AppKit
 // Seventh section peeled, and the one the ivar promotion was really for —
 // twelve of these thirteen methods touched an ivar.
 //
-// **-setFileItem: stays in the .mm** and will until the flip: it is the setter
-// of a declared property, and a Swift extension cannot supply an accessor. That
-// leaves it as the one place that still re-assigns the observer dictionary and
-// the two URL sets, which is why those keep readwrite declarations on the class
-// extension as well as here.
-//
 // **The pending sets are `pendingExpandedURLs` / `pendingSelectedURLs`, never
-// `expandedURLs` / `selectedURLs`.** The latter pair are accessors that merge in
-// what the outline view currently shows and return an immutable copy; this file
-// means the ivars behind them every time. Getting that wrong is not a subtle
-// difference — the first draft of this file did, and collapsing a folder sent
-// -removeObject: to an NSSet and crashed. See
-// FileBrowserViewControllerInternal.h for why the merged pair is no longer
-// visible to Swift at all.
+// `expandedURLs` / `selectedURLs`.** The latter pair merge in what the outline
+// view currently shows; this file means the pending sets every time. Getting
+// that wrong is not a subtle difference — the first draft of this file did, and
+// collapsing a folder sent -removeObject: to an immutable NSSet and crashed
+// (rule 46, `d680bbe5`).
+//
+// Since the flip they are simply four different declarations on the Swift class
+// rather than an ivar and an accessor sharing a name, so the mistake is no
+// longer available to make. -setFileItem: is in that class too now, and is
+// still the one place that deliberately merges the two.
 extension FileBrowserViewController {
 	@objc(outlineViewItemDidExpand:)
 	func outlineViewItemDidExpand(_ aNotification: Notification) {

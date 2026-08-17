@@ -194,8 +194,23 @@ extension FileBrowserViewController {
 			OakPlayUISound(OakSoundDidTrashItemUISound)
 		}
 
-		if let proxy = undoManager?.prepare(withInvocationTarget: self) as? FileBrowserViewController {
-			proxy.undoOperation(op, sourceURLs: newSrcURLs.isEmpty ? nil : newSrcURLs, destinationURLs: newDestURLs, select: selectDestinationURLs)
+		// **Block-based registration, not -prepareWithInvocationTarget:, and the
+		// change is forced by the flip.** That method hands back an NSProxy, and
+		// the old line cast it with `as? FileBrowserViewController` — which worked
+		// only because the proxy forwards -isKindOfClass: to its target and the
+		// class was an imported ObjC one. Now that Swift defines the class, the
+		// cast is answered from Swift class metadata, reads the proxy's own isa,
+		// and fails. The `if let` then does not run: **every operation silently
+		// stops being undoable**, with nothing failing and the menu item still
+		// enabled. Probed, not guessed — the cast logs FAILED on every operation.
+		//
+		// -registerUndoWithTarget:handler: has no proxy in it, so there is nothing
+		// for a cast to get wrong. Same semantics: the handler runs on undo with
+		// the controller as its argument.
+		if let undoManager {
+			undoManager.registerUndo(withTarget: self) { target in
+				target.undoOperation(op, sourceURLs: newSrcURLs.isEmpty ? nil : newSrcURLs, destinationURLs: newDestURLs, select: selectDestinationURLs)
+			}
 		}
 
 		switch op {
@@ -371,8 +386,11 @@ extension FileBrowserViewController {
 			OakPlayUISound(OakSoundDidTrashItemUISound)
 		}
 
-		if let proxy = undoManager?.prepare(withInvocationTarget: self) as? FileBrowserViewController {
-			proxy.performOperation(op, sourceURLs: newSrcURLs, destinationURLs: newDestURLs, unique: false, select: selectDestinationURLs)
+		// The redo half, and the same change for the same reason as above.
+		if let undoManager {
+			undoManager.registerUndo(withTarget: self) { target in
+				_ = target.performOperation(op, sourceURLs: newSrcURLs, destinationURLs: newDestURLs, unique: false, select: selectDestinationURLs)
+			}
 		}
 	}
 

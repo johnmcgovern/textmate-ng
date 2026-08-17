@@ -118,4 +118,18 @@ static bool is_binary (std::string const& path)
 {
 	return to_ns(to_s(event));
 }
+
+// See the header for why these two exist. Plain assignments, deliberately — the
+// point is that ObjC does no conformance check, so the controller installs
+// itself exactly as it did when this class was ObjC++.
++ (void)wireOutlineView:(NSOutlineView*)outlineView toController:(id)controller
+{
+	outlineView.dataSource = controller;
+	outlineView.delegate   = controller;
+}
+
++ (void)wireMenu:(NSMenu*)menu toDelegate:(id)delegate
+{
+	menu.delegate = delegate;
+}
 @end

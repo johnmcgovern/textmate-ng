@@ -1,4 +1,4 @@
-#import "../src/FileBrowserDiskOperations.h"
+#import "FileBrowserSwiftSurface.h"
 #import "../src/FileBrowserDiskOperationsSupport.h"
 
 // FileBrowserDiskOperations is Swift implementing an ObjC category, so nothing
@@ -151,6 +151,55 @@ void test_perform_operation_renames_a_file ()
 	OAK_ASSERT_EQ(res.count, 1);
 	OAK_ASSERT(![NSFileManager.defaultManager fileExistsAtPath:srcURL.path]);
 	OAK_ASSERT([NSFileManager.defaultManager fileExistsAtPath:destURL.path]);
+
+	RemoveDirectory(dir);
+}
+
+// **That an operation registers its undo at all**, which nothing else here
+// checks and which the flip put at risk in a way worth spelling out.
+//
+// -performOperation:… registers by way of
+// `undoManager?.prepare(withInvocationTarget: self) as? FileBrowserViewController`.
+// -prepareWithInvocationTarget: hands back an NSProxy, not a controller, so that
+// cast only succeeds because the proxy forwards -isKindOfClass: to its target.
+// While FileBrowserViewController was an imported ObjC class, Swift's `as?` went
+// through exactly that message. Now that Swift defines the class, a dynamic cast
+// to it can instead be answered from Swift's own class metadata — which reads the
+// proxy's isa and says no. The `if let` then quietly does not run and **every
+// operation becomes un-undoable, with the suite green and the menu item still
+// enabled** (the window's own undo manager keeps it that way).
+//
+// **It drives the undo and checks the disk**, and that is not belt-and-braces —
+// a first draft asserted `canUndo` and the action name instead, and was
+// *vacuous*: with the `if let` above forced to `if false`, both still held (the
+// name comes from -setActionName:, which runs either way) and the test passed.
+// Mutation-checked in both directions, so what is written here is what it
+// covers (rule 40).
+void test_perform_operation_undo_moves_the_file_back ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+	NSURL* dir = CreateTemporaryDirectory();
+
+	NSURL* srcURL  = [dir URLByAppendingPathComponent:@"before.txt"];
+	NSURL* destURL = [dir URLByAppendingPathComponent:@"after.txt"];
+	[@"content" writeToURL:srcURL atomically:YES encoding:NSUTF8StringEncoding error:nil];
+
+	OAK_ASSERT(!controller.undoManager.canUndo);
+
+	[controller performOperation:FBOperationRename withURLs:@{ srcURL: destURL } unique:NO select:NO];
+	OAK_ASSERT([NSFileManager.defaultManager fileExistsAtPath:destURL.path]);
+
+	// -undoManager is the controller's own — it overrides NSResponder's and
+	// answers a manager it owns — and is the one -performOperation: registers
+	// with. Deliberately not -activeUndoManager, which answers from the first
+	// responder and so depends on a window this test does not have.
+	OAK_ASSERT(controller.undoManager.canUndo);
+	OAK_ASSERT([controller.undoManager.undoActionName isEqualToString:@"Rename “before.txt”"]);
+
+	[controller.undoManager undo];
+
+	OAK_ASSERT([NSFileManager.defaultManager fileExistsAtPath:srcURL.path]);
+	OAK_ASSERT(![NSFileManager.defaultManager fileExistsAtPath:destURL.path]);
 
 	RemoveDirectory(dir);
 }

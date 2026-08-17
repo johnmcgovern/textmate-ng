@@ -1,4 +1,4 @@
-#import "../src/FileBrowserViewController.h"
+#import "FileBrowserSwiftSurface.h"
 #import "../src/FileItem.h"
 #import "../src/FileItemTableCellView.h"
 #import "../src/FileBrowserViewControllerSupport.h"

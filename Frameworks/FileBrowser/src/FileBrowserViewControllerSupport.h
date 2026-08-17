@@ -83,4 +83,35 @@
 // prefixes and all. The comparison against it stays with the caller, which is
 // the only thing that knows an arrow key means "move the Quick Look selection".
 + (NSString*)eventStringForEvent:(NSEvent*)event;
+
+// ==========================================================================
+// = Installing the controller as data source / delegate, which has to be   =
+// = done from ObjC                                                          =
+// ==========================================================================
+//
+// Not C++, and the only two methods here that are not. They exist because of a
+// specific Swift limitation found at the flip, and the alternative was worse.
+//
+// FileBrowserViewController's NSOutlineViewDataSource / NSOutlineViewDelegate /
+// NSMenuDelegate conformances are declared on an ObjC category
+// (FileBrowserViewControllerCxx.mm), not in the Swift, because the peeled
+// sections spell their parameters `item: FileItem` rather than `item: Any` and
+// declaring the conformances in Swift turns all fourteen of those into
+// "conflicts with optional requirement" errors.
+//
+// `outlineView.dataSource = self` therefore does not typecheck in Swift, and
+// **the obvious workaround does not work**: `(self as AnyObject) as!
+// NSOutlineViewDataSource` compiles and then fails at run time with "Could not
+// cast value of type 'NSKVONotifying_FileBrowserViewController' to
+// 'NSOutlineViewDataSource'". Swift's dynamic cast consults Swift conformance
+// metadata, which an ObjC category does not write, and by the time the browser
+// wires itself up KVO has already swizzled the class (the location menu item
+// binds to it two lines earlier). That is a crash on first showing the file
+// browser, not a test artifact — the suite caught it.
+//
+// Assigning from ObjC has no such check, which is exactly what the ObjC++ did
+// for years. `id` rather than FileBrowserViewController* so this header does not
+// have to declare a class Swift defines.
++ (void)wireOutlineView:(NSOutlineView*)outlineView toController:(id)controller;
++ (void)wireMenu:(NSMenu*)menu toDelegate:(id)delegate;
 @end

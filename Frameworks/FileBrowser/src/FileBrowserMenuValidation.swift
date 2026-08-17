@@ -12,12 +12,11 @@ import Quartz
 //   * already Swift — the actions peeled in the previous commits;
 //   * public header — goBack:/goForward:/newFolder:/toggleShowInvisibles:,
 //     which Swift sees because the bridging header imports that header;
-//   * still ObjC++ and private — undo:, redo:, toggleQuickLookPreview: and
-//     openWithMenuAction:, which had to be declared in
-//     FileBrowserViewControllerInternal.h. That is the *reverse* of that
-//     header's usual direction and it is safe for exactly one reason: ObjC
-//     still implements them. Declaring something Swift defines there would
-//     collide.
+//   * ObjC++ and private at the time — undo:, redo:, toggleQuickLookPreview:
+//     and openWithMenuAction:, which had to be declared in
+//     FileBrowserViewControllerInternal.h, the *reverse* of that header's usual
+//     direction. All four are Swift on the class itself since the flip, and
+//     that header is gone.
 //
 // #selector is used throughout rather than NSSelectorFromString, so that a
 // selector this method tests for cannot quietly stop matching the method it

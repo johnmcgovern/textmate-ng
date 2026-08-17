@@ -59,25 +59,29 @@
 // only that one line has to go.
 #import "FileBrowserTypes.h"
 
-// FileBrowserDiskOperations.swift extends FileBrowserViewController, which is
-// still ObjC++, so — uniquely, and only until it is ported — its declaration
-// *is* wanted here. The (DiskOperations) category it implements lives in
-// FileBrowserDiskOperations.h and is deliberately not imported: Swift defines
-// those methods.
-#import "FileBrowserViewController.h"
+// **FileBrowserViewController.h is deliberately absent, as of the flip.** Swift
+// defines that class now (FileBrowserViewController.swift), so importing the
+// hand-written declaration here would give it two — exactly the rule this file's
+// opening note states, and the one line the whole header split was arranged to
+// make removable. FileBrowserViewControllerInternal.h and FileBrowserActions.h
+// went with it: both existed only to let peeled sections and the .mm reach
+// across the ObjC++/Swift line inside this class, and there is no line left.
 #import "FileBrowserNotifications.h"
 #import "FileBrowserDiskOperationsSupport.h"
 #import <OakAppKit/OakSound.h>
 
 // The C++ lifted out of FileBrowserViewController ahead of its port — the glob
-// filter that decides which children show, and the binary-file test. C++-free
-// signatures, so this is importable here.
+// filter that decides which children show, the binary-file test, the bundle
+// action-menu items and the rest. C++-free signatures, so this is importable
+// here, and it stays ObjC++ permanently.
 #import "FileBrowserViewControllerSupport.h"
 
-// The private controller state a peeled-off Swift section reads (readonly —
-// see the header). Temporary, and it goes away with the class extension when
-// the controller itself becomes Swift.
-#import "FileBrowserViewControllerInternal.h"
+// OakOpenWithMenuDelegate, which -openWithMenuAction: sends
+// -openDocumentURLs:withApplicationURL:, and OakZoomingIcon for the open
+// animation. Both arrived with the controller's own translation; neither was
+// needed while those methods were ObjC++.
+#import <OakAppKit/OakOpenWithMenu.h>
+#import <OakAppKit/OakZoomingIcon.h>
 
 // -updateTitle: and -setDynamicTitle:, which the peeled -validateMenuItem: uses
 // to retitle menu items. The header carries C++-typed selectors alongside them,

@@ -9,11 +9,21 @@
 //
 // 2. -presentError:, which is an *override* of NSResponder's method: it presents
 //    the error as a sheet on the file browser's window instead of app-modally.
-//    A Swift extension cannot override an inherited method, so this one stays a
-//    category on the ObjC++ side. Nothing else here needs to.
-// The full declaration, not a forward one: the category below needs the class
-// defined, both here and where the bridging header pulls this in.
-#import "FileBrowserViewController.h"
+//    **Its category declaration is in the .mm, not here**, and that moved at the
+//    flip: this header is in the bridging header, and once Swift defines
+//    FileBrowserViewController it must not also see an ObjC declaration of that
+//    class — which a category on it requires. Nothing calls -presentError:
+//    by name from ObjC (AppKit and the Swift both reach it as NSResponder's),
+//    so the declaration has no reason to be public.
+//
+// Why it did not become part of the Swift class along with everything else: the
+// override is one line, `-presentError:modalForWindow:…`, and AppKit declares
+// that window parameter **nonnull**. The ObjC++ passes `self.view.window`, which
+// is nil whenever the browser is not in a window, and passing nil through was
+// the behaviour. From Swift the parameter is a non-optional NSWindow, so a
+// faithful translation has nowhere to put the nil: `view.window!` traps, and
+// falling back to `super.presentError(_:)` presents app-modally and returns a
+// different value. Rule 31 stopped applying at the flip; this replaced it.
 
 @interface FileBrowserDiskOperationsSupport : NSObject
 // The destination path for a symbolic link at destURL pointing at srcURL:
@@ -24,8 +34,4 @@
 
 // YES when destURL is inside srcURL — copying a directory into itself.
 + (BOOL)isURL:(NSURL*)destURL childOfURL:(NSURL*)srcURL;
-@end
-
-@interface FileBrowserViewController (DiskOperationsSupport)
-- (BOOL)presentError:(NSError*)error;
 @end

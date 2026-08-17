@@ -9,11 +9,11 @@ import Quartz
 // promotion (`2b34881a`) unblocked — every method here but one used to touch
 // `_previewItems` and so could not leave the .mm at all.
 //
-// **-previewableItems stays behind**, and will until the flip: it is the getter
-// of a property declared on the class extension, and a Swift extension cannot
-// supply an accessor for declared storage. It is readable from here through
-// FileBrowserViewControllerInternal.h, which is how the sections peeled before
-// this one already use it.
+// -previewableItems stayed behind at the time, as the getter of a property
+// declared on the class extension, and was readable from here only because
+// FileBrowserViewControllerInternal.h re-declared it. Both that header and the
+// class extension went at the flip; it is an ordinary computed property on the
+// Swift class now.
 //
 // The conformances are declared here rather than in that header, per rule 42 —
 // re-stating them where Swift can see them would break these witnesses instead

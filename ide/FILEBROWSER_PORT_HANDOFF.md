@@ -1,14 +1,17 @@
 # FileBrowser port — handoff
 
 _Written 2026-08-15, rewritten 2026-08-16 at the end of the session that took
-the controller from 2280 lines to 1410 by peeling seven sections into Swift
-extensions — which is **every section that can be peeled**; see "What is left"
-below. The C++ extraction was finished the session before; what is left is
-translation. This is the starting point for a fresh session; the per-commit
-detail and the reasoning behind each decision live in
+the controller from 2280 lines to 1410 by peeling eight sections into Swift
+extensions across seven commits — which is **every section that can be
+peeled**; see "Why nothing else can peel" below. The C++ extraction was
+finished the session before. **Both preparatory phases are over: the only work
+left in this framework is the flip**, and it has its own section below._
+
+_Re-measured and de-staled 2026-08-17 against `11c5e1da` — every count and line
+number below was checked against the tree on that date, not carried forward.
+The per-commit detail and the reasoning behind each decision live in
 `ide/FILEBROWSER_PORT_PLAN.md`, and the 22 cross-framework rules that predate
-this work are at the end of `ide/FIND_PORT_HANDOFF.md`. Read those two first.
-Everything below was measured, not assumed._
+this work are at the end of `ide/FIND_PORT_HANDOFF.md`. Read those two first._
 
 ## State you are starting from
 
@@ -16,13 +19,20 @@ Everything below was measured, not assumed._
   documentation, so cite that rather than a HEAD hash a doc commit will stale.
 - **Nothing is pushed, and it is not just this work.** The remote is
   `GH-johnmcgovern` (there is no `origin` — a `git log origin/master..master`
-  silently reports nothing and reads as "all pushed"). `master` is **50 commits
-  ahead** of `GH-johnmcgovern/master`, which reaches back well before this port.
-  Check with `git branch -vv`, and do not push without asking.
-- **643 tests across 36 bundles, green.** Re-measure, never increment — that
-  figure has been wrong in these docs before (rule 10). FileBrowser has **10** test
-  files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before
-  this port began.
+  silently reports nothing and reads as "all pushed"). `master` was **51 commits
+  ahead** of `GH-johnmcgovern/master` at `11c5e1da`, and that reaches back well
+  before this port. The number grows with every commit including doc ones, so
+  read it off `git branch -vv` rather than from this line, and do not push
+  without asking.
+- **644 tests across 36 bundles, green**, of which FileBrowser's bundle is
+  **43**. Measured at `11c5e1da`, not carried forward: this line said 643 until
+  the count was actually run, which is rule 10 happening again in the same
+  document that states it. Re-measure, never increment:
+  ```bash
+  grep -c "^Test Case .*' passed" <log>   # after a full `xcodebuild test`, and do not `tail` the log away
+  ```
+  FileBrowser has **10** test files (`Frameworks/FileBrowser/tests/t_*.mm`); the
+  framework had **zero** before this port began.
 - **Nothing is unverified.** Every commit was checked in the running app, and
   where a path could not be reached from the tools (a modifier held across a
   synthetic drag, a drop on the Dock's Trash) the commit says so rather than
@@ -38,8 +48,8 @@ Everything below was measured, not assumed._
 A class cannot be half-translated: its *definition* flips from ObjC++ to Swift
 in one commit. But its **methods** can leave a section at a time, as Swift
 extensions on the still-ObjC++ class — which is what `FileBrowserDiskOperations`
-already was, and what five more sections did this session. Each peel is its own
-commit, judged by the suite *and* an app run before the next one starts.
+already was, and what eight more sections did this session. Each peel was its
+own commit, judged by the suite *and* an app run before the next one started.
 
 That has already paid for itself twice over: the first peel crashed the test
 process on a nil root (rule 33) and the last one put `Optional("committed.txt")`
@@ -60,22 +70,33 @@ was missed.
 
 ### What is already Swift
 
-The entire view layer, the whole `FileItem*` model family, the disk operations,
-and — as extensions on the still-ObjC++ controller — seven of its sections:
+**Whole classes** — the entire view layer and the whole `FileItem*` model
+family:
 
 `OFBHeaderView`, `OFBActionsView`, `FileBrowserOutlineView`, `OFBFinderTagsChooser`,
 `FileItemTableCellView`, `FileBrowserView`, `FileItem` (base),
-`FileItemMountedVolumes`, `FileItemSCMStatus`, `FileItemObserver`,
+`FileItemMountedVolumes`, `FileItemSCMStatus`, `FileItemObserver`.
+
+**Nine sections of the controller**, as Swift extensions on the class while it
+is still ObjC++ — `FileBrowserDiskOperations` from the earlier session, the
+other eight from the peel:
+
 `FileBrowserDiskOperations`, `FileBrowserOutlineViewDataSource`,
 `FileBrowserTableCells`, `FileBrowserAcceptDrop`, `FileBrowserActions`,
 `FileBrowserPasteboard`, `FileBrowserMenuValidation`, `FileBrowserQuickLook`,
 `FileBrowserLoading`.
 
+```bash
+grep -l 'extension FileBrowserViewController' Frameworks/FileBrowser/src/*.swift   # the check for the second list
+```
+
 ### What is still ObjC++ (and why)
 
 - **The one port left:** `FileBrowserViewController.mm` (1410), plus its
   `FileBrowserViewControllerSupport.{h,mm}`, which is ObjC++ **permanently** —
-  that is the point of it.
+  that is the point of it. Two of the controller's own methods are permanent
+  ObjC++ too and become a category on the Swift class at the flip:
+  `-variables` and `-updateMenu:`.
 - **ObjC++ by design (do not "finish" these without reason):**
   - `FSEventsManager.mm`, `SCMManager.mm` — model managers whose C++ boundaries
     were already made Swift-importable (`FSEventStream`, `SCMManagerCxx`). A Swift
@@ -112,10 +133,18 @@ Computer shows the host + volumes, and rename selects the basename.
 
 ## The last port, specifically
 
-**It has been surveyed and its prep is done** — the full measured checklist is
-in `ide/FILEBROWSER_PORT_PLAN.md` under "FileBrowserViewController — the
-survey". Four commits landed off the back of it, each judged by the suite on its
-own:
+**Surveyed, prepped, peeled, and extracted. What is left is the translation
+itself**: `FileBrowserViewController.mm` (1410 lines, 75 methods) becomes
+`FileBrowserViewController.swift`, in the one commit that flips the class
+definition. **The step-by-step for that commit is under "The flip" below**;
+this section and the next are the record of how the file reached this state and
+why nothing more can be done to it first.
+
+### The prep, and why each commit happened
+
+The full measured checklist is in `ide/FILEBROWSER_PORT_PLAN.md` under
+"FileBrowserViewController — the survey". Four commits landed off the back of
+it, each judged by the suite on its own:
 
 - `00a42e07` — `FileBrowserTypes.h` split out (FBOperation + FileBrowserDelegate).
 - `8c98956d` — **`+initialize` is gone**, replaced by `+registerDefaults`
@@ -126,34 +155,47 @@ own:
 - `53a7b1e6` — the first C++ extraction (see below), and the only commit in this
   port not verified in the running app.
 
-**The C++ extraction is done. What is left is the translation.** The survey
-found the C++ spread across the file rather than pooled in one fragment, so it
-came out a cluster at a time while everything was still ObjC++ and the existing
-suite judged each move — step 2 of this plan's original order, the shape that
-made FSEventsManager and SCMManager tractable. Four commits did it:
+### The C++ extraction, and the one thing it did not get
+
+The survey found the C++ spread across the file rather than pooled in one
+fragment, so it came out a cluster at a time while everything was still ObjC++
+and the existing suite judged each move — step 2 of this plan's original order,
+the shape that made FSEventsManager and SCMManager tractable. Four commits did
+it:
 
 - `53a7b1e6` — the settings/glob pair (exclude/include filter, `is_binary`).
-- `b4fb22e7` — the action menu. Emptied `-updateMenu:` of C++ entirely.
+- `b4fb22e7` — the action menu's bundle items. **This commit's message says it
+  "emptied `-updateMenu:` of C++ entirely" and that is wrong** — it removed the
+  `bundles::` half; the `MBMenu` literal was there the whole time and is
+  invisible to the grep that was used to check. See below.
 - `b3ba8abf` — the remaining two `bundles::` uses (new-file extension, command
   runner). After this the controller had no `bundles::` and no settings read.
 - `6266b9a8` — `path::device` ×2 and `to_s(NSEvent*)`.
 
-**Re-measure before trusting anything below** (rule 10), and note the grep in
-the previous handoff was too narrow — it misses `new`/`delete`:
+**Re-measure before trusting anything below** (rule 10). The grep in the
+handoff before this one was too narrow twice over — it misses `new`/`delete`,
+and it misses a typedef'd C++ type such as `MBMenu` (see `-updateMenu:` below).
+This is the widened form:
 
 ```bash
-grep -n 'std::\|[a-z_]\+::[a-z_]\|\bnew \|delete \[\]' Frameworks/FileBrowser/src/FileBrowserViewController.mm
+grep -n 'std::\|[a-z_]\+::[a-z_]\|\bnew \|delete \[\]\|MBMenu\|MBCreateMenu' Frameworks/FileBrowser/src/FileBrowserViewController.mm
 ```
 
-As of `6266b9a8` (2280 lines) every remaining hit is one of two kinds, and
-**neither is extraction work**:
+Re-run at `11c5e1da` (1410 lines) it returns eleven hits in four groups. **None
+of them is extraction work**, and only the first two survive the flip as ObjC++:
 
-| where | what | why it stays |
+| where | what | what happens to it |
 | --- | --- | --- |
-| `-variables` (~1207–1218) | `std::map` return, `path::escape`, `text::join` | Pinned from outside (`DocumentWindowSupport.mm`). Belongs on an ObjC++ category on the Swift class, exactly like `DocumentWindowController`'s four C++-typed selectors. |
-| ~34/68, ~820, ~1113, ~1192, ~1498 | `new NSInteger[]`/`delete[]`, `std::set<NSInteger>`, `std::clamp` ×2, `std::vector<std::pair<BOOL, FileItem*>>` | Local scratch with no C++ dependency — translates straight to Swift when its method does. Do **not** build a support method for these. |
+| `-variables` (777–788) | `std::map` return, `std::vector`, `path::escape`, `text::join` | **Stays ObjC++.** Pinned from outside (`DocumentWindowSupport.mm:356`), so it cannot change shape. Becomes an ObjC++ category on the Swift class, exactly like `DocumentWindowController`'s four C++-typed selectors. |
+| `-updateMenu:` (507–541) | `MBMenu const items = { … }`, `MBCreateMenu` | **Stays ObjC++**, same category. See the paragraph below — this one was missed by the original inventory. |
+| `MutableLongestCommonSubsequence` (36, 70) | `new NSInteger[]` / `delete []` | File-scope static C helper. Translates to a Swift array — no C++ dependency, no support method. |
+| 683, 762, 1068 | `std::clamp` ×2, `std::vector<std::pair<BOOL, FileItem*>>` | Local scratch inside `-restoreStateWithCoder:`, `-setupViewWithState:` and `-rearrangeChildrenInParent:`. Translates straight to Swift with its method. Do **not** build a support method for these. |
 
-## What is left to peel, and what actually blocks the rest
+The `std::set<NSInteger>` the earlier inventory listed is already gone — it left
+with the action methods in `8cb0d7d5`, and `FileBrowserActions.swift:131` notes
+where it was.
+
+## Why nothing else can peel (the record, not a to-do)
 
 The section survey in the plan sorted methods by ivars, overrides and accessors.
 **It missed a fourth blocker and so its "84 eligible" is optimistic** — see rule
@@ -189,13 +231,6 @@ other ~40 lines could be Swift was considered and rejected — it buys an
 `NSMenuItem**` out-parameter boundary for code that needs an ObjC++ neighbour
 either way.
 
-At the flip: Swift defines the class, `FileBrowserViewController.h` becomes a
-hand-written declaration (rule 23) and leaves the bridging header,
-`FileBrowserActions.h` and `FileBrowserViewControllerInternal.h` are deleted,
-`FileBrowserDiskOperations.h` is deleted, `-presentError:` moves from
-`FileBrowserDiskOperationsSupport.mm` into the class body (rule 31 stops
-applying), and `-variables` becomes an ObjC++ category.
-
 ### What the support class now holds, and one thing about it that is permanent
 
 `FileBrowserViewControllerSupport` has seven class methods: the glob predicate,
@@ -212,36 +247,79 @@ that the *callee* is C++-typed on both sides: `OakCommand`'s
 controller ends up, that call is made from ObjC++. It lives in the support
 class now; when the controller becomes Swift it stays there unchanged.
 
-- **`FileBrowserViewController.mm` (2280).** Its known hazards, updated by what
-  the DiskOperations port and the survey measured:
-  - **The rule-21 cascade is real but smaller than the survey thought, and its
-    structural half is now done.** Three of the fears are settled facts rather
-    than risks: a `@class FileItem` forward declaration unifies with the Swift
-    FileItem instead of colliding, the C++-typed `-variables` is dropped by the
-    importer, and every type the Swift needs out of that header has been split
-    into exported companions — `FileBrowserTypes.h` (FBOperation +
-    FileBrowserDelegate), `FileBrowserNotifications.h` (the notification consts),
-    `FileBrowserDiskOperations.h` (the category declaration). So when **Swift
-    defines the class**, the bridging header change is deleting its one
-    `#import "FileBrowserViewController.h"` line. `DocumentWindow`'s bridging
-    header keeps importing `<FileBrowser/FileBrowserViewController.h>` — it does
-    not define the class, and that hand-decl is what keeps its *Swift* compiling
-    (see the survey's cross-module note).
-  - **DiskOperations is already a Swift extension on this class**, so when the
-    controller becomes Swift the extension needs nothing except that its
-    `@objc(...)` selector spellings stay — and `FileBrowserDiskOperations.h` can
-    then be deleted outright, since ObjC++ will no longer be calling in.
-  - **`-presentError:` lives in `FileBrowserDiskOperationsSupport.mm`** only
-    because a Swift *extension* cannot override an inherited method (rule 31).
-    Once Swift defines the class itself, that override can move into the class
-    body and the support category disappears; the `path::` half stays.
-  - **`- (std::map<std::string,std::string>)variables` is pinned from outside**
-    (`DocumentWindowSupport.mm:356`). It cannot change shape — it belongs on an
-    ObjC++ category on the Swift class, exactly like `DocumentWindowController`'s
-    four C++-typed selectors. The selector-surface test already lists it.
-  - It is a `<QLPreviewPanelDataSource>` and holds the history/undo state; survey
-    its bindings (`grep 'bind:\|addObserver:.*forKeyPath:\|keyPathsForValuesAffecting'`)
-    before porting and make every observed property `@objc dynamic` (rule 1).
+## The flip — what the next commit actually has to do
+
+The one remaining port. `FileBrowserViewController.mm` (1410 lines, 75 methods)
+becomes `FileBrowserViewController.swift`, minus the two methods that stay
+ObjC++. Everything below was settled by the prep; none of it is open.
+
+**The file moves:**
+
+1. **Swift defines the class.** `FileBrowserViewController.h` becomes a
+   hand-written ObjC declaration of it (rule 23) and **leaves the bridging
+   header** — that one `#import "FileBrowserViewController.h"` line is the only
+   bridging-header change, because every type the Swift needs was already split
+   into exported companions: `FileBrowserTypes.h` (FBOperation +
+   FileBrowserDelegate), `FileBrowserNotifications.h` (the notification consts),
+   `FileBrowserDiskOperations.h` (the category declaration).
+2. **The two temporary headers are deleted**: `FileBrowserActions.h` and
+   `FileBrowserViewControllerInternal.h`. Their contents become ordinary private
+   state and methods in the Swift class. **If either survives the flip,
+   something was missed.**
+3. **`FileBrowserDiskOperations.h` is deleted** too — ObjC++ will no longer be
+   calling into the category. The extension itself needs nothing except that its
+   `@objc(...)` selector spellings stay.
+4. **`-presentError:` moves into the class body** from
+   `FileBrowserDiskOperationsSupport.mm`; rule 31 stops applying once Swift
+   defines the class. The `path::` half of that support file stays.
+5. **`-variables` and `-updateMenu:` become an ObjC++ category on the Swift
+   class** — the `DocumentWindowController` arrangement, which already carries
+   four C++-typed selectors this way. The selector-surface test already lists
+   `-variables`.
+6. **Re-seed** (`.mm`→`.swift` is an add plus a remove — rule 29).
+
+**What does not change, and is worth knowing before you go looking:**
+`DocumentWindow`'s bridging header keeps importing
+`<FileBrowser/FileBrowserViewController.h>`. It does not define the class, and
+that hand-decl is what keeps its *Swift* compiling (see the survey's
+cross-module note).
+
+**The hazards specific to this class**, as measured rather than feared:
+
+- **The rule-21 cascade is real but smaller than the survey thought, and its
+  structural half is already done.** Three of the fears are settled facts: a
+  `@class FileItem` forward declaration unifies with the Swift FileItem instead
+  of colliding, the C++-typed `-variables` is dropped by the importer, and the
+  header split above is finished.
+- **It is a `<QLPreviewPanelDataSource>` and holds the history/undo state.**
+  Survey its bindings before porting and make every observed property
+  `@objc dynamic` (rule 1) — a missed one is a silently dead binding:
+  ```bash
+  grep -n 'bind:\|addObserver:.*forKeyPath:\|keyPathsForValuesAffecting' Frameworks/FileBrowser/src/FileBrowserViewController.mm
+  ```
+  `908a82da` already pinned part of this surface with a real NSButton and
+  NSMenuItem, so a missing `@objc dynamic` on `canGoBack`/`canGoForward` fails a
+  test rather than going quiet.
+- **Nine ivars are now properties** (`2b34881a`) and the class extension at
+  `FileBrowserViewController.mm:75–126` is the full inventory of private state
+  the Swift class has to carry. Copy each one's ownership across unchanged —
+  rule 27, and a flip is not the moment to reconsider a weak/strong choice.
+- **Read nullability before translating each line that uses a value** (rule 44).
+  This is the failure mode that stays green: the peel produced both a literal
+  `Optional("committed.txt")` in a menu title and a force-unwrap trap, with the
+  whole suite passing.
+- **Eight methods are overrides** (`-init`, `-dealloc`, `-loadView`,
+  `-scrollWheel:`, the restorable-state pair, `-undoManager`,
+  `-validRequestorForSendType:`). They were blocked from peeling by rule 31 and
+  are the part of this file that has had the least prior exposure — they get
+  translated for the first time here.
+
+**Verification, and it is not optional.** The suite is the floor, not the check
+(rule 8): run the app against a git repo with modified/deleted/untracked/staged
+files and a Finder tag, and walk the list in "Build, test, run" above. This is
+one large commit with no intermediate judgement available — unlike every peel,
+which was one suspect in sixty lines — so the app run is the only thing standing
+between a green suite and an empty directory (rule 27).
 
 ## Rules earned this session (continuing FIND_PORT_HANDOFF's list at 23)
 

@@ -98,8 +98,27 @@
 @property (nonatomic, readonly, nullable) NSMutableSet<NSURL*>* loadingURLs;
 
 @property (nonatomic, nullable) NSArray<void(^)(void)>* loadingURLsCompletionHandlers;
-@property (nonatomic, nullable) NSMutableSet<NSURL*>* expandedURLs;
-@property (nonatomic, nullable) NSMutableSet<NSURL*>* selectedURLs;
+
+// **The pending sets, and they are deliberately not called expandedURLs /
+// selectedURLs.** Those two names are already taken by accessors that mean
+// something else: each merges the pending set with what the outline view
+// currently shows and answers `[res copy]` — a snapshot, and an **immutable**
+// one. Everything the loading section does is with the *pending* sets, which in
+// the ObjC++ it reached as the ivars `_expandedURLs` / `_selectedURLs`.
+//
+// A Swift extension cannot see an ivar, so the peel had nothing to reach and
+// wrote `self.expandedURLs` instead. That compiles, reads the wrong set, and
+// then sends -removeObject: to an NSSet: collapsing any folder took the process
+// down with an unrecognized selector. So the pending sets get their own
+// spelling here, and the merged accessors are **not** declared for Swift at
+// all — nothing outside the .mm wants them, and leaving them visible is what
+// made the mistake available.
+//
+// Readwrite, unlike the rest of this header's convention, for the same reason
+// previewItems is: -expandURLs:selectURLs: replaces both sets outright and that
+// method is the one that moved.
+@property (nonatomic, nullable) NSMutableSet<NSURL*>* pendingExpandedURLs;
+@property (nonatomic, nullable) NSMutableSet<NSURL*>* pendingSelectedURLs;
 
 @property (nonatomic) NSInteger expandingChildrenCounter;
 @property (nonatomic) NSInteger collapsingChildrenCounter;

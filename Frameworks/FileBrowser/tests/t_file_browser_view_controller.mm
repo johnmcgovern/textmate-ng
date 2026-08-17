@@ -553,6 +553,45 @@ void test_expand_urls_drains_its_completion_handlers ()
 	OAK_ASSERT([controller valueForKey:@"loadingURLsCompletionHandlers"] == nil);
 }
 
+// ==============================================================
+// = The pending expand/select sets, which are not the accessors =
+// = of the same name                                            =
+// ==============================================================
+//
+// `_expandedURLs` and `_selectedURLs` are the *pending* sets: URLs the browser
+// has been asked to expand or select and has not reached yet. The accessors
+// -expandedURLs / -selectedURLs are a different thing entirely — they merge the
+// pending set with what the outline view currently shows and answer `[res copy]`,
+// an **immutable** NSSet.
+//
+// So a caller that means the pending set has to reach the ivar, and every ObjC++
+// caller did. A Swift extension cannot see an ivar, which is exactly the trap:
+// `expandedURLs?.remove(url)` compiles, reads the merged snapshot instead of the
+// pending set, and then sends -removeObject: to an immutable NSSet.
+//
+// -outlineViewItemWillCollapse: is the shortest path to it — collapsing any
+// expanded folder — so that is what this drives.
+void test_collapsing_an_item_drops_it_from_the_pending_expanded_urls ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+
+	NSURL* url = [NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES];
+	FileItem* item = [FileItem fileItemWithURL:url];
+	OAK_ASSERT(item != nil);
+
+	// Pending, i.e. asked for and not yet reached: nothing is on screen, so the
+	// merged accessor and the pending set disagree from here on.
+	[controller expandURLs:@[ url ] selectURLs:nil];
+
+	NSNotification* notification = [NSNotification notificationWithName:NSOutlineViewItemWillCollapseNotification object:controller.outlineView userInfo:@{ @"NSObject": item }];
+	[(id <NSOutlineViewDelegate>)controller outlineViewItemWillCollapse:notification];
+
+	// The pending set no longer holds it. Read through the merged accessor,
+	// which is all a test can reach — with nothing expanded on screen it adds
+	// nothing, so what comes back is the pending set.
+	OAK_ASSERT(![[controller valueForKey:@"expandedURLs"] containsObject:url]);
+}
+
 // ===========================================================
 // = The table cell constructor, after it became Swift       =
 // ===========================================================

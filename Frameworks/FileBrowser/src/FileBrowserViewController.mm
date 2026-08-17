@@ -1305,6 +1305,20 @@ static NSMutableIndexSet* MutableLongestCommonSubsequence (NSArray* lhs, NSArray
 		[self.outlineView scrollPoint:NSMakePoint(NSMinX(rowRect), round(NSMidY(rowRect) - NSHeight(visibleRect)/2))];
 }
 
+// The pending expand/select sets, as the loading section reaches them.
+//
+// These are the ivars `_expandedURLs` / `_selectedURLs` and nothing more. They
+// exist as accessors only because a Swift extension cannot see an ivar, and they
+// are spelled differently from the two methods below on purpose: those merge the
+// pending set with the outline view's current state and return an immutable
+// copy, which is not what any of the loading code means (see
+// FileBrowserViewControllerInternal.h). At the flip both pairs become ordinary
+// private state and this indirection goes away.
+- (NSMutableSet<NSURL*>*)pendingExpandedURLs                              { return _expandedURLs; }
+- (void)setPendingExpandedURLs:(NSMutableSet<NSURL*>*)someURLs            { _expandedURLs = someURLs; }
+- (NSMutableSet<NSURL*>*)pendingSelectedURLs                              { return _selectedURLs; }
+- (void)setPendingSelectedURLs:(NSMutableSet<NSURL*>*)someURLs            { _selectedURLs = someURLs; }
+
 - (NSSet<NSURL*>*)selectedURLs
 {
 	NSMutableSet<NSURL*>* res = [_selectedURLs mutableCopy];

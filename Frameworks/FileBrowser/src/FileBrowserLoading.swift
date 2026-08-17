@@ -14,6 +14,15 @@ import AppKit
 // leaves it as the one place that still re-assigns the observer dictionary and
 // the two URL sets, which is why those keep readwrite declarations on the class
 // extension as well as here.
+//
+// **The pending sets are `pendingExpandedURLs` / `pendingSelectedURLs`, never
+// `expandedURLs` / `selectedURLs`.** The latter pair are accessors that merge in
+// what the outline view currently shows and return an immutable copy; this file
+// means the ivars behind them every time. Getting that wrong is not a subtle
+// difference — the first draft of this file did, and collapsing a folder sent
+// -removeObject: to an NSSet and crashed. See
+// FileBrowserViewControllerInternal.h for why the merged pair is no longer
+// visible to Swift at all.
 extension FileBrowserViewController {
 	@objc(outlineViewItemDidExpand:)
 	func outlineViewItemDidExpand(_ aNotification: Notification) {
@@ -156,13 +165,13 @@ extension FileBrowserViewController {
 			for child in (item.arrangedChildren as? [FileItem]) ?? [] {
 				guard let childURL = child.URL else { continue }
 
-				if (flag && !child.symbolicLink || expandedURLs?.contains(childURL) ?? false || childURL.scheme == "scm") && outlineView.isExpandable(child) {
+				if (flag && !child.symbolicLink || pendingExpandedURLs?.contains(childURL) ?? false || childURL.scheme == "scm") && outlineView.isExpandable(child) {
 					outlineView.expandItem(child, expandChildren: flag && !child.symbolicLink)
 				}
 
-				if selectedURLs?.contains(childURL) ?? false {
+				if pendingSelectedURLs?.contains(childURL) ?? false {
 					outlineView.selectRowIndexes(IndexSet(integer: outlineView.row(forItem: child)), byExtendingSelection: true)
-					selectedURLs?.remove(childURL)
+					pendingSelectedURLs?.remove(childURL)
 				}
 			}
 		}
@@ -191,13 +200,13 @@ extension FileBrowserViewController {
 			self.perform(#selector(NSResponder.centerSelectionInVisibleArea(_:)), with: self, afterDelay: 0)
 		} ]
 
-		self.expandedURLs = expandURLs.map { NSMutableSet(array: $0) } ?? self.expandedURLs
-		self.selectedURLs = selectURLs.map { NSMutableSet(array: $0) } ?? self.selectedURLs
+		self.pendingExpandedURLs = expandURLs.map { NSMutableSet(array: $0) } ?? self.pendingExpandedURLs
+		self.pendingSelectedURLs = selectURLs.map { NSMutableSet(array: $0) } ?? self.pendingSelectedURLs
 
 		var stack = (fileItem?.arrangedChildren as? [FileItem]) ?? []
 		while let item = stack.first {
 			stack.removeFirst()
-			if let itemURL = item.URL, expandedURLs?.contains(itemURL) ?? false {
+			if let itemURL = item.URL, pendingExpandedURLs?.contains(itemURL) ?? false {
 				outlineView.expandItem(item)
 				if let arrangedChildren = item.arrangedChildren as? [FileItem] {
 					stack.append(contentsOf: arrangedChildren)
@@ -207,7 +216,7 @@ extension FileBrowserViewController {
 
 		var indexesToSelect = IndexSet()
 		for i in 0 ..< outlineView.numberOfRows {
-			if let item = outlineView.item(atRow: i) as? FileItem, let itemURL = item.URL, selectedURLs?.contains(itemURL) ?? false {
+			if let item = outlineView.item(atRow: i) as? FileItem, let itemURL = item.URL, pendingSelectedURLs?.contains(itemURL) ?? false {
 				indexesToSelect.insert(i)
 			}
 		}
@@ -245,7 +254,7 @@ extension FileBrowserViewController {
 		let item = aNotification.userInfo?["NSObject"] as? FileItem
 		if nestedCollapsingChildrenCounter == 0 || collapsingChildrenCounter > 0 {
 			if let url = item?.URL {
-				expandedURLs?.remove(url)
+				pendingExpandedURLs?.remove(url)
 			}
 		}
 

@@ -24,8 +24,8 @@ this work are at the end of `ide/FIND_PORT_HANDOFF.md`. Read those two first._
   before this port. The number grows with every commit including doc ones, so
   read it off `git branch -vv` rather than from this line, and do not push
   without asking.
-- **644 tests across 36 bundles, green**, of which FileBrowser's bundle is
-  **43**. Measured at `11c5e1da`, not carried forward: this line said 643 until
+- **645 tests across 36 bundles, green**, of which FileBrowser's bundle is
+  **44**. Measured at `d680bbe5`, not carried forward: this line said 643 until
   the count was actually run, which is rule 10 happening again in the same
   document that states it. Re-measure, never increment:
   ```bash
@@ -33,10 +33,26 @@ this work are at the end of `ide/FIND_PORT_HANDOFF.md`. Read those two first._
   ```
   FileBrowser has **10** test files (`Frameworks/FileBrowser/tests/t_*.mm`); the
   framework had **zero** before this port began.
-- **Nothing is unverified.** Every commit was checked in the running app, and
-  where a path could not be reached from the tools (a modifier held across a
-  synthetic drag, a drop on the Dock's Trash) the commit says so rather than
-  implying coverage.
+- **One commit was not verified in the app, and it shipped a crash.** This line
+  used to read "nothing is unverified". `61ebc55f` collapsed folders by sending
+  -removeObject: to an immutable NSSet (rule 46), and what let it through is
+  simple: there was no Release build on this machine newer than that commit. So
+  the check is not "did I mean to run the app" — it is **`stat` the binary
+  against the commit**:
+  ```bash
+  stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' build/Release/TextMate-NG.app/Contents/MacOS/TextMate-NG
+  git log -1 --format=%ad --date=iso HEAD
+  ```
+  Everything else was checked in the running app, and where a path could not be
+  reached from the tools (a modifier held across a synthetic drag, a drop on the
+  Dock's Trash) the commit says so rather than implying coverage.
+- **Known, unfixed, and not from the port's own work:** in the SCM data source
+  (⇧⌘Y) the two group rows draw their disclosure triangle but no title text —
+  they should read "Uncommitted Changes" and "Untracked Items". Ruled out: the
+  table-cell peel (the pre-peel ObjC++ had no group-row case either) and
+  `SCMStatusFileItem.localizedName`, which returns the right strings. Likely in
+  how a group row's cell gets its text through
+  `objectValue.editingAndDisplayName`.
 - The **first thing settled** was the survey's open question: `FileBrowserViewController`
   **is** constructible in a test process. So this framework's coverage can use
   instances.
@@ -304,6 +320,15 @@ cross-module note).
   `FileBrowserViewController.mm:75–126` is the full inventory of private state
   the Swift class has to carry. Copy each one's ownership across unchanged —
   rule 27, and a flip is not the moment to reconsider a weak/strong choice.
+- **Two of those properties have hand-written getters that mean something other
+  than their storage**, and the flip is where that stops being a hazard.
+  `expandedURLs` / `selectedURLs` are declared `NSMutableSet*` and their getters
+  return an immutable merge of the ivar with the outline view's current state.
+  In Swift the pending sets become plain private storage and the merged pair
+  become two computed properties under names of their own — do **not** give the
+  stored and computed halves the same name again. Rule 46; it already cost a
+  shipped crash once (`d680bbe5`), and the `pendingExpandedURLs` /
+  `pendingSelectedURLs` passthroughs that fixed it exist only to be deleted here.
 - **Read nullability before translating each line that uses a value** (rule 44).
   This is the failure mode that stays green: the peel produced both a literal
   `Optional("committed.txt")` in a menu title and a force-unwrap trap, with the
@@ -577,6 +602,32 @@ allowed to say depends on who imports it.**
     choice. Expect the suite to be **unchanged in both directions**; the app run
     is the only real check, so pick the checks that exercise the promoted
     storage specifically.
+
+This last one is from `d680bbe5`, which fixed a crash the loading peel shipped.
+
+46. **When a peel replaces `_foo` with `self.foo`, check what `-foo` actually
+    is.** This is rule 45's other half and the more dangerous one: promoting
+    ivars makes them *reachable*, and the reachable thing is not always the thing
+    the ivar was. `_expandedURLs` / `_selectedURLs` are the pending expand/select
+    sets; `-expandedURLs` / `-selectedURLs` are accessors that merge them with
+    what the outline view currently shows and return `[res copy]`. Same name,
+    different value, and immutable. The loading peel took the accessors at seven
+    sites, so every read answered about the screen instead of the pending set and
+    `expandedURLs?.remove(url)` sent -removeObject: to an NSSet — **collapsing any
+    folder crashed the app, with the whole suite green.** Three disciplines:
+    - **Grep the `.mm` for a hand-written accessor before translating any
+      property access.** An ObjC property whose getter is overridden to return a
+      different type is legal, and from Swift it is invisible.
+    - **Give the ivar its own name rather than sharing one** — here
+      `pendingExpandedURLs` — and take the accessor that means something else
+      *out* of the header Swift sees. The peel could not have made this mistake
+      if the wrong name had not been in scope.
+    - **A test for this kind of defect does not fail, it crashes.** Expect the
+      "prove it can fail" step (rule 40) to look like `Restarting after
+      unexpected exit` rather than an assertion, and read the whole log — an
+      ObjC exception surfaces as "C++ exception handling detected but the Swift
+      runtime was compiled with exceptions disabled", which names neither the
+      selector nor the class.
 
 ## One build gotcha that is not a code error
 

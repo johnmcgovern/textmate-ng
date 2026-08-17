@@ -13,23 +13,28 @@ predate this work are at the end of `ide/FIND_PORT_HANDOFF.md`._
 
 ## What is left
 
-**Nothing that blocks anything.** In rough order of value:
+**Nothing that blocks anything, and nothing that is owed.** In rough order of
+value:
 
-1. **Finish the app run for `53923fe4`** — it is the one loose end that is not
-   optional. That commit's message lists exactly what was checked and what was
-   not (undo through the context menu, Quick Look, the SCM view, Computer,
-   back/forward); the machine locked part-way through. Do this before building
-   anything on top of it.
-2. **Move the delegate conformances into Swift**, which means widening about
+1. **Move the delegate conformances into Swift**, which means widening about
    fourteen peeled methods from `item: FileItem` to `item: Any` with a cast
    inside. That deletes `+wireOutlineView:toController:` /
    `+wireMenu:toDelegate:` and the `(CxxConformances)` category, and turns a
    runtime arrangement back into a compile-time one. Deliberately left out of
    the flip so that commit stayed a translation — see rule 47.
-3. **The blank SCM group headers** (noted under "State" below). Not from the
-   port.
-4. `FSEventsManager.mm` / `SCMManager.mm`, which are ObjC++ **by choice** and
+2. **The blank SCM group headers** (noted under "State" below). Not from the
+   port, and it survived the flip unchanged, which is one more piece of evidence
+   that it is upstream of all of this.
+3. `FSEventsManager.mm` / `SCMManager.mm`, which are ObjC++ **by choice** and
    work as-is. Do not "finish" them without a reason.
+
+**The flip's app run is finished.** `53923fe4`'s own message says it is not —
+that was true when it was written, because the machine locked part-way through.
+It was completed afterwards against a Release build of `71bc39ad`, and the five
+checks it named all pass: undo through the context menu (the folder leaves the
+disk), Quick Look, ⇧⌘Y, ⇧⌘C, and back/forward — the last restoring the tree's
+expansion state *and* selection, which is the pending-set path. Read this line
+rather than that commit message.
 
 ## State you are starting from
 
@@ -333,7 +338,8 @@ registration keeps `"NSFilenamesPboardType"` / `"Apple URL pasteboard type"` by
 raw value, because `.fileURL` / `.URL` are different types and swapping them
 would change which services the browser offers.
 
-**The app run for this commit is unfinished** — see item 1 of "What is left".
+**The app run for this commit is finished**, though its commit message says
+otherwise — see the note at the end of "What is left".
 
 ## Rules earned this session (continuing FIND_PORT_HANDOFF's list at 23)
 

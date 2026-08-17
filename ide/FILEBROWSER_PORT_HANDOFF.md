@@ -12,8 +12,13 @@ Everything below was measured, not assumed._
 
 ## State you are starting from
 
-- `master`, HEAD `61ebc55f`, tree clean. **Not pushed** — everything from
-  `1e9f53de` onward is local.
+- `master`, tree clean. The peel ends at **`61ebc55f`**; anything after it is
+  documentation, so cite that rather than a HEAD hash a doc commit will stale.
+- **Nothing is pushed, and it is not just this work.** The remote is
+  `GH-johnmcgovern` (there is no `origin` — a `git log origin/master..master`
+  silently reports nothing and reads as "all pushed"). `master` is **50 commits
+  ahead** of `GH-johnmcgovern/master`, which reaches back well before this port.
+  Check with `git branch -vv`, and do not push without asking.
 - **643 tests across 36 bundles, green.** Re-measure, never increment — that
   figure has been wrong in these docs before (rule 10). FileBrowser has **10** test
   files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before

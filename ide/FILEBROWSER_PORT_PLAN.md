@@ -492,8 +492,14 @@ plainly because it is the argument for doing the rest the same way:
 - Neither is the kind of thing a class-wide flip would have surfaced one at a
   time.
 
-Two things were investigated and deliberately **not** changed, which is worth
+Three things were investigated and deliberately **not** changed, which is worth
 recording so nobody re-opens them:
+
+- **-updateMenu: cannot be Swift**, and the reason is C++ the inventory grep
+  cannot see: `MBMenu` is a typedef for `std::vector<MBMenuItem>`, so
+  `MBMenu const items = { … }` is a C++ aggregate literal and `MBCreateMenu` a
+  C++ call, neither containing `std::` or `::`. It joins -variables as a
+  category on the Swift class at the flip.
 
 - **Paste and Move Items Here do not show their dynamic titles**, while Create
   Link does. `-setDynamicTitle:` writes only `title`, `-setInactiveKeyEquivalent:`

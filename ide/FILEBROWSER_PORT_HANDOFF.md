@@ -1,8 +1,9 @@
 # FileBrowser port — handoff
 
 _Written 2026-08-15, rewritten 2026-08-16 at the end of the session that took
-the controller from 2280 lines to 1709 by peeling five sections into Swift
-extensions. The C++ extraction was finished the session before; what is left is
+the controller from 2280 lines to 1410 by peeling seven sections into Swift
+extensions — which is **every section that can be peeled**; see "What is left"
+below. The C++ extraction was finished the session before; what is left is
 translation. This is the starting point for a fresh session; the per-commit
 detail and the reasoning behind each decision live in
 `ide/FILEBROWSER_PORT_PLAN.md`, and the 22 cross-framework rules that predate
@@ -11,9 +12,9 @@ Everything below was measured, not assumed._
 
 ## State you are starting from
 
-- `master`, HEAD `2b34881a`, tree clean. **Not pushed** — everything from
+- `master`, HEAD `61ebc55f`, tree clean. **Not pushed** — everything from
   `1e9f53de` onward is local.
-- **642 tests across 36 bundles, green.** Re-measure, never increment — that
+- **643 tests across 36 bundles, green.** Re-measure, never increment — that
   figure has been wrong in these docs before (rule 10). FileBrowser has **10** test
   files (`Frameworks/FileBrowser/tests/t_*.mm`); the framework had **zero** before
   this port began.
@@ -24,8 +25,8 @@ Everything below was measured, not assumed._
 - The **first thing settled** was the survey's open question: `FileBrowserViewController`
   **is** constructible in a test process. So this framework's coverage can use
   instances.
-- `FileBrowserViewController.mm` is **1709 lines, 99 methods**, down from 2280
-  and ~134.
+- `FileBrowserViewController.mm` is **1410 lines, 75 methods**, down from 2280
+  and ~134. Nothing further can leave it before the flip.
 
 ### How this port is being done — read this before writing any code
 
@@ -55,18 +56,19 @@ was missed.
 ### What is already Swift
 
 The entire view layer, the whole `FileItem*` model family, the disk operations,
-and — as extensions on the still-ObjC++ controller — five of its sections:
+and — as extensions on the still-ObjC++ controller — seven of its sections:
 
 `OFBHeaderView`, `OFBActionsView`, `FileBrowserOutlineView`, `OFBFinderTagsChooser`,
 `FileItemTableCellView`, `FileBrowserView`, `FileItem` (base),
 `FileItemMountedVolumes`, `FileItemSCMStatus`, `FileItemObserver`,
 `FileBrowserDiskOperations`, `FileBrowserOutlineViewDataSource`,
 `FileBrowserTableCells`, `FileBrowserAcceptDrop`, `FileBrowserActions`,
-`FileBrowserPasteboard`, `FileBrowserMenuValidation`.
+`FileBrowserPasteboard`, `FileBrowserMenuValidation`, `FileBrowserQuickLook`,
+`FileBrowserLoading`.
 
 ### What is still ObjC++ (and why)
 
-- **The one port left:** `FileBrowserViewController.mm` (1709), plus its
+- **The one port left:** `FileBrowserViewController.mm` (1410), plus its
   `FileBrowserViewControllerSupport.{h,mm}`, which is ObjC++ **permanently** —
   that is the point of it.
 - **ObjC++ by design (do not "finish" these without reason):**
@@ -155,17 +157,32 @@ numbers:
 
 | section | can move now | blocked | by what |
 | --- | --- | --- | --- |
-| **QuickLook** | 9 | — | nothing, since `2b34881a` freed `_previewItems`. **Do this next.** |
-| **Loading/Expanding Items** | 14 | — | nothing, since the counters and loading sets are properties |
-| **Action Menu** (`-updateMenu:`) | 2 | — | nothing, since `_openWithMenuDelegate` is a property |
+| ~~QuickLook~~ | done | — | `6162472b` |
+| ~~Loading/Expanding Items~~ | done | — | `61ebc55f` |
+| **Action Menu** (`-updateMenu:`) | — | 2 | **C++** — see below. Not peelable; this row said "eligible" and was wrong. |
 | History / Location / `From FileBrowserView` | — | ~19 | **accessors** for declared properties: a Swift extension cannot supply storage or its accessors |
 | Public-header actions (`newFile:`, `newFolder:`, `goToURL:`, `reload:`, …) | — | ~20 | **header visibility** (rule 41) |
 | `-init`, `-dealloc`, `-loadView`, `-scrollWheel:`, restorable state, `-undoManager`, `-validRequestorForSendType:` | — | 8 | **overrides** (rule 31) |
 | `-variables` | — | 1 | C++ signature pinned from `DocumentWindowSupport.mm` |
 
-So: **three sections left to peel (25 methods), then the flip.** After those,
-what remains in the `.mm` is only the four blocked kinds — which is the right
-shape for the flip, because none of them can leave any earlier.
+So: **the peel is finished.** Everything left in the `.mm` is one of five
+blocked kinds, none of which can leave before the class definition flips.
+
+**`-updateMenu:` is C++, and the C++ inventory missed it.** Line ~507 is
+`MBMenu const items = { … }`, and MenuBuilder declares
+`typedef std::vector<MBMenuItem> MBMenu` — a std::vector, built with C++
+designated-initialiser aggregate syntax, with `NSMenuItem* __strong* ref`
+members. The grep recorded above finds none of it, because neither `MBMenu` nor
+`MBCreateMenu` contains `std::` or `::`. **Widen the grep before trusting any
+"no C++ left" claim**: a typedef'd C++ type is invisible to it, and so is
+`new`/`delete`.
+
+There is no ObjC-shaped MenuBuilder API to use instead, so -updateMenu: joins
+-variables and the support class in the permanent-ObjC++ bucket: at the flip it
+becomes a category on the Swift class. Extracting just the MBMenu literal so the
+other ~40 lines could be Swift was considered and rejected — it buys an
+`NSMenuItem**` out-parameter boundary for code that needs an ObjC++ neighbour
+either way.
 
 At the flip: Swift defines the class, `FileBrowserViewController.h` becomes a
 hand-written declaration (rule 23) and leaves the bridging header,

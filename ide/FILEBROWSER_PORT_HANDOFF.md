@@ -682,6 +682,15 @@ xattr -cr "$DD/Build/Products/Debug"
 
 ## One environment note, not about the code either
 
+**Check whether the screen is simply locked before believing any of this.** The
+flip's app run ended with `screenshot` returning "permission missing or
+SCContentFilter failure" and System Events unable to see the app's windows —
+which is exactly the signature below, and was not it: the machine had locked
+while a build ran. A screenshot taken once it was awake showed the lock screen
+immediately. The distinction matters because this note otherwise says "do not
+diagnose it", and waiting out a bug that is actually a locked Mac means waiting
+forever. `pmset -g` or one more screenshot costs nothing.
+
 Screen capture (and the accessibility API with it) stopped responding on this
 machine mid-session once — `screenshot` returned "permission missing or
 SCContentFilter failure" and System Events could not see the app's windows,

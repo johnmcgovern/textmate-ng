@@ -2,6 +2,44 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-18 (v2026.8-alpha.13)
+
+**The download is about a fifth smaller** — 15.2 MB instead of 19.3, and roughly
+27 MB instead of 39 once installed. Nothing was removed that the app uses, and
+nothing it does has changed.
+
+Three things made it up, and the largest was an oversight. Every release until
+now shipped its full table of internal debugging symbols, because the build was
+never told to strip them — that alone was 6.5 MB. The rest was the old TextMate
+application icon, still being copied in months after the rebrand replaced it, and
+the document icons for the 54 file types, which were stored in a format that
+predates 2007 and is far larger than it needs to be.
+
+Those document icons are worth a sentence, because they are the part you could
+actually notice. They have been re-encoded, not reduced: same artwork, same
+sizes, down to the pixel. If a file icon anywhere — in the sidebar, in Finder, in
+Get Info — looks wrong or blurry in this release and looked right in alpha.12,
+that is a real bug and worth reporting.
+
+**The Contributions page in the About window works again.** Every link on it
+pointed at the original TextMate repository, so all 1,645 of this fork's own
+commits led to a "not found" page, and contributor avatars were being loaded from
+an address GitHub retired years ago — anyone without a Gravatar showed as a
+broken image. Both are fixed. It is a credits page and nothing depends on it,
+but it had been quietly wrong since the fork began.
+
+**Also in this release:** builds now publish their debug symbols as a second file
+alongside the app. It is only useful for making sense of a crash report, and the
+app is the other one — but since stripping the symbols out of the app is what
+saved the 6.5 MB above, they have to live somewhere.
+
+**Known limitations in this alpha:** unchanged from alpha.12. The version-control
+view (⇧⌘Y) still draws its two group rows — "Uncommitted Changes" and "Untracked
+Items" — without their titles; the files under them are correct. Software update
+and crash-report submission stay switched off while the fork has no server of its
+own, so a new build means downloading a new build. Finder thumbnails are still
+generic; Quick Look previews work.
+
 ## 2026-08-17 (v2026.8-alpha.12)
 
 **Opening Settings no longer crashes the app.** It crashed every time, on every

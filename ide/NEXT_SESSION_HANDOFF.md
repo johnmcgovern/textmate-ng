@@ -294,17 +294,35 @@ bridging header needs, so defining the class in Swift breaks every use as
 `__ObjC.X` vs `OakAppKit.X`. Splitting that header is a change 31 files see, and
 it unblocks more than one port — worth doing on purpose rather than mid-port.
 
-## Next: `FileBrowser` (5196) or `OakFilterList` (2757)
+## Next: finish `FileBrowser` (~572 lines left), then `OakFilterList` (2757)
 
-**`FileBrowser` is surveyed — read `ide/FILEBROWSER_PORT_PLAN.md` before
-starting.** It applies the rules below as a checklist and found four things worth
-knowing in advance: the framework has **no tests at all**, `SCMManager.h` is a
-public header carrying both a `std::map` property and a C++-typed block,
-`FSEventsManager` holds a `shared_ptr` **ivar**, and the `.rave` sources glob is
-missing `swift`. It also proposes an order.
+**`FileBrowser` is most of the way ported, not waiting to start** — this section
+said otherwise until 2026-08-18, and every one of the four things it listed as
+"worth knowing in advance" had already been dealt with. Read
+`ide/FILEBROWSER_PORT_PLAN.md`, whose Progress section is current. Measured
+2026-08-18: **4683 lines of Swift against 1168 of ObjC++, and 46 tests** in a
+framework that genuinely did have none.
 
-(The 4968 figure previously here counted `src/*.mm` only; with `src/OFB/` and the
-headers it is 5196.)
+Of that 1168, roughly half is **not** meant to go anywhere — the `…Cxx.mm` and
+`…Support.mm` boundary files this project deliberately creates (596 lines across
+six of them, `FSEventStream.mm` among them, which exists precisely to hold the
+C++ struct). What is actually left to port:
+
+| file | lines |
+| --- | --- |
+| `SCMManager.mm` | 375 |
+| `FSEventsManager.mm` | 153 — the plan already calls this Swift-portable |
+| `FileBrowserOutlineViewKeyBindings.mm` | 31 |
+| `FileBrowserNotifications.mm` / `FileItemLocations.mm` | 13 |
+
+The four resolved preconditions, so nobody re-checks them: the `.rave` globs have
+`swift`, `SCMManager.h` is C++-free (the `std::map` and the C++-typed block moved
+to `SCMManagerCxx.h`), `FSEventsManager` no longer holds a `shared_ptr` ivar, and
+the bridging-header/hand-declared-`.h` arrangement is settled and proven.
+
+Free cleanup noted in passing and still true:
+`-addObserverToFileAtURL:usingBlock:` has **zero callers anywhere** and can just
+be deleted.
 
 `OakFilterList` is **not** surveyed. What is already known:
 

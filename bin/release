@@ -70,6 +70,24 @@ NOTES_VERSION=$(sed -n 's/^## .* (v\(.*\))$/\1/p' "$CHANGES" | head -1)
   echo "       (rebuild after adding the heading — the heading *is* the version bump)" >&2
   exit 1; }
 
+# The heading states a date and a version on the same line, and under calendar
+# versioning their year.month has to be the same thing said twice.
+#
+# This exists because it was not the same thing said twice for nine releases.
+# alpha.3 through alpha.11 all shipped as 2026.7 while dated August — the drift
+# started on 2026-08-02 and nothing noticed until after alpha.11 was published,
+# because the only thing that could have caught it was remembering, every time.
+# Fixed forward rather than retagging; see the versioning bullet in the alpha.1
+# entry of Changes.md.
+NOTES_DATE=$(sed -n 's/^## \([0-9][0-9-]*\) (v.*)$/\1/p' "$CHANGES" | head -1)
+NOTES_YM=$(printf '%s' "$NOTES_DATE" | sed 's/^\([0-9]*\)-0*\([0-9]*\)-.*$/\1.\2/')
+VERSION_YM=$(printf '%s' "$VERSION" | sed 's/^\([0-9]*\.[0-9]*\).*$/\1/')
+[ "$VERSION_YM" = "$NOTES_YM" ] || {
+  echo "error: version $VERSION says $VERSION_YM but the heading is dated $NOTES_DATE ($NOTES_YM)" >&2
+  echo "       calendar versioning means the version carries the month it shipped in;" >&2
+  echo "       bump the heading to v$NOTES_YM-<suffix>, re-seed, and rebuild" >&2
+  exit 1; }
+
 git -C "$ROOT" rev-parse "$TAG" >/dev/null 2>&1 || {
   echo "error: no git tag $TAG — tag the release commit first" >&2; exit 1; }
 

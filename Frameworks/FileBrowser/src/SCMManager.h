@@ -1,5 +1,4 @@
-// The C++-typed members — SCMRepository's `status` map and
-// -addObserverToFileAtURL:usingBlock: — live in SCMManagerCxx.h so this header
+// SCMRepository's C++-typed `status` map lives in SCMManagerCxx.h so this header
 // stays importable from a Swift bridging header. See that file for why.
 
 @interface SCMRepository : NSObject

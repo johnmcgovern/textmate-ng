@@ -353,16 +353,6 @@ namespace scm
 	return directory;
 }
 
-- (id)addObserverToFileAtURL:(NSURL*)url usingBlock:(void(^)(scm::status::type))handler
-{
-	__block scm::status::type oldStatus = scm::status::unknown;
-	return [[self directoryAtURL:url.URLByDeletingLastPathComponent] addObserver:^(SCMRepository* repository){
-		scm::status::type newStatus = [repository SCMStatusForURL:url];
-		if(oldStatus != newStatus)
-			handler(oldStatus = newStatus);
-	}];
-}
-
 - (id)addObserverToRepositoryAtURL:(NSURL*)url usingBlock:(void(^)(SCMRepository*))handler
 {
 	return [[self repositoryAtURL:url] addObserver:handler];

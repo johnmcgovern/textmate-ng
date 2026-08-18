@@ -16,17 +16,21 @@ predate this work are at the end of `ide/FIND_PORT_HANDOFF.md`._
 **Nothing that blocks anything, and nothing that is owed.** In rough order of
 value:
 
-1. **Move the delegate conformances into Swift**, which means widening about
-   fourteen peeled methods from `item: FileItem` to `item: Any` with a cast
-   inside. That deletes `+wireOutlineView:toController:` /
-   `+wireMenu:toDelegate:` and the `(CxxConformances)` category, and turns a
-   runtime arrangement back into a compile-time one. Deliberately left out of
-   the flip so that commit stayed a translation — see rule 47.
-2. **The blank SCM group headers** (noted under "State" below). Not from the
+1. **The blank SCM group headers** (noted under "State" below). Not from the
    port, and it survived the flip unchanged, which is one more piece of evidence
    that it is upstream of all of this.
-3. `FSEventsManager.mm` / `SCMManager.mm`, which are ObjC++ **by choice** and
+2. `FSEventsManager.mm` / `SCMManager.mm`, which are ObjC++ **by choice** and
    work as-is. Do not "finish" them without a reason.
+
+**Done since:** the delegate conformances moved into Swift (`159cdde4`), which
+deleted the `(CxxConformances)` category and both `+wire…` helpers. Fifteen
+witnesses were widened from `item: FileItem` to the `Any` the protocols declare.
+Two things came out of it worth carrying forward — `FileBrowserOutlineViewDelegate.h`
+is now nullability-annotated (rule 44 applied to a protocol, which also removed
+an `item as Any` that was boxing an Optional inside an `Any`), and
+`-outlineView:child:ofItem:` is declared `-> Any!` because it must still answer
+nil and the requirement is non-optional. The suite caught the NSNull() version
+of that immediately.
 
 **The flip's app run is finished.** `53923fe4`'s own message says it is not —
 that was true when it was written, because the machine locked part-way through.

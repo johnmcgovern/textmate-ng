@@ -19,7 +19,10 @@
 #   3. packages with ditto, then **unpacks the package somewhere clean and
 #      re-verifies it**, because the artifact people download is the zip, not the
 #      directory it was made from
-#   4. creates the release, marked pre-release, with notes taken from Changes.md
+#   4. collects the dSYMs for exactly the binaries in that bundle, matched by
+#      UUID, and refuses to publish if any of them is missing
+#   5. creates the release, marked pre-release, with notes taken from Changes.md,
+#      attaching the app zip and the dSYM zip
 #
 # Requires: gh, authenticated with repo scope (`gh auth status`).
 #
@@ -141,7 +144,80 @@ spctl --assess --type execute "$UNPACKED" >/dev/null 2>&1 || {
 echo "    $(du -h "$ZIP" | cut -f1), $VERSION, stapled, Gatekeeper-accepted"
 
 # ============================================================
-# = 4. Notes, from the file that already has them            =
+# = 4. The dSYMs for exactly these binaries                  =
+# ============================================================
+
+# Release builds are stripped (see the Release block in ide/seed_xcodeproj.rb),
+# so a crash report from a published build is only fully readable against the
+# dSYM that was produced alongside it — and those live in build/, which is
+# gitignored and routinely deleted. Publishing them as a second asset is what
+# makes them outlive the build directory.
+#
+# Matched by UUID rather than by filename, which is the whole point rather than a
+# nicety: build/ accumulates dSYMs from earlier builds, and a *stale* dSYM is
+# worse than no dSYM, because it resolves addresses to confident wrong answers.
+# This project has already had dSYMs sitting two weeks older than the binaries
+# next to them without anything noticing.
+
+BUILT=$(cd "$(dirname "$APP")" && pwd)
+DSYM_ZIP="$ROOT/build/TextMate-NG-$VERSION-dSYMs.zip"
+
+echo "==> collecting dSYMs"
+
+# Every UUID that has a dSYM sitting beside the app, and where it lives.
+: > "$WORK/dsym-index"
+for d in "$BUILT"/*.dSYM; do
+  [ -d "$d" ] || continue
+  for img in "$d"/Contents/Resources/DWARF/*; do
+    [ -f "$img" ] || continue
+    dwarfdump --uuid "$img" 2>/dev/null | awk -v p="$d" '/^UUID:/ { print $2, p }' >> "$WORK/dsym-index"
+  done
+done
+
+# Every Mach-O actually inside the bundle — by executable bit rather than by a
+# list of paths, so a helper nested somewhere new cannot quietly go unsymbolicated.
+# dwarfdump prints nothing for a non-Mach-O, which is the filter for shell scripts.
+: > "$WORK/dsym-wanted"
+: > "$WORK/dsym-missing"
+find "$APP" -type f -perm -u+x | while IFS= read -r bin; do
+  uuid=$(dwarfdump --uuid "$bin" 2>/dev/null | awk '/^UUID:/ { print $2; exit }')
+  [ -n "$uuid" ] || continue
+  match=$(awk -v u="$uuid" '$1 == u { print $2; exit }' "$WORK/dsym-index")
+  if [ -n "$match" ]; then
+    echo "$match" >> "$WORK/dsym-wanted"
+  else
+    echo "${bin#"$APP"/} ($uuid)" >> "$WORK/dsym-missing"
+  fi
+done
+
+# Nothing matched and nothing missing means the walk found no Mach-O at all,
+# which is not "no dSYMs needed" — it is a bad $APP. Without this the script
+# sails on and fails later with an empty archive, which does not point anywhere.
+if [ ! -s "$WORK/dsym-wanted" ] && [ ! -s "$WORK/dsym-missing" ]; then
+  echo "error: found no Mach-O binaries inside $APP — is that a real app bundle?" >&2
+  exit 1
+fi
+
+if [ -s "$WORK/dsym-missing" ]; then
+  echo "error: no dSYM matches these shipped binaries:" >&2
+  sed 's/^/       /' "$WORK/dsym-missing" >&2
+  echo "       Release sets DEBUG_INFORMATION_FORMAT=dwarf-with-dsym, so a full" >&2
+  echo "       rebuild writes them beside the app. A dSYM whose UUID does not" >&2
+  echo "       match is not a near miss — it is a different build." >&2
+  exit 1
+fi
+
+rm -f "$DSYM_ZIP"
+sort -u "$WORK/dsym-wanted" | sed "s|^$BUILT/||" > "$WORK/dsym-names"
+while IFS= read -r name; do
+  (cd "$BUILT" && zip -qr9 "$DSYM_ZIP" "$name")
+done < "$WORK/dsym-names"
+[ -s "$DSYM_ZIP" ] || { echo "error: dSYM archive came out empty" >&2; exit 1; }
+
+echo "    $(wc -l < "$WORK/dsym-names" | tr -d ' ') dSYMs, $(du -h "$DSYM_ZIP" | cut -f1), all UUID-matched to the packaged app"
+
+# ============================================================
+# = 5. Notes, from the file that already has them            =
 # ============================================================
 
 # Everything between the newest `## ` heading and the next one. Changes.md is
@@ -165,6 +241,10 @@ open it, that is a real signal rather than something to work around.
 This is an alpha. Software update and crash-report submission are switched off
 while the fork has no server of its own, so a new build means downloading a new
 build.
+
+The `-dSYMs.zip` asset is debug symbols for this exact build — only useful for
+turning a crash report into readable function names. **The app is the other
+one.**
 REQUIREMENTS
 
 if [ "$DRY_RUN" = YES ]; then
@@ -173,13 +253,14 @@ if [ "$DRY_RUN" = YES ]; then
   cat "$NOTES"
   echo "----------------------------------------------------------------"
   echo "==> zip left at $ZIP"
+  echo "==> dSYMs left at $DSYM_ZIP"
   exit 0
 fi
 
 # --prerelease on purpose: these are alphas, and it keeps "Latest release" honest
 # for whenever a non-alpha appears.
 echo "==> creating GitHub release $TAG"
-gh release create "$TAG" "$ZIP" \
+gh release create "$TAG" "$ZIP" "$DSYM_ZIP" \
   --title "TextMate-NG $VERSION" \
   --notes-file "$NOTES" \
   --prerelease

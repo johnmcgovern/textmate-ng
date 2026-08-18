@@ -303,26 +303,31 @@ said otherwise until 2026-08-18, and every one of the four things it listed as
 2026-08-18: **4683 lines of Swift against 1168 of ObjC++, and 46 tests** in a
 framework that genuinely did have none.
 
-Of that 1168, roughly half is **not** meant to go anywhere — the `…Cxx.mm` and
-`…Support.mm` boundary files this project deliberately creates (596 lines across
-six of them, `FSEventStream.mm` among them, which exists precisely to hold the
-C++ struct). What is actually left to port:
+**As of 2026-08-18 exactly one portable file is left: `SCMManager.mm` (365).**
+`FSEventsManager` is Swift (`1ce283bd`) and the dead
+`-addObserverToFileAtURL:usingBlock:` is gone (`a1c4…`, see the log). `src/*.mm`
+is **1005**, and the other 640 lines are boundaries that are *finished by design*
+— the `…Cxx.mm` / `…Support.mm` files, plus `FSEventStream.mm`, which exists
+precisely to hold the C++ struct.
 
-| file | lines |
-| --- | --- |
-| `SCMManager.mm` | 375 |
-| `FSEventsManager.mm` | 153 — the plan already calls this Swift-portable |
-| `FileBrowserOutlineViewKeyBindings.mm` | 31 |
-| `FileBrowserNotifications.mm` / `FileItemLocations.mm` | 13 |
+**The table this section used to carry was wrong about 44 of those lines**, and
+the mistake is instructive: it listed `FileBrowserOutlineViewKeyBindings.mm`,
+`FileBrowserNotifications.mm` and `FileItemLocations.mm` as remaining work. Run
+the rule 19/21 survey and all three are rule-19 blocked by construction — they
+are `extern` constants and one C++ key-equivalent helper, and each says so in its
+own header comment. They were *created* by this port, not left behind by it.
+Counting `.mm` lines is not the same as counting work.
 
-The four resolved preconditions, so nobody re-checks them: the `.rave` globs have
-`swift`, `SCMManager.h` is C++-free (the `std::map` and the C++-typed block moved
-to `SCMManagerCxx.h`), `FSEventsManager` no longer holds a `shared_ptr` ivar, and
-the bridging-header/hand-declared-`.h` arrangement is settled and proven.
+`SCMManager.mm` is a session of its own and wants the two-commit shape. It has
+the densest C++ left in the framework: a `scm::driver_t const*` **pointer ivar**,
+a `std::map<std::string, scm::status::type>` property, `scm::status::type` return
+types, and the driver table. `SCMManagerCxx.h` is now down to that one map
+property, so it is one property away from not existing.
 
-Free cleanup noted in passing and still true:
-`-addObserverToFileAtURL:usingBlock:` has **zero callers anywhere** and can just
-be deleted.
+The resolved preconditions, so nobody re-checks them: the `.rave` globs have
+`swift`, `SCMManager.h` is C++-free, `FSEventsManager` no longer holds a
+`shared_ptr` ivar, and the bridging-header/hand-declared-`.h` arrangement is
+settled and proven.
 
 `OakFilterList` is **not** surveyed. What is already known:
 
@@ -401,6 +406,44 @@ slot, so an `iconutil` round-trip **silently drops** `ih32`/`h8mk` from the nine
 `TextMate *.icns` that carry one. Nothing errors, and the icons still draw. If
 you ever transform these again, diff the *set of sizes* before and after rather
 than eyeballing the result.
+
+## The Software Update crash, and what the dSYMs bought
+
+`1d587756`, shipped in alpha.14. Settings ▸ Software Update killed the app a
+minute or so after the pane was opened, in **alpha.12 and every release before
+it** — not an alpha.13 regression, though that is where it was reported.
+
+The mechanism, because it is now the *second* crash of this exact family and will
+not be the last: `-checkForTestBuild:completionHandler:` guaranteed a main-thread
+callback only on its success path. Its two early returns called back synchronously
+on the caller's queue, and the caller is `NSBackgroundActivityScheduler`'s XPC
+queue. The completion set `errorString` there, KVO notified Cocoa Bindings, and
+the binding read back a **`@MainActor` Swift getter**. Swift 6 checks the executor
+and traps.
+
+Four things to carry:
+
+1. **The published dSYM named all four unresolved frames on the first try.** That
+   step (`a83a9005`) had never run in anger; it repaid itself the same day. When a
+   report comes in, `atos -o <dSYM> -arch arm64 -l <load address>` before
+   theorising.
+2. **KVO cannot be fixed in the setter.** Automatic KVO swizzles it, so
+   `-willChangeValueForKey:` runs on the *calling* thread before your body does.
+   Marshalling inside `-setFoo:` moves nothing. Fix the method that owns the path.
+3. **`@MainActor` on a class with ObjC callers is a loaded gun** — `-dealloc` runs
+   wherever the last reference drops. This is why `FSEventsManager` was left
+   non-isolated when it was ported hours later: `-[SCMRepository dealloc]` calls
+   it, and SCMRepository does background work. Same reasoning applies to anything
+   else in this framework's port queue.
+4. **The smoke pass cannot catch this shape.** Clicking through every Settings
+   pane that morning did not surface it: the failure needs the pane opened *and*
+   the background activity to fire, about twenty seconds later. "Open every
+   surface" is still the right list; it just does not cover anything on a timer.
+
+Also found, and not a bug to fix: `SCMManager`-unrelated, `SoftwareUpdate`'s
+`channels` property is **never assigned anywhere in this fork**, so every check
+errors with "No channel named 'release'". That is consistent with update being
+deliberately off, but it does mean the crashing path was the only path.
 
 ## Distribution — done (2026-08-10)
 
@@ -503,6 +546,13 @@ the script.
   XCTest bundles at seed time, so `xcodebuild test` alone compiles the *previous*
   version of a test you just changed. Cost a wasted cycle on 2026-08-05 chasing
   errors that had already been fixed.
+- **Adding a *new* test file needs `extract_specs.rb` as well**, not just a
+  re-seed. The `tests tests/t_*.mm` glob is expanded in `ide/extract_specs.rb`
+  into `ide/gen/specs.json`, so a seed alone rebuilds the bundle from the old
+  file list and the new test simply does not run — it reports success, with the
+  same total as before. Always the documented pair:
+  `ruby ide/extract_specs.rb > ide/gen/specs.json && ruby ide/seed_xcodeproj.rb`.
+  (2026-08-18; the wording above, which says only "re-seed", is what caused it.)
 - **Adding the first `.swift` to a framework? Check its `default.rave` first.**
   The sources line must include `swift` — `sources src/*.{cc,mm,swift}`. OakAppKit's
   said `{cc,mm}`, so the seed silently ignored the new file and the ObjC++ then

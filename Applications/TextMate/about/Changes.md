@@ -2,6 +2,46 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-18 (v2026.8-alpha.14)
+
+**Opening Settings ▸ Software Update no longer crashes the app.** If you opened
+that pane and left the window up, the app died a little while later — not on the
+click, which is why it can feel like it happened at random. Thank you to whoever
+reported it.
+
+It is worth saying plainly that **this was not new in alpha.13**, even though
+that is where it was found. Nothing in alpha.13 touched this code; the fault has
+been there since the settings window was rewritten, and it shipped in alpha.12
+and in releases before it. What alpha.13 did change was that its debug symbols
+are published, and those turned an unreadable crash report into four named lines
+of code — which is how this was found in minutes rather than by guesswork.
+
+The cause is a close cousin of the alpha.12 crash, and the same lesson twice: the
+update check runs on a background thread, and when it finished it told the
+settings window to refresh from that thread. Reading a value from the wrong
+thread is the sort of thing that used to be quietly wrong and now stops the
+program on the spot. It is fixed by having the check always report back on the
+main thread, and there is now a test that fails if it ever does not.
+
+**While you are in there, that pane says "Error: No channel named 'release'."**
+That is expected rather than a new fault: the fork has no update server, so there
+is no channel for it to reach, and the check has nowhere to go. Software update
+stays switched off until there is something to point it at. The error was what
+made the crash reproducible — it is the path the check always takes.
+
+**Also in this release**, and invisible as usual: the file browser's directory
+watching — the part that notices a file appearing or changing on disk and
+refreshes the sidebar — moved into Swift. If the sidebar ever stops keeping up
+with changes made outside the app, that is the area to suspect and worth
+reporting.
+
+**Known limitations in this alpha:** unchanged from alpha.13. The version-control
+view (⇧⌘Y) still draws its two group rows — "Uncommitted Changes" and "Untracked
+Items" — without their titles; the files under them are correct. Software update
+and crash-report submission stay switched off while the fork has no server of its
+own, so a new build means downloading a new build. Finder thumbnails are still
+generic; Quick Look previews work.
+
 ## 2026-08-18 (v2026.8-alpha.13)
 
 **The download is about a fifth smaller** — 15.2 MB instead of 19.3, and roughly

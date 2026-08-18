@@ -1,11 +1,11 @@
 # Next-session handoff — TextMate-NG
 
-_Snapshot at end of session 2026-08-13. Point-in-time; when it disagrees with the
+_Snapshot at end of session 2026-08-18. Point-in-time; when it disagrees with the
 git log or the docs below, trust those. The section this file used to end with —
 "Next: port DocumentWindowController … now unblocked" — got three things wrong
 about that port, which is a fair warning about how much to trust the rest._
 
-## Where things stand (updated 2026-08-13)
+## Where things stand (updated 2026-08-18)
 
 - **Phase 2 is DONE.** Stream 3 (signing & notarization) landed: Developer ID
   `John McGovern (R22V2H7QF4)`, `bin/notarize` drives `notarytool`, and shipped
@@ -19,17 +19,18 @@ about that port, which is a fair warning about how much to trust the rest._
   The old note here said the id "must not move again"; it moved once more, on
   purpose, to match the product name while the audience was still alpha-only.
   Now it does match, so there is no third move worth making.
-- **Six releases shipped so far:** alpha.3–alpha.5 on 2026-08-02/03, then
-  alpha.7 (2026-08-06), alpha.8 and alpha.9 (both 2026-08-10). **9 commits are
-  unreleased as of 2026-08-13, one of them the first user-visible fix since the
-  fork began** (line numbers, see below) — which makes alpha.10 worth cutting on
-  its own merits rather than to exercise the release flow. Count what is
-  unreleased with `git rev-list --count v2026.7-alpha.9..HEAD` rather than by
-  assertion — that number has been stated wrong here three times.
+- **Six releases are published:** alpha.7 through alpha.12, the newest
+  `v2026.8-alpha.12` on 2026-08-18. (alpha.3–alpha.5 shipped 2026-08-02/03 but
+  were never backfilled to GitHub — see the end of "Distribution".) **2 commits
+  are unreleased as of 2026-08-18**, both the package-size work below, which is
+  worth a release only when something else needs one. Count what is unreleased
+  with `git rev-list --count "$(git tag | sort -V | tail -1)"..HEAD` rather than
+  by assertion — that number has been stated wrong here three times, and the
+  bullet naming the releases was itself stale for five of them.
 - **Builds are downloadable.** `bin/release` publishes a notarized build to
-  GitHub Releases; **alpha.7, .8 and .9 are up** (2026-08-10). The flow has been
-  run three times and verified from the outside each time — download the
-  published asset, set `com.apple.quarantine`, check `spctl`. See
+  GitHub Releases. The flow has been run six times and verified from the outside
+  — download the published asset, set `com.apple.quarantine`, check `spctl`. As
+  of alpha.13 a release carries **two** assets, the app and its dSYMs. See
   "Distribution" below.
 - **Phase 4's Find work is DONE (2026-08-07).** All four substantial files are
   Swift — `FFResultNode`, `FFDocumentSearch`, `FFResultsViewController` and now
@@ -38,7 +39,7 @@ about that port, which is a fair warning about how much to trust the rest._
   last port left `FindSupport.mm` (271) behind, which is why the directory fell
   by 1131 and not by 1402. What it cost, and the four new rules it earned, are in
   `ide/FIND_PORT_HANDOFF.md`.
-- **601 tests across 35 bundles**, green (2026-08-13; 76 Find, 51
+- **649 tests across 36 bundles**, green (2026-08-18; 76 Find, 51
   DocumentWindow, 29 OakAppKit). Counted from `Test Case … started` lines, which
   is what the rest of this bullet has been telling people to do — and which is
   how the 58 previously claimed for DocumentWindow was caught: it was never
@@ -46,8 +47,12 @@ about that port, which is a fair warning about how much to trust the rest._
   increment the documented figure. **Match `Executed ([0-9]+) tests?,` — with the
   `s` optional.** xctest prints `Executed 1 test` for single-test suites, and a
   plural-only pattern skips those lines and then mis-attributes the next
-  bundle's total, which reads as 500 instead of 484. Cross-check that
-  `Test Case … started` and `… passed` counts are equal. Full note in
+  bundle's total, which reads as 500 instead of 484. **And take only the
+  *bundle-level* lines.** xctest prints an `Executed …` summary for every nested
+  suite as well — 203 lines for 36 bundles — so summing all of them reads as 1947
+  (2026-08-18). Filter to the line that follows a `Test Suite '…xctest' passed`.
+  Cross-check that `Test Case … started` and `… passed` counts are equal; the two
+  methods agreeing is the only reason to believe either. Full note in
   `PROJECT_PHASES.md` under the test-count corrections.
 - **QuickLook works again, as a Preview Extension (2026-08-03).** Legacy
   `.qlgenerator`s no longer load from *any* third-party app on this macOS, so it
@@ -335,6 +340,50 @@ Three things to carry forward:
    blank, this is now the first thing to check, and the fix pattern is
    `NSRectFill(NSIntersectionRect(aRect, self.bounds))`.
 
+## Done: the package-size pass (2026-08-18)
+
+`01698794` and `a83a9005`. **37 MB → 26 MB installed, 19.3 MB → 15.2 MB
+downloaded**, with no change to what the app does. The detail is in those two
+commit messages and in the code comments; what belongs here is the two things
+this got wrong first, because both are the shape of mistake that would repeat.
+
+**"Obsolete format" is not the same as "unused size".** The 54 document icons
+carry `is32`/`il32`/`it32`, which read as pre-10.5 cruft to delete. They are old
+*encodings* but they hold the only 16/32/128px **sizes** those icons have —
+deleting them would have made the file browser resample everything from the
+512px rep. What was actually recoverable was the encoding, losslessly: the 128px
+pair costs 32 KB (its mask is an uncompressed 16 KB) against 12 KB as PNG, and
+every PNG rep was under-compressed by ~18%. Same pixels, 2.2 MB. Check what a
+thing *contains* before concluding it is redundant.
+
+**Raw size and download size are different questions, and only one of them was
+the ask.** `About/Contributions.html` is 1.6 MB and looks like the obvious
+target. 600 KB of it is repeated per-commit markup — which compresses to 28 KB,
+because it is identical boilerplate and gzip erases it. Trimming it would have
+been a day's fiddling for nothing a user could measure. Measure compressed
+before optimising anything that ships inside a zip.
+
+Two mechanisms worth knowing about before touching this again:
+
+- **`Applications/TextMate/icons` is a submodule**, so the icons ship exactly as
+  upstream encoded them and cannot be edited in place. `ide/optimize_icons.rb`
+  re-encodes them into `ide/gen/icons/` at seed time (cached on mtime; ~6 s cold,
+  free warm) and `seed_xcodeproj.rb` rewrites the spec inputs so every consumer
+  picks the generated ones up. The same constraint is why the unused 1.7 MB
+  `icons/TextMate.icns` is *subtracted* in `extract_specs.rb` rather than deleted.
+- **Release is stripped and now emits dSYMs.** `xcodebuild build` never strips on
+  its own — only the `install` action sets `DEPLOYMENT_POSTPROCESSING` — so every
+  alpha through alpha.12 shipped its full symbol table. Worth recording that the
+  obvious objection is wrong: stripping does **not** cost ObjC method names in
+  crash reports, all 3746 survive `strip -x`. The dSYM is what recovers file/line
+  and the C++ frames.
+
+And one trap, caught by asserting rather than looking: `.iconset` has no 48×48
+slot, so an `iconutil` round-trip **silently drops** `ih32`/`h8mk` from the nine
+`TextMate *.icns` that carry one. Nothing errors, and the icons still draw. If
+you ever transform these again, diff the *set of sizes* before and after rather
+than eyeballing the result.
+
 ## Distribution — done (2026-08-10)
 
 **Builds are downloadable.** `v2026.7-alpha.7` is published at
@@ -347,7 +396,7 @@ bin/release --dry-run    # packages and verifies, prints the notes, publishes no
 ```
 
 It is separate from `bin/notarize` on purpose — re-running a notarization is
-safe, re-running "publish a public release" is not. Three of its four steps are
+safe, re-running "publish a public release" is not. Four of its five steps are
 checks, because the failure that matters is publishing something a stranger
 cannot open:
 
@@ -357,6 +406,21 @@ cannot open:
   means the build predates it;
 - **the zip is unpacked somewhere clean and verified again**, because the artifact
   people download is the zip and `build/` has held stale bundles here before.
+- **every Mach-O in the bundle has a UUID-matching dSYM**, or it refuses to
+  publish (added 2026-08-18, `a83a9005`).
+
+That last one exists because Release builds are stripped now. A published release
+carries two assets: the app zip, and `TextMate-NG-<version>-dSYMs.zip` — ten
+dSYMs, ~52 MB. They are matched **by UUID, not by filename**, which is the whole
+point: `build/` accumulates dSYMs from earlier builds, and a stale one is worse
+than none because it resolves addresses to confident wrong answers. This project
+has already carried dSYMs two weeks older than the binaries beside them without
+anything noticing.
+
+The binary walk is by executable bit over the whole bundle rather than a list of
+paths, and that mattered on the first run: it picks up `tm_dialog` and
+`tm_dialog2` inside the two `.tmplugin` Resources directories, which the
+hand-written list of "the obvious locations" had missed.
 
 Notes come from `Changes.md` (everything between the newest `## ` heading and the
 next), plus the requirements, which are not in that file and whose absence earns a
@@ -426,6 +490,10 @@ the script.
   said `{cc,mm}`, so the seed silently ignored the new file and the ObjC++ then
   failed to find `<Framework>-Swift.h`, which reads like a bridging problem and is
   not one (2026-08-13).
+- **Do not edit `Applications/TextMate/icons/` — it is the `document-icons`
+  submodule.** What ships is re-encoded into `ide/gen/icons/` by
+  `ide/optimize_icons.rb`; change that, not the source icons. Same for anything
+  else that needs to ship differently from how a submodule stores it.
 - **Leave `headers src/*.h` alone where it is a glob.** Replacing it with an
   explicit brace list exports **zero** headers if any filename contains a space
   (`NSAlert Additions.h`) — a brace list expands to nothing rather than failing,

@@ -1,18 +1,14 @@
 #import "SCMManager.h"
-#import "SCMManagerCxx.h"
+#import "SCMSupport.h"
 #import "FSEventsManager.h"
-#import "drivers/api.h"
-#import <scm/scm.h>
 #import <ns/ns.h>
 #import <TMFileReference/TMFileReference.h>
 
-namespace scm
-{
-	driver_t* git_driver ();
-	driver_t* hg_driver ();
-	driver_t* p4_driver ();
-	driver_t* svn_driver ();
-}
+// No C++ left on any ivar or method signature below — the `scm::driver_t const*`
+// and `std::map` both moved to SCMSupport (SCMDriver / SCMStatus), which is what
+// clears this file for the Swift port. It stays ObjC++ for now so the app and the
+// existing tests judge those shims before any translation (the
+// DocumentWindowController two-commit shape).
 
 @class SCMRepositoryObserver;
 
@@ -24,13 +20,12 @@ namespace scm
 	NSDate* _noUpdateBefore;
 	NSMutableSet<TMFileReference*>* _fileReferences;
 }
-@property (nonatomic, readwrite) std::map<std::string, scm::status::type> status;
+@property (nonatomic, readwrite) SCMStatus* status;
 @property (nonatomic, readwrite) NSDictionary<NSString*, NSString*>* variables;
-@property (nonatomic, readonly) scm::driver_t const* driver;
+@property (nonatomic, readonly) SCMDriver* driver;
 @property (nonatomic, readonly) NSMutableArray<SCMRepositoryObserver*>* observers;
 @property (nonatomic) id fsEventsObserver;
-- (instancetype)initWithURL:(NSURL*)url driver:(scm::driver_t const*)driver;
-- (scm::status::type)SCMStatusForURL:(NSURL*)url;
+- (instancetype)initWithURL:(NSURL*)url driver:(SCMDriver*)driver;
 - (SCMRepositoryObserver*)addObserver:(void(^)(SCMRepository*))handler;
 - (void)removeObserver:(SCMRepositoryObserver*)observer;
 @end
@@ -102,14 +97,14 @@ namespace scm
 // ===========================================
 
 @implementation SCMRepository
-- (instancetype)initWithURL:(NSURL*)url driver:(scm::driver_t const*)driver
+- (instancetype)initWithURL:(NSURL*)url driver:(SCMDriver*)driver
 {
 	if(self = [super init])
 	{
 		_URL               = url;
 		_driver            = driver;
-		_enabled           = scm::scm_enabled_for_path(url.fileSystemRepresentation);
-		_tracksDirectories = driver && driver->tracks_directories();
+		_enabled           = [SCMDriver isSCMEnabledForPath:url.path];
+		_tracksDirectories = driver.tracksDirectories;
 		_noUpdateBefore    = [NSDate distantPast];
 		_observers         = [NSMutableArray array];
 
@@ -171,14 +166,11 @@ namespace scm
 	__weak SCMRepository* weakSelf = self;
 
 	NSURL* url = _URL;
-	scm::driver_t const* driver = _driver;
+	SCMDriver* driver = _driver;
 
 	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-		std::map<std::string, scm::status::type> const status = driver->status(url.fileSystemRepresentation);
-
-		NSMutableDictionary* variables = [NSMutableDictionary dictionary];
-		for(auto pair : driver->variables(url.fileSystemRepresentation))
-			variables[to_ns(pair.first)] = to_ns(pair.second);
+		SCMStatus* status = [driver statusForDirectory:url.path];
+		NSDictionary<NSString*, NSString*>* variables = [driver variablesForDirectory:url.path];
 
 		dispatch_async(dispatch_get_main_queue(), ^{
 			[weakSelf updateStatus:status variables:variables];
@@ -186,27 +178,23 @@ namespace scm
 	});
 }
 
-- (void)updateStatus:(std::map<std::string, scm::status::type> const&)status variables:(NSDictionary<NSString*, NSString*>*)variables
+- (void)updateStatus:(SCMStatus*)status variables:(NSDictionary<NSString*, NSString*>*)variables
 {
 	_status    = status;
 	_variables = variables;
 	_hasStatus = YES;
 
 	NSMutableSet<TMFileReference*>* fileReferences = [NSMutableSet set];
-	for(auto pair : _status)
-	{
-		if(pair.second != scm::status::none)
+	[status.entries enumerateKeysAndObjectsUsingBlock:^(NSString* path, NSNumber* rawStatus, BOOL* stop){
+		TMSCMStatus scmStatus = (TMSCMStatus)rawStatus.unsignedIntegerValue;
+		if(scmStatus != TMSCMStatusNone)
 		{
-			NSString* path = [NSFileManager.defaultManager stringWithFileSystemRepresentation:pair.first.data() length:pair.first.size()];
 			TMFileReference* fileReference = [TMFileReference fileReferenceWithURL:[NSURL fileURLWithPath:path]];
-			// Widening a 4-byte C++ enum into the 8-byte ObjC one, which is
-			// the whole point of TMSCMStatus — the width now agrees on both
-			// sides of the boundary instead of being asserted by a header.
-			fileReference.SCMStatus = (TMSCMStatus)pair.second;
+			fileReference.SCMStatus = scmStatus;
 			[fileReferences addObject:fileReference];
 			[_fileReferences removeObject:fileReference];
 		}
-	}
+	}];
 
 	for(TMFileReference* fileReference in _fileReferences)
 		fileReference.SCMStatus = TMSCMStatusNone;
@@ -219,17 +207,6 @@ namespace scm
 	_noUpdateBefore = [_noUpdateBefore laterDate:[NSDate dateWithTimeIntervalSinceNow:1.5]];
 	if(_needsUpdate)
 		[self tryUpdateStatusInBackground];
-}
-
-- (scm::status::type)SCMStatusForURL:(NSURL*)url
-{
-	if(_hasStatus)
-	{
-		auto it = _status.find(url.fileSystemRepresentation);
-		if(it != _status.end())
-			return it->second;
-	}
-	return scm::status::unknown;
 }
 
 - (SCMRepositoryObserver*)addObserver:(void(^)(SCMRepository*))handler
@@ -312,21 +289,16 @@ namespace scm
 
 - (SCMRepository*)repositoryAtURL:(NSURL*)url
 {
-	static scm::driver_t* const drivers[] = { scm::git_driver(), scm::hg_driver(), scm::p4_driver(), scm::svn_driver() };
-
 	while(url)
 	{
 		if(SCMRepository* repository = [_repositories objectForKey:url])
 			return repository;
 
-		for(scm::driver_t* driver : drivers)
+		if(SCMDriver* driver = [SCMDriver driverWithInfoForDirectory:url.path])
 		{
-			if(driver && driver->has_info_for_directory(url.fileSystemRepresentation))
-			{
-				SCMRepository* repository = [[SCMRepository alloc] initWithURL:url driver:driver];
-				[_repositories setObject:repository forKey:url];
-				return repository;
-			}
+			SCMRepository* repository = [[SCMRepository alloc] initWithURL:url driver:driver];
+			[_repositories setObject:repository forKey:url];
+			return repository;
 		}
 
 		NSNumber* isVolume;

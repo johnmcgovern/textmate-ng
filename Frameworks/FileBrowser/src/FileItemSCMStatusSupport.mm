@@ -1,5 +1,5 @@
 #import "FileItemSCMStatusSupport.h"
-#import "SCMManagerCxx.h"
+#import "SCMSupportCxx.h"
 #import <io/path.h>
 #import <ns/ns.h>
 
@@ -10,7 +10,7 @@
 + (NSArray<NSURL*>*)unstagedURLsInRepository:(SCMRepository*)repository
 {
 	std::map<std::string, scm::status::type> unstagedPaths;
-	for(auto const& pair : repository.status)
+	for(auto const& pair : repository.status.rawStatus)
 	{
 		if(pair.second & (scm::status::modified|scm::status::added|scm::status::deleted|scm::status::conflicted|scm::status::unversioned))
 		{
@@ -44,7 +44,7 @@
 + (NSArray<NSURL*>*)untrackedURLsInRepository:(SCMRepository*)repository
 {
 	std::map<std::string, scm::status::type> untrackedPaths;
-	for(auto pair : repository.status)
+	for(auto pair : repository.status.rawStatus)
 	{
 		if(pair.second & (scm::status::modified|scm::status::added|scm::status::deleted|scm::status::conflicted|scm::status::unversioned))
 		{

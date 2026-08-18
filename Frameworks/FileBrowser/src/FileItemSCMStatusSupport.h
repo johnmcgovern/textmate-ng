@@ -2,7 +2,7 @@
 // FileItemSCMStatus can be Swift.
 //
 // These two methods walk SCMRepository's status — a std::map<std::string,
-// scm::status::type> reached through SCMManagerCxx.h — filtering by scm::status::
+// scm::status::type> reached through SCMStatus.rawStatus (SCMSupportCxx.h) — filtering by scm::status::
 // bitmasks and collapsing parent/child paths with path::is_child. That is real
 // C++ that would be a hazard to re-derive in Swift (rule 6), so it stays here;
 // the Swift SCMStatusObserver calls these. The signatures are C++-free

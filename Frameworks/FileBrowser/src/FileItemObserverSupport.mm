@@ -1,5 +1,5 @@
 #import "FileItemObserverSupport.h"
-#import "SCMManagerCxx.h"
+#import "SCMSupportCxx.h"
 #import <io/path.h>
 #import <ns/ns.h>
 
@@ -11,7 +11,7 @@
 	NSMutableArray<NSURL*>* urls = [NSMutableArray array];
 
 	std::string const dir = url.fileSystemRepresentation;
-	for(auto pair : repository.status)
+	for(auto pair : repository.status.rawStatus)
 	{
 		if(!(pair.second & scm::status::deleted) || dir != path::parent(pair.first))
 			continue;

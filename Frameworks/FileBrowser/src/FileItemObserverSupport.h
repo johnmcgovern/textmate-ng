@@ -3,7 +3,7 @@
 //
 // When the SCM status of a watched directory changes, this reports the files in
 // that directory that git now considers deleted — walking SCMRepository's status
-// (a std::map<std::string, scm::status::type> reached through SCMManagerCxx.h),
+// (a std::map<std::string, scm::status::type> reached through SCMStatus.rawStatus (SCMSupportCxx.h)),
 // matching scm::status::deleted, and keeping only entries whose parent is the
 // directory. Real C++ (rule 6); the Swift FileSystemObserver calls it. The
 // signature is C++-free, so the bridging header can import this.

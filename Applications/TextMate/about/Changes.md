@@ -2,6 +2,47 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-17 (v2026.8-alpha.12)
+
+**Opening Settings no longer crashes the app.** It crashed every time, on every
+machine, in both alpha.10 and alpha.11 — choosing TextMate-NG ▸ Settings, or
+pressing ⌘, quit the app instantly. If you tried it and assumed you had done
+something wrong: you had not, and thank you to whoever reported it.
+
+The cause is a good illustration of how this migration can go wrong. Swift lets
+a class be marked `final`, meaning nothing may subclass it, and the compiler
+optimises on that promise. Two of the classes behind the Settings window were
+marked that way — but they are also published to the app's Objective-C side,
+where `final` does not exist and nothing enforces it. One of them was subclassed
+in our own code; the other was subclassed *at runtime* by macOS itself, which
+does that routinely to watch a window's title for changes. Both promises were
+false, and the code the compiler generated on the strength of them ran away into
+an infinite loop.
+
+Nothing about this was visible from the outside: it is not a message anyone
+could have read, the test suite was entirely green through both releases, and
+the app is fine until the moment that one window is built. There is now a test
+that builds the Settings window, which is the check that should have existed all
+along.
+
+**The version number jumps from 2026.7 to 2026.8, and nothing is missing.**
+TextMate-NG uses the year and month it shipped in, and nine releases in a row
+carried July's number into August because nothing checked. The published builds
+keep the numbers they were released under; from here on the month is right, and
+`bin/release` now refuses to publish a build whose version and date disagree.
+
+**Also in this release**, and invisible as usual: the file browser's outline-view
+plumbing moved the rest of the way into Swift. Same advice as alpha.11 — if the
+sidebar misbehaves, that is the area to suspect, and dragging items within it is
+the part most worth reporting.
+
+**Known limitations in this alpha:** unchanged from alpha.11. The version-control
+view (⇧⌘Y) still draws its two group rows — "Uncommitted Changes" and "Untracked
+Items" — without their titles; the files under them are correct. Software update
+and crash-report submission stay switched off while the fork has no server of its
+own, so a new build means downloading a new build. Finder thumbnails are still
+generic; Quick Look previews work.
+
 ## 2026-08-17 (v2026.7-alpha.11)
 
 **The file browser is now Swift, all of it.** The sidebar you expand folders in

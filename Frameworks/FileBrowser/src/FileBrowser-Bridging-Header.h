@@ -48,9 +48,16 @@
 #import "SCMManager.h"
 #import "FileItemSCMStatusSupport.h"
 
-// The directory observers (FileItemObserver.swift): FSEventsManager (C++-free)
-// and the ObjC++ helper for the git-deleted-files walk.
-#import "FSEventsManager.h"
+// FSEventStream, which FSEventsManager.swift owns one of. This is the ObjC shell
+// 3f6bcc0c wrapped the std::shared_ptr<fs_events_t> in, kept C++-free for
+// exactly this import — see its header comment.
+#import "FSEventStream.h"
+
+// The ObjC++ helper for the git-deleted-files walk. **FSEventsManager.h is
+// deliberately absent as of its port** — Swift defines that class now
+// (FSEventsManager.swift), so importing the hand-written declaration here would
+// give it two, per this file's opening note. Its ObjC++ caller (SCMManager.mm)
+// imports that header directly, and so does the test bundle.
 #import "FileItemObserverSupport.h"
 
 // FBOperation, which FileBrowserDiskOperations.swift's signatures are built

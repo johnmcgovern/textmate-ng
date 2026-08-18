@@ -726,11 +726,17 @@ Five smaller things about driving the app, each of which cost time:
 
 Two more, from the drag work:
 
-- **A synthetic drag needs to be slow and finely stepped.** A press, three
-  moves and a release highlights the drop row but the drop does not happen —
-  the file stays put and it reads as "validateDrop: rejected it". Eight or so
-  moves with a pause before the release completes it. Check the *disk*, not the
-  outline view, before believing either result.
+- **A synthetic drag needs to be slow and finely stepped, and "eight or so moves
+  with a pause" is not enough.** A press, three moves and a release highlights
+  the drop row but the drop does not happen — the file stays put and it reads as
+  "validateDrop: rejected it". Nine moves and a 1.5s pause before the release
+  still did not drop. What works: ~12 moves, a 1s pause on arrival, then a
+  **one-pixel jiggle at the destination** (off the drop row by a pixel and back)
+  and a 2s pause before the release. The jiggle is what was missing — the last
+  move has to land while the drag session is already settled on the row.
+  Check the *disk*, not the outline view, before believing either result: the
+  failed attempt highlighted the drop row **and spring-loaded the folder open**,
+  which looks exactly like success.
 - **Quitting can hang on an unsaved untitled document** left over from testing
   New File. `osascript … to quit` blocks on the save sheet with no output; look
   at the screen rather than assuming the app is wedged.

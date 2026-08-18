@@ -445,6 +445,39 @@ Also found, and not a bug to fix: `SCMManager`-unrelated, `SoftwareUpdate`'s
 errors with "No channel named 'release'". That is consistent with update being
 deliberately off, but it does mean the crashing path was the only path.
 
+## OPEN: two unexplained EXC_BAD_ACCESS crashes (2026-08-18)
+
+**Shipped in alpha.14 knowingly. Start here next session.**
+
+Two crashes, both in builds made today, both `EXC_BAD_ACCESS` on the main thread,
+both roughly 20–25 seconds after launch, neither reproducible:
+
+| time | build contained | top of stack |
+| --- | --- | --- |
+| 13:20:39 | the SoftwareUpdate fix only | AppKit layout → SwiftUICore `ViewGraph` render → `objc_opt_class` |
+| 13:49:09 | + the FSEventsManager port | autorelease pool drain → `-[__NSDictionaryM dealloc]` → `objc_release` |
+
+Both are **over-release signatures**, not the Swift-6 isolation trap `1d587756`
+fixed — a different failure class. Neither stack contains a single frame of ours,
+which is expected for an over-release: the pool drain runs long after whoever
+released too many times has gone.
+
+What was ruled out, so nobody repeats it: four launches totalling ~6 minutes of
+soak, with the same folder open and the same Settings pane up, produced nothing.
+The FileBrowser port is not obviously implicated, because the first crash predates
+it. `atos` against the dSYM adds nothing — there is nothing of ours to symbolicate.
+
+**The hypothesis worth testing first is that these are older than today.** The
+only prior crash reports on this machine are alpha.11's, because alpha.12 and .13
+died at the isolation trap *first* — the trap plausibly masked a pre-existing
+over-release, and removing it revealed one. That is a claim to test, not to
+believe.
+
+Next step is instrumentation rather than reasoning (rule 22): soak under
+`NSZombieEnabled=YES`, or a build with MallocStackLogging / AddressSanitizer,
+which is the only thing that can name the over-releaser. Do that before
+attributing it to any of today's commits.
+
 ## Distribution — done (2026-08-10)
 
 **Builds are downloadable.** `v2026.7-alpha.7` is published at

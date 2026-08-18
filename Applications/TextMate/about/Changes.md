@@ -2,6 +2,49 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-17 (v2026.7-alpha.11)
+
+**The file browser is now Swift, all of it.** The sidebar you expand folders in
+is the single largest piece of this migration so far and the last of it landed
+in this release. As always, a port that changes behaviour has failed, so the
+intent is that you notice nothing at all.
+
+That makes this the release worth being suspicious of if the file browser
+misbehaves. Everything it does went through the rewrite:
+
+* expanding and collapsing folders, and the expansion surviving a quit-and-reopen
+* the right-click menu — every item on it, including the Finder tag swatches and
+  the bundle commands near the bottom
+* New File and New Folder, renaming, duplicating, and **Move to Trash**
+* dragging items within the browser, onto folders, and out to other apps
+* copy, paste, Move Items Here and Create Link to Items
+* Quick Look (space), the version-control view (⇧⌘Y), Computer (⇧⌘C), and the
+  back/forward arrows
+* **undo, for all of the above**
+
+Undo is called out because the rewrite genuinely broke it part-way through and
+the automated tests could not see it — every operation still worked, and the
+Undo item stayed enabled, but nothing came back. It is fixed and now has a test
+that moves a file, undoes it, and checks the disk. If you ever find an undo in
+the file browser that does nothing, that is a real bug and worth reporting even
+though it looks trivial.
+
+**One long-standing fix you will not see.** The code that works out which rows
+merely moved when a folder is re-sorted has been reading past the end of its own
+buffer since long before this fork — whenever a rename left the browser with a
+different number of items than it started with. It never announced itself, which
+is the unsettling part. Rewriting it in Swift made it impossible to keep, because
+Swift refuses the out-of-bounds read that C++ performed silently.
+
+**Known limitations in this alpha:** unchanged, plus one new cosmetic one. The
+version-control view (⇧⌘Y) draws its two group rows — "Uncommitted Changes" and
+"Untracked Items" — without their titles, so you get two unlabelled dividers. The
+files under them are correct and grouped correctly. It predates the file browser
+rewrite and survived it unchanged. Software update and crash-report submission
+stay switched off while the fork has no server of its own, so a new build means
+downloading a new build. Finder thumbnails are still generic; Quick Look previews
+work.
+
 ## 2026-08-13 (v2026.7-alpha.10)
 
 **Line numbers are back.** So are the fold arrows and bookmark markers next to

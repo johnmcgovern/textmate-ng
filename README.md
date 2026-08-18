@@ -14,8 +14,9 @@ rather than rewritten. Three things are different from upstream:
 
 [`PROJECT_PHASES.md`](PROJECT_PHASES.md) is the roadmap and the progress tracker.
 
-**Status: alpha.** The current release is `v2026.7-alpha.7` (2026-08-06). Release
-notes for every build are in
+**Status: alpha.** Builds are published on
+[the releases page](https://github.com/johnmcgovern/textmate-ng/releases) as they
+are cut; release notes for every build, including the current one, are in
 [`Applications/TextMate/about/Changes.md`](Applications/TextMate/about/Changes.md).
 
 ## Screenshot

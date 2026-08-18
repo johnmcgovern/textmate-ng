@@ -125,8 +125,38 @@ NSString* const kSoftwareUpdateChannelCanary                                   =
 	}];
 }
 
+// Runs on the main thread, and calls its completion handler there, always.
+//
+// This used to be true only of the success path — the URL session's completion
+// dispatches to main before touching `checking` — while the two early returns
+// below called back synchronously on whatever queue the caller was on. From
+// -setAutomaticUpdateCheckEnabled: that queue is NSBackgroundActivityScheduler's
+// XPC queue, so a machine with no configured update channel took an early return
+// on a background thread and set `errorString` there.
+//
+// That is a KVO notification raised off the main thread, and since 81d5d8a7 the
+// observer on the other end is Cocoa Bindings driving a **@MainActor** Swift
+// getter (SoftwareUpdatePreferences.lastCheckDescription). Swift 6 checks the
+// executor and traps: EXC_BREAKPOINT in _dispatch_assert_queue_fail, reported
+// against alpha.13 as "Settings ▸ Software Update crashes". It needs the pane to
+// have been opened once, so the binding exists, and it fires whenever the
+// background activity next runs — about twenty seconds after launch, which is
+// why clicking through every pane during a smoke pass does not surface it.
+//
+// The hop goes here rather than in the setters because automatic KVO swizzles
+// the setter: -willChangeValueForKey: runs on the *calling* thread before the
+// body does, so marshalling inside -setChecking:/-setErrorString: would not move
+// the notification at all. Fixing the one method that owns every path is also
+// what stops `self.checking = YES` below — same hazard, reached only when a
+// channel *is* configured — and hands the completion handler a main-thread
+// guarantee it needs anyway, since callers present UI from it.
 - (void)checkForTestBuild:(BOOL)testBuild completionHandler:(void(^)(NSURL* remoteURL, NSString* remoteVersion, NSError* error))completionHandler
 {
+	if(!NSThread.isMainThread)
+		return dispatch_async(dispatch_get_main_queue(), ^{
+			[self checkForTestBuild:testBuild completionHandler:completionHandler];
+		});
+
 	NSString* updateChannel = testBuild ? kSoftwareUpdateChannelCanary : [NSUserDefaults.standardUserDefaults stringForKey:kUserDefaultsSoftwareUpdateChannelKey];
 	if(!updateChannel)
 		return completionHandler(nil, nil, [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: @"No channel configured." }]);

@@ -7,8 +7,20 @@
 // comparison a pointer set was doing.
 import AppKit
 
+// **Not `final`, and that is a bug fix rather than a style choice.** This class
+// is exported to ObjC through a hand-written OakTransitionViewController.h
+// (rule 23), and Preferences' bridging header imports it — so
+// PreferencesViewController subclasses what its module sees as an ordinary ObjC
+// class. ObjC has no `final`, so nothing stopped it, and Swift meanwhile
+// compiled the initialisers on the assumption that no subclass could exist.
+//
+// The result was an unbounded recursion between
+// `init(nibName:bundle:)` and its own @objc thunk — 58,000 frames and a
+// segfault the moment anyone opened Settings, in every build from alpha.10
+// onwards. `final` on a class that ObjC can see is only true if nothing ever
+// subclasses it, and nothing enforces that.
 @objc(OakTransitionViewController)
-final class OakTransitionViewController: NSViewController {
+class OakTransitionViewController: NSViewController {
 
 	private var animationCounter: UInt = 0
 	private var viewFrameConstraints: [NSLayoutConstraint]?

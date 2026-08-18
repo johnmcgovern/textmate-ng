@@ -13,7 +13,13 @@ private let kMASPreferencesSelectedViewKey = "MASPreferences Selected Identifier
 // = PreferencesViewController =
 // =============================
 
-final class PreferencesViewController: OakTransitionViewController {
+// Not `final`, for the same reason its superclass is not — and here the
+// subclasser is **KVO**, not source code. This is the window's
+// contentViewController, and +[NSWindow _windowWithContentViewController:] binds
+// the window title to it, which makes KVO build an NSKVONotifying_ subclass at
+// run time. Against a `final` Swift class that traps inside
+// swift_objc_classCopyFixupHandler before the window ever appears.
+class PreferencesViewController: OakTransitionViewController {
 	var selectedViewIdentifier: String? {
 		didSet {
 			guard oldValue != selectedViewIdentifier else { return }

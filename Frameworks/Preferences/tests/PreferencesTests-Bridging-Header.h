@@ -12,5 +12,9 @@
 #include "../../../Shared/PCH/prelude.cc"
 #import <Cocoa/Cocoa.h>
 
+// Preferences itself, for the construction test: `Preferences.sharedInstance` is
+// the exact call -[AppController showPreferences:] makes, and it is what crashed
+// in alpha.10 and alpha.11.
+#import "../src/Preferences.h"
 #import "../src/TerminalPreferences.h"
 #import "../src/Keys.h"

@@ -20,6 +20,7 @@ require "fileutils"
 require "json"
 require "set"
 require "shellwords"
+require_relative "optimize_icons"
 
 ROOT      = File.expand_path("..", __dir__)
 PROJ_PATH = File.join(ROOT, "TextMate.xcodeproj")
@@ -99,6 +100,7 @@ GEN_INCLUDE_NOU = "#{GEN_DIR}/include-nou" # variant farm w/o the <fw>.h umbrell
                                           # system-colliding frameworks on WebKit-pulling
                                           # targets (see header_farm_dirs / option 4)
 GEN_SWIFT       = "#{GEN_DIR}/swift"       # Swift-facing Clang module maps (Phase 3)
+GEN_ICONS       = "#{GEN_DIR}/icons"       # re-encoded document icons (ide/optimize_icons.rb)
 
 # System frameworks (lowercased) in the active SDK. A TM framework whose name
 # case-collides with one of these (e.g. `network` vs Apple's Network.framework)
@@ -131,6 +133,21 @@ LIB_LDFLAGS = {
 
 # ---------------------------------------------------------------------------
 specs = JSON.parse(File.read(File.join(ROOT, GEN_DIR, "specs.json")))
+
+# Ship re-encoded document icons instead of the submodule's originals: same
+# pixels, 2.5 MB smaller. Rewriting the spec inputs here rather than at each copy
+# phase means every consumer (the app, test resources, Pass 3's dedup) picks the
+# generated ones up without knowing this happened. See ide/optimize_icons.rb.
+ICON_MAP = optimize_icons(ROOT, specs.flat_map { |t|
+  (t["files"].to_a + t["copy"].to_a).flat_map { |e| e["inputs"].to_a }
+}.uniq.select { |i| i.start_with?("Applications/TextMate/icons/") && i.end_with?(".icns") }, GEN_ICONS)
+
+specs.each do |t|
+  (t["files"].to_a + t["copy"].to_a).each do |e|
+    e["inputs"] = e["inputs"].to_a.map { |i| ICON_MAP[i] || i }
+  end
+end
+
 BY_NAME = specs.each_with_object({}) { |t, h| h[t["name"]] = t }
 
 def kind(t)
@@ -553,6 +570,34 @@ specs.each do |t|
       # does NOT link (OakDebug is `require`d only in `config debug`). Without this,
       # executables fail to link with undefined oak::* symbols.
       extra["GCC_PREPROCESSOR_DEFINITIONS"] = ["$(inherited)", "NDEBUG"]
+      # Strip the shipped products. `xcodebuild build` never strips on its own —
+      # only the `install` action sets DEPLOYMENT_POSTPROCESSING — so every alpha
+      # up to v2026.8-alpha.12 shipped its full symbol table: 6.5 MB across the
+      # five executables, ~2 MB of the download. Measured 2026-08-18.
+      #
+      # STRIP_STYLE is "non-global" (`strip -x`) rather than the Xcode default
+      # "all": it is the safe style for every product kind here, including the
+      # .appex and the two .tmplugin bundles, and it accounts for all of the
+      # saving anyway — "all" removes external symbols on top and measured the
+      # same byte for byte.
+      #
+      # NOT applied to :lib. Stripping a static library removes the symbols the
+      # linker resolves against, so its dependents fail to link.
+      #
+      # dwarf-with-dsym because CrashReporter ships the OS's DiagnosticReports
+      # files as-is and the dSYM is what makes one readable afterwards. Measured,
+      # not assumed: `strip -x` keeps all 3746 ObjC method symbols (they carry
+      # N_NO_DEAD_STRIP), so a crash report still names `-[Foo bar]` on its own.
+      # What the dSYM adds on top is file/line, inlined frames, and the C++ side.
+      # Before this change the project emitted no dSYM at all for Release — the
+      # built-in default is plain "dwarf" — which is why the ones sitting in
+      # build/Release predated their binaries by two weeks.
+      unless k == :lib
+        extra["DEBUG_INFORMATION_FORMAT"]  = "dwarf-with-dsym"
+        extra["DEPLOYMENT_POSTPROCESSING"] = "YES"
+        extra["STRIP_INSTALLED_PRODUCT"]   = "YES"
+        extra["STRIP_STYLE"]               = "non-global"
+      end
     end
     apply_common_settings(config, extra)
     bs = config.build_settings

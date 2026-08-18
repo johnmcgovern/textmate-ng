@@ -48,6 +48,24 @@ def expand_vars(str, vars)
   str.gsub(/\$(?:\{(.+?)\}|(\w+))/) { vars[$1 || $2] || "" }
 end
 
+# Files a `files`/`copy` glob picks up but the app must not ship. Subtracted after
+# expansion rather than narrowed in the .rave glob, because the only glob involved
+# is `icons/*.icns` over the `document-icons` **submodule** — out of scope for
+# edits — and because a brace list is the wrong tool here for the same reason it is
+# for `headers src/*.h`: these filenames contain `#` and `+` (`C#.icns`,
+# `Obj-C++.icns`), so any hand-written enumeration is one typo from silently
+# shipping nothing.
+#
+# `icons/TextMate.icns` is upstream's classic app icon: 1.7 MB, and dead weight
+# since the alpha.5 rebrand. CFBundleIconFile is `TextMate-NG`, no document type
+# names it, and nothing in src/ reads it. It is incompressible, so it cost the
+# full 1.7 MB of every download through v2026.8-alpha.12. The byte-identical
+# backup kept deliberately at `branding/legacy/TextMate.icns` is unaffected —
+# `branding/*.icns` does not recurse.
+NOT_SHIPPED = [
+  "Applications/TextMate/icons/TextMate.icns",
+].freeze
+
 # Glob relative to dir, supporting {a,b} and ** (Dir.glob handles both).
 def glob_rel(pattern, dir)
   abs = File.join(ROOT, dir, pattern)
@@ -117,7 +135,7 @@ SPEC_FILES.each do |path|
     when "files", "copy"
       refs, globs = ev.partition { |e| e.start_with?("@") }
       dest = globs.pop
-      expanded = globs.flat_map { |g| glob_rel(g, dir) }
+      expanded = globs.flat_map { |g| glob_rel(g, dir) } - NOT_SHIPPED
       tgt[command] += [{ "dest" => dest, "inputs" => expanded, "refs" => refs }]
     when "add"
       var = ev.first

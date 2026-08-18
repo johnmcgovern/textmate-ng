@@ -374,6 +374,44 @@ so backfilling would mean rebuilding and re-notarizing alphas nobody ever had.
 Still not software update. Sparkle-style updating stays off while the fork has no
 server, and a GitHub Release is not a substitute for one.
 
+## Before cutting a release: the five-minute smoke pass
+
+**Write this list down and follow it, because the suite cannot replace it.**
+`v2026.8-alpha.12` exists because opening Settings crashed the app instantly, in
+every build from alpha.10 onwards, with 646 tests green the whole time. Two
+releases shipped it. The reason is embarrassing and worth stating plainly:
+**nothing had ever constructed that window** — not a test, not an app run. Every
+app-run checklist in this project has been about whichever framework was being
+ported, and Settings had not been touched since it was ported in July.
+
+So the pre-release pass is not "exercise the thing you changed" — that is what
+rule 8 already demands per commit. It is **open every top-level surface, whether
+or not you went near it**, because a window that is dead is dead from the first
+frame and takes two seconds to find:
+
+| Surface | How | What "alive" means |
+| --- | --- | --- |
+| Settings | ⌘, | Window appears; click through **every** toolbar pane |
+| File browser | open a git repo | Tree populates, SCM badges draw |
+| Find | ⌘F, and Find in Folder | Both windows appear; run one search |
+| Bundle Editor | Bundles ▸ Edit Bundles | Window appears, list populates |
+| Go to File | ⌘T | Panel appears, filtering responds |
+| Commit window | Bundles ▸ … ▸ Commit | Window appears (needs a dirty repo) |
+| HTML output | run any bundle command with HTML output | Window appears |
+| A document | open a source file | Text draws, **gutter has line numbers** |
+
+Two minutes if nothing is broken. The gutter line is there because that bug also
+shipped in every release until alpha.10 (see "The gutter bug" above), and it is
+the same failure shape: something structural, visible in the first second, that
+no test looks at.
+
+**A window that constructs is not the same as a window that works** — this pass
+is a smoke test, not coverage. It is aimed at exactly one class of defect: the
+whole surface being dead. That is the class that has now shipped twice.
+
+`bin/release` cannot check any of this, which is why it lives here rather than in
+the script.
+
 ## Guardrails
 
 - Edit the **generator** (`ide/*.rb`), not the generated `TextMate.xcodeproj`.

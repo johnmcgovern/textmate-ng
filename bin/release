@@ -22,6 +22,11 @@
 #   4. creates the release, marked pre-release, with notes taken from Changes.md
 #
 # Requires: gh, authenticated with repo scope (`gh auth status`).
+#
+# **Before running this, do the five-minute smoke pass** in
+# ide/NEXT_SESSION_HANDOFF.md ("Before cutting a release"). Nothing in this script
+# can tell you a whole window is dead on arrival — alpha.10 and alpha.11 both
+# shipped with Settings crashing on open, and every check below passed for both.
 set -e
 
 APP="build/Release/TextMate-NG.app"

@@ -32,29 +32,20 @@ import CoreServices
 // they are `pendingExpandedURLs` (stored) and `expandedURLs` (computed), and the
 // distinction is now enforced by them being different declarations rather than
 // by a comment.
-// **Where the delegate/data-source conformances are declared, and why not here.**
-// NSOutlineViewDataSource, NSOutlineViewDelegate, FileBrowserOutlineViewDelegate
-// and NSMenuDelegate are declared on the ObjC++ category in
-// FileBrowserViewControllerCxx.mm — the DocumentWindowController (Cxx)
-// arrangement — and not on this class.
-//
-// That is not tidiness. The peeled sections spell their parameters with the
-// concrete type the browser actually receives (`item: FileItem`, not
-// `item: Any`), which is what made them readable and is how each was verified.
-// Swift matches a witness by its *Swift* signature, so declaring the
-// conformances here makes every one of those a "conflicts with optional
-// requirement" error rather than a witness. Widening ten signatures and casting
-// inside each is the right end state, but it is a second change and this commit
-// is a translation — so the conformances stay where the ObjC++ class extension
-// had them, invisible to Swift, and AppKit keeps dispatching by selector exactly
-// as it did.
-//
-// The cost is at the three assignment sites below, which cannot say `= self`
-// and go through a checked cast instead. `guard case let` would hide a mistake;
-// these use `as!` so a dropped conformance is loud rather than a silently nil
-// data source.
+// The AppKit conformances are declared on the class, below. That was not true
+// when the flip landed: the peeled sections spelled their parameters with the
+// concrete type the browser receives (`item: FileItem`), which makes each of
+// them "conflicts with optional requirement" the moment Swift sees the
+// conformance, so they lived on an ObjC category instead and the three
+// assignment sites went through a `+wire…` helper. Fourteen signatures were
+// widened to the protocol's own types afterwards, which is what let all of that
+// be deleted — see rule 47.
 @objc(FileBrowserViewController)
-class FileBrowserViewController: NSViewController, @preconcurrency OakUserDefaultsObserver {
+class FileBrowserViewController: NSViewController, NSMenuDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate,
+                                 // @preconcurrency on these two only: the compiler reports it as
+                                 // having no effect on the three AppKit protocols above, and warns
+                                 // if it is written there anyway.
+                                 @preconcurrency OakUserDefaultsObserver, @preconcurrency FileBrowserOutlineViewDelegate {
 
 	// ==========================================================
 	// = Private state (was the class extension in the .mm)     =
@@ -340,19 +331,15 @@ class FileBrowserViewController: NSViewController, @preconcurrency OakUserDefaul
 		locationMenuItem.bind(.image, to: self, withKeyPath: "fileReference.image", options: nil)
 		currentLocationMenuItem = locationMenuItem
 
-		// Installed through the ObjC helper rather than `= self`. The conformances
-		// live on the ObjC category (see the note above the class), so this does not
-		// typecheck in Swift — and casting to make it typecheck fails at run time
-		// once KVO has swizzled the class, which by this line it has. The header of
-		// FileBrowserViewControllerSupport spells the whole trap out.
 		let outlineView = view.outlineView!
-		FileBrowserViewControllerSupport.wireOutlineView(outlineView, toController: self)
+		outlineView.dataSource   = self
+		outlineView.delegate     = self
 		outlineView.target       = self
 		outlineView.action       = #selector(didSingleClickOutlineView(_:))
 		outlineView.doubleAction = #selector(didDoubleClickOutlineView(_:))
 
 		outlineView.menu = NSMenu()
-		FileBrowserViewControllerSupport.wireMenu(outlineView.menu!, toDelegate: self)
+		outlineView.menu?.delegate = self
 
 		let headerView = view.headerView!
 		headerView.goBackButton?.target    = self
@@ -389,9 +376,7 @@ class FileBrowserViewController: NSViewController, @preconcurrency OakUserDefaul
 		actionsView.scmButton?.target       = self
 		actionsView.scmButton?.action       = #selector(goToSCMDataSource(_:))
 
-		if let actionsMenu = actionsView.actionsPopUpButton?.menu {
-			FileBrowserViewControllerSupport.wireMenu(actionsMenu, toDelegate: self)
-		}
+		actionsView.actionsPopUpButton?.menu?.delegate = self
 
 		return view
 	}

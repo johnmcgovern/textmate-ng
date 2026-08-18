@@ -227,12 +227,12 @@ extension FileBrowserViewController {
 	// one carries the flag.
 
 	@objc(outlineView:willExpandItem:expandChildren:)
-	func outlineView(_ outlineView: NSOutlineView, willExpandItem item: FileItem?, expandChildren flag: Bool) {
+	func outlineView(_ outlineView: NSOutlineView, willExpandItem item: Any?, expandChildren flag: Bool) {
 		expandingChildrenCounter += flag ? 1 : 0
 	}
 
 	@objc(outlineView:didExpandItem:expandChildren:)
-	func outlineView(_ outlineView: NSOutlineView, didExpandItem item: FileItem?, expandChildren flag: Bool) {
+	func outlineView(_ outlineView: NSOutlineView, didExpandItem item: Any?, expandChildren flag: Bool) {
 		expandingChildrenCounter -= flag ? 1 : 0
 	}
 

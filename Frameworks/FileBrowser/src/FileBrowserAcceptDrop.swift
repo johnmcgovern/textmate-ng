@@ -24,7 +24,8 @@ private func filter(_ mask: NSDragOperation) -> NSDragOperation {
 
 extension FileBrowserViewController {
 	@objc(outlineView:validateDrop:proposedItem:proposedChildIndex:)
-	func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo, proposedItem item: FileItem?, proposedChildIndex childIndex: Int) -> NSDragOperation {
+	func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo, proposedItem item: Any?, proposedChildIndex childIndex: Int) -> NSDragOperation {
+		let item = item as? FileItem
 		let parent: FileItem? = item ?? fileItem
 		guard let dropURL = parent?.resolvedURL.filePathURL,
 		      self.outlineView.isExpandable(item),
@@ -64,8 +65,8 @@ extension FileBrowserViewController {
 	}
 
 	@objc(outlineView:acceptDrop:item:childIndex:)
-	func outlineView(_ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: FileItem?, childIndex: Int) -> Bool {
-		let newParent: FileItem? = item ?? fileItem
+	func outlineView(_ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: Any?, childIndex: Int) -> Bool {
+		let newParent: FileItem? = item as? FileItem ?? fileItem
 		let op = filter(info.draggingSourceOperationMask)
 		guard op != [], let newParent, self.outlineView.isExpandable(newParent), newParent.resolvedURL.isFileURL else {
 			return false
@@ -94,7 +95,7 @@ extension FileBrowserViewController {
 	}
 
 	@objc(outlineView:didTrashURLs:)
-	func outlineView(_ outlineView: NSOutlineView, didTrashURLs someURLs: [NSURL]) {
-		_ = performOperation(.trash, sourceURLs: someURLs, destinationURLs: nil, unique: false, select: false)
+	func outlineView(_ outlineView: NSOutlineView, didTrashURLs someURLs: [URL]) {
+		_ = performOperation(.trash, sourceURLs: someURLs.map { $0 as NSURL }, destinationURLs: nil, unique: false, select: false)
 	}
 }

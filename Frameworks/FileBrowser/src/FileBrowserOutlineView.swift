@@ -16,15 +16,15 @@ import AppKit
 @objc(FileBrowserOutlineView)
 final class FileBrowserOutlineView: NSOutlineView {
 	override func expandItem(_ item: Any?, expandChildren: Bool) {
-		(delegate as? FileBrowserOutlineViewDelegate)?.outlineView(self, willExpandItem: item as Any, expandChildren: expandChildren)
+		(delegate as? FileBrowserOutlineViewDelegate)?.outlineView(self, willExpandItem: item, expandChildren: expandChildren)
 		super.expandItem(item, expandChildren: expandChildren)
-		(delegate as? FileBrowserOutlineViewDelegate)?.outlineView(self, didExpandItem: item as Any, expandChildren: expandChildren)
+		(delegate as? FileBrowserOutlineViewDelegate)?.outlineView(self, didExpandItem: item, expandChildren: expandChildren)
 	}
 
 	override func collapseItem(_ item: Any?, collapseChildren: Bool) {
-		(delegate as? FileBrowserOutlineViewDelegate)?.outlineView(self, willCollapseItem: item as Any, collapseChildren: collapseChildren)
+		(delegate as? FileBrowserOutlineViewDelegate)?.outlineView(self, willCollapseItem: item, collapseChildren: collapseChildren)
 		super.collapseItem(item, collapseChildren: collapseChildren)
-		(delegate as? FileBrowserOutlineViewDelegate)?.outlineView(self, didCollapseItem: item as Any, collapseChildren: collapseChildren)
+		(delegate as? FileBrowserOutlineViewDelegate)?.outlineView(self, didCollapseItem: item, collapseChildren: collapseChildren)
 	}
 
 	@objc func showContextMenu(_ sender: Any?) {

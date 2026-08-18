@@ -35,17 +35,23 @@ extension FileBrowserViewController {
 	// that state, which is why -updateMenu: reached it from a test.
 
 	@objc(outlineView:numberOfChildrenOfItem:)
-	func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: FileItem?) -> Int {
-		let parent: FileItem? = item ?? fileItem
+	func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
+		let parent: FileItem? = item as? FileItem ?? fileItem
 		return parent?.arrangedChildren?.count ?? 0
 	}
 
 	@objc(outlineView:child:ofItem:)
-	func outlineView(_ outlineView: NSOutlineView, child childIndex: Int, ofItem item: FileItem?) -> Any! {
+	// `-> Any!`, not `-> Any`, even though the protocol requirement is
+	// non-optional. An implicitly-unwrapped return still witnesses it, and it is
+	// the only spelling that can answer **nil** — which is what the ObjC++ did and
+	// what t_file_browser_view_controller.mm pins. Returning NSNull() instead
+	// compiles, reads as harmless, and fails that test: rule 33, caught by the one
+	// assertion written for it.
+	func outlineView(_ outlineView: NSOutlineView, child childIndex: Int, ofItem item: Any?) -> Any! {
 		// The ObjC++ subscripted a possibly-nil array and answered nil; a literal
 		// translation would trap, so the nil is explicit. AppKit is not supposed
 		// to ask out of range — "not supposed to" is what rule 33 is about.
-		let parent: FileItem? = item ?? fileItem
+		let parent: FileItem? = item as? FileItem ?? fileItem
 		guard let children = parent?.arrangedChildren, childIndex < children.count else {
 			return nil
 		}
@@ -53,29 +59,33 @@ extension FileBrowserViewController {
 	}
 
 	@objc(outlineView:isItemExpandable:)
-	func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: FileItem) -> Bool {
+	func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
+		guard let item = item as? FileItem else { return false }
 		return item.isDirectory && (canExpandPackages || !item.package) || (canExpandSymbolicLinks && item.linkToDirectory && (canExpandPackages || !item.linkToPackage))
 	}
 
 	@objc(outlineView:isGroupItem:)
-	func outlineView(_ outlineView: NSOutlineView, isGroupItem item: FileItem) -> Bool {
+	func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {
+		guard let item = item as? FileItem else { return false }
 		return item.URL.scheme == "scm"
 	}
 
 	@objc(outlineView:shouldSelectItem:)
-	func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: FileItem) -> Bool {
+	func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
+		guard let item = item as? FileItem else { return false }
 		return item.URL.isFileURL
 	}
 
 	@objc(outlineView:objectValueForTableColumn:byItem:)
-	func outlineView(_ outlineView: NSOutlineView, objectValueFor tableColumn: NSTableColumn?, byItem item: FileItem?) -> Any? {
+	func outlineView(_ outlineView: NSOutlineView, objectValueFor tableColumn: NSTableColumn?, byItem item: Any?) -> Any? {
 		return item
 	}
 
 	@objc(outlineView:pasteboardWriterForItem:)
-	func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: FileItem) -> NSPasteboardWriting? {
+	func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
 		// -[NSURL filePathURL] imports as a bridged `URL?`, which is a struct and
 		// conforms to nothing; the ObjC++ handed the pasteboard the NSURL itself.
+		guard let item = item as? FileItem else { return nil }
 		return item.URL.filePathURL as NSURL?
 	}
 }

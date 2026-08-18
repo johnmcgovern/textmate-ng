@@ -554,6 +554,40 @@ void test_expand_urls_drains_its_completion_handlers ()
 }
 
 // ==============================================================
+// = The one drag method a test can actually reach              =
+// ==============================================================
+//
+// -outlineView:pasteboardWriterForItem: is the method that decides whether a row
+// can be dragged **at all**: answer nil and AppKit starts a rubber-band
+// selection instead of a drag session, which is indistinguishable from "drag and
+// drop is broken" and is invisible to every other test here.
+//
+// Unlike validateDrop/acceptDrop it needs no NSDraggingInfo, so it is the one
+// part of the drag path a test can drive (rule 34 is why the other two cannot).
+// Worth having: when the data-source signatures were widened to take `Any` so the
+// conformances could move into Swift, this is the method whose `as? FileItem`
+// would silently disable dragging if it were ever wrong.
+void test_outline_view_vends_a_pasteboard_writer_for_a_file ()
+{
+	FileBrowserViewController* controller = [FileBrowserViewController new];
+	NSOutlineView* outlineView = controller.outlineView;
+	OAK_ASSERT(outlineView != nil);
+
+	NSURL* url = [NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES];
+	FileItem* item = [FileItem fileItemWithURL:url];
+	OAK_ASSERT(item != nil);
+
+	id <NSOutlineViewDataSource> dataSource = (id <NSOutlineViewDataSource>)controller;
+	id writer = [dataSource outlineView:outlineView pasteboardWriterForItem:item];
+
+	// Non-nil is the whole point — nil here means no drag session. It is the
+	// item's file URL, which is what the pasteboard carries to other apps.
+	OAK_ASSERT(writer != nil);
+	OAK_ASSERT([writer isKindOfClass:[NSURL class]]);
+	OAK_ASSERT([(NSURL*)writer isEqual:item.URL.filePathURL]);
+}
+
+// ==============================================================
 // = The pending expand/select sets, which are not the accessors =
 // = of the same name                                            =
 // ==============================================================

@@ -12,7 +12,7 @@ import AppKit
 // wired up right here.
 extension FileBrowserViewController {
 	@objc(outlineView:viewForTableColumn:item:)
-	func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: FileItem) -> NSView? {
+	func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
 		// The delegate declares tableColumn nullable and the ObjC++ read
 		// .identifier off it unguarded, which would have handed makeView a nil
 		// identifier. AppKit passes the outline column here in practice; this

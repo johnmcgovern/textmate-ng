@@ -100,29 +100,6 @@
 - (nullable NSURL*)newFolder:(nullable id)sender;
 @end
 
-// **The class's AppKit conformances are declared here**, exactly where the
-// ObjC++ class extension used to declare them, and this is load-bearing rather
-// than incidental.
-//
-// The peeled Swift sections spell their parameters with the concrete type the
-// browser receives — `item: FileItem` rather than `item: Any` — so declaring
-// these on the Swift class turns every one of those methods into a "conflicts
-// with optional requirement" error instead of a witness (the Swift-side face of
-// rule 42). Declaring them from ObjC keeps them invisible to Swift and visible
-// to the runtime, which is all AppKit needs: it dispatches by selector, and
-// -conformsToProtocol: answers YES because of this line.
-//
-// That last part is what the three `as!` casts in
-// FileBrowserViewController.swift depend on. Delete a protocol from this list
-// and those casts start trapping — which is the intended failure, and much
-// better than the browser silently never populating.
-// NSTextFieldDelegate is deliberately **not** in this list: FileBrowserTableCells.swift
-// already declares that one on the Swift side, and re-stating it here makes
-// clang warn that a category implements a protocol method the primary class
-// also implements.
-@interface FileBrowserViewController (CxxConformances) <NSMenuDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate, FileBrowserOutlineViewDelegate>
-@end
-
 @implementation FileBrowserViewController (Cxx)
 
 - (std::map<std::string, std::string>)variables

@@ -41,6 +41,21 @@ final class PreferencesWindowTests: XCTestCase {
 		XCTAssertNotNil(controller?.window)
 	}
 
+	// **No test loads a pane's view, and that is a known gap rather than an
+	// oversight.** Attempted 2026-08-18 and reverted: touching `pane.view` runs
+	// loadView, whose `bind(…, to: self, …)` calls make AppKit read the value
+	// straight back, which routes through PreferencesPane.value(forUndefinedKey:)
+	// into settings_t::raw_get — and that asserts on default_settings_path() in a
+	// process that never called settings_t::set_default_settings_path. The test
+	// bundle cannot: that is a C++ API, this bundle compiles Swift only
+	// (`tests tests/*.swift`), so reaching it needs an ObjC++ shim and a glob
+	// change. Worth doing, because loadView is where the alpha.12 crash lived and
+	// nothing covers it; not worth doing as a side quest.
+	//
+	// A test that crashes the runner is worse than no test: xctest reports
+	// "Restarting after unexpected exit" and then counts the *remaining* tests as
+	// the total, so the suite goes green while silently running fewer.
+
 	/// `sharedInstance` is a `static let`, so a second read must hand back the
 	/// same object rather than building a second window.
 	@MainActor

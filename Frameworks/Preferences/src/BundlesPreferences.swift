@@ -10,7 +10,15 @@ private let kTableColumnIdentifierDescription = NSUserInterfaceItemIdentifier("D
 // = BundleInstallHelper =
 // =======================
 
-@objc(BundleInstallHelper) final class BundleInstallHelper: NSObject {
+// **Not `final`.** This class is a Cocoa Bindings target for its own properties
+// (`bind(…, to: self, …)`), so AppKit registers KVO on it and Foundation builds
+// an NSKVONotifying_ subclass of it at run time. That is the rule aaf4395586
+// earned — a Swift class ObjC can see must not be `final` if anything subclasses
+// it, and KVO counts — applied to the cases that commit's survey missed: it
+// looked for *source* subclassing, and "binds to self" is the marker for the
+// runtime kind. Symptom is not a clean trap but intermittent heap corruption
+// surfacing later at unrelated allocations (2026-08-18).
+@objc(BundleInstallHelper) class BundleInstallHelper: NSObject {
 	// Main-thread-only by convention, exactly as the ObjC singleton was: it is
 	// only ever touched from bindings and from BundlesManager's completion
 	// handlers, both of which run on the main thread.
@@ -107,7 +115,10 @@ extension TMBundle {
 // = BundlesPreferences =
 // ======================
 
-@objc(BundlesPreferences) final class BundlesPreferences: PreferencesPane, NSTableViewDelegate {
+// **Not `final`** — same reason as the panes above: `scopeBar.bind(…, to: self,
+// …)` makes KVO build an NSKVONotifying_ subclass of this class at run time.
+// See the note on BundleInstallHelper and rule aaf4395586.
+@objc(BundlesPreferences) class BundlesPreferences: PreferencesPane, NSTableViewDelegate {
 	private var enabledCategories = Set<String>()
 	private let arrayController = NSArrayController()
 	private let scopeBar = OakScopeBarViewController()

@@ -1,6 +1,14 @@
 import AppKit
 
-@objc(SoftwareUpdatePreferences) final class SoftwareUpdatePreferences: PreferencesPane {
+// **Not `final`.** This class is a Cocoa Bindings target for its own properties
+// (`bind(…, to: self, …)`), so AppKit registers KVO on it and Foundation builds
+// an NSKVONotifying_ subclass of it at run time. That is the rule aaf4395586
+// earned — a Swift class ObjC can see must not be `final` if anything subclasses
+// it, and KVO counts — applied to the cases that commit's survey missed: it
+// looked for *source* subclassing, and "binds to self" is the marker for the
+// runtime kind. Symptom is not a clean trap but intermittent heap corruption
+// surfacing later at unrelated allocations (2026-08-18).
+@objc(SoftwareUpdatePreferences) class SoftwareUpdatePreferences: PreferencesPane {
 	private var relativeDateUserDefaultsObserver: NSObjectProtocol?
 	private var relativeDateUpdateTimer: Timer?
 

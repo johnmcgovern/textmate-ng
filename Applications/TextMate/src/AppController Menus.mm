@@ -93,11 +93,68 @@ static NSString* NameForLocaleIdentifier (NSString* languageCode)
 
 		[NSUserDefaults.standardUserDefaults removeObjectForKey:@"changeThemeBasedOnAppearance"];
 	}];
+
+	// Apply the theme appearance to the *application*, not just the editor. See
+	// +applyThemeAppearance. Both on the main queue deliberately: user-defaults
+	// change notifications are delivered on whichever thread made the change —
+	// including another process — and NSApp.appearance is main-thread-only. That
+	// is the same hazard that shipped as the alpha.13 Software Update crash.
+	[NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification object:NSApp queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* notification){
+		[self applyThemeAppearance];
+	}];
+
+	[NSNotificationCenter.defaultCenter addObserverForName:NSUserDefaultsDidChangeNotification object:NSUserDefaults.standardUserDefaults queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* notification){
+		[self applyThemeAppearance];
+	}];
+}
+
+// Make the window chrome follow the chosen theme appearance.
+//
+// **This diverges from upstream on purpose.** Upstream treats `themeAppearance`
+// as picking an editor *theme* and lets AppKit chrome follow the system, so on a
+// light-appearance Mac choosing Dark gives a black editor inside a white window
+// with a white file browser. Nothing in this project's history ever set
+// NSApp.appearance — checked with `git log -S` across all branches — so this is
+// new behaviour rather than a restored regression. Reported 2026-08-18 as
+// "the sidebar stays light in dark mode", which is a fair reading of it.
+//
+// `nil` is the important case: Auto must leave NSApp.appearance unset so the app
+// follows the system, which is what makes -viewDidChangeEffectiveAppearance fire
+// and OakTextView re-resolve its theme. Setting an explicit appearance instead
+// would pin it and break Auto.
+//
+// No feedback loop, and the reason is worth stating: -effectiveThemeUUID only
+// consults -effectiveAppearance when the setting is Auto, and Auto is exactly
+// the case where this sets nothing. An explicit Light/Dark never round-trips
+// through the appearance it just set.
+//
+// The guard is not an optimisation. Assigning NSApp.appearance re-broadcasts
+// -viewDidChangeEffectiveAppearance to every view in the app, and this runs on
+// every user-defaults change — which is frequent.
++ (void)applyThemeAppearance
+{
+	NSString* setting = [NSUserDefaults.standardUserDefaults stringForKey:@"themeAppearance"];
+
+	NSAppearanceName name = nil;
+	if([setting isEqualToString:@"dark"])
+		name = NSAppearanceNameDarkAqua;
+	else if([setting isEqualToString:@"light"])
+		name = NSAppearanceNameAqua;
+
+	NSAppearanceName currentName = NSApp.appearance.name; // nil when never set
+	if(currentName == name || [currentName isEqualToString:name])
+		return;
+
+	NSApp.appearance = name ? [NSAppearance appearanceNamed:name] : nil;
 }
 
 - (void)takeThemeAppearanceFrom:(id)sender
 {
 	[NSUserDefaults.standardUserDefaults setObject:[sender representedObject] forKey:@"themeAppearance"];
+	// The defaults notification would reach +applyThemeAppearance anyway; calling
+	// it here makes the menu feel synchronous. Idempotent, so the later
+	// notification is a no-op.
+	[AppController applyThemeAppearance];
 }
 
 - (void)takeUniversalThemeUUIDFrom:(id)sender

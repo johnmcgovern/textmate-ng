@@ -19,14 +19,18 @@ about that port, which is a fair warning about how much to trust the rest._
   The old note here said the id "must not move again"; it moved once more, on
   purpose, to match the product name while the audience was still alpha-only.
   Now it does match, so there is no third move worth making.
-- **Six releases are published:** alpha.7 through alpha.12, the newest
-  `v2026.8-alpha.12` on 2026-08-18. (alpha.3–alpha.5 shipped 2026-08-02/03 but
-  were never backfilled to GitHub — see the end of "Distribution".) **2 commits
-  are unreleased as of 2026-08-18**, both the package-size work below, which is
-  worth a release only when something else needs one. Count what is unreleased
-  with `git rev-list --count "$(git tag | sort -V | tail -1)"..HEAD` rather than
-  by assertion — that number has been stated wrong here three times, and the
-  bullet naming the releases was itself stale for five of them.
+- **Eight releases are published:** alpha.7 through alpha.14, the newest
+  `v2026.8-alpha.14` on 2026-08-18. (alpha.3–alpha.5 shipped 2026-08-02/03 but
+  were never backfilled to GitHub — see the end of "Distribution".) **3 commits
+  are unreleased and unpushed as of 2026-08-18** — the SCMManager shim, the
+  preference-class `final` fix, and the window-chrome theme change. Count what is
+  unreleased with `git rev-list --count "$(git tag | sort -V | tail -1)"..HEAD`
+  rather than by assertion — that number has been stated wrong here three times,
+  this bullet was stale for five releases and then again for two, and it is
+  cheaper to run the command than to trust the sentence.
+  **Do not cut alpha.15 until the crashes below are understood.** alpha.14 shipped
+  with them knowingly; shipping again without new information would be a choice to
+  keep a known crash in front of users rather than an oversight.
 - **Builds are downloadable.** `bin/release` publishes a notarized build to
   GitHub Releases. The flow has been run six times and verified from the outside
   — download the published asset, set `com.apple.quarantine`, check `spctl`. As
@@ -39,8 +43,8 @@ about that port, which is a fair warning about how much to trust the rest._
   last port left `FindSupport.mm` (271) behind, which is why the directory fell
   by 1131 and not by 1402. What it cost, and the four new rules it earned, are in
   `ide/FIND_PORT_HANDOFF.md`.
-- **649 tests across 36 bundles**, green (2026-08-18; 76 Find, 51
-  DocumentWindow, 29 OakAppKit). Counted from `Test Case … started` lines, which
+- **658 tests across 36 bundles**, green (measured 2026-08-18 at `7dde4c06`;
+  76 Find, 51 DocumentWindow, 29 OakAppKit). Counted from `Test Case … started` lines, which
   is what the rest of this bullet has been telling people to do — and which is
   how the 58 previously claimed for DocumentWindow was caught: it was never
   measured, the bundle ran 48. Re-measure by summing each bundle's own `Executed N tests`; do not
@@ -139,10 +143,14 @@ Two diagnostic traps that cost real time, both worth remembering:
 
 ## Documentation map (read in this order)
 
-1. **`ide/FIND_PORT_HANDOFF.md`, the numbered rules at the end** — 22 of them, and
-   they are the checklist for every remaining port. Rules 15–22 were all earned
-   by something that compiled, passed, and was still wrong. Read these *before*
-   surveying a framework, not after.
+1. **The numbered rules — all 49 of them, and they live in TWO files.** Rules
+   1–22 are at the end of `ide/FIND_PORT_HANDOFF.md`; rules **23–49** continue in
+   `ide/FILEBROWSER_PORT_HANDOFF.md` under "Rules earned this session
+   (continuing FIND_PORT_HANDOFF's list at 23)". This entry said "22 of them" and
+   pointed at one file, so anyone following the map read a third of the list and
+   believed they had read all of it. **Read both, before surveying a framework.**
+   Consolidating them into one file is worth doing — the split is an accident of
+   which session earned which rule, and it will mislead again.
 2. `PROJECT_PHASES.md` — the 6-phase roadmap and the running record. End state =
    Swift app shell over the kept C++ core. **Phase 4 is current** (Phases 1–3 and
    2.5/2.6 are done); Phase 6, the core engine, is deliberately skipped, which is
@@ -445,9 +453,40 @@ Also found, and not a bug to fix: `SCMManager`-unrelated, `SoftwareUpdate`'s
 errors with "No channel named 'release'". That is consistent with update being
 deliberately off, but it does mean the crashing path was the only path.
 
+## START HERE: stabilise before porting anything else
+
+The recommendation at the end of 2026-08-18, with the reasoning, so it can be
+disagreed with rather than just followed. **Three things, in this order, and none
+of them is a port.**
+
+**1. The two crashes below.** They are the only live user-facing risk, alpha.14 is
+public with them, and the next step is instrumentation that has not been run yet.
+Over-release bugs also get harder as more lands: every port adds candidate
+owners, so the cheapest day to find this is the one where the fewest commits
+stand between the last known-good build and now.
+
+**2. The `final` audit (rule 49).** This class of bug has now shipped **twice** —
+`aaf43955` and `dc66d10d` — and until 2026-08-18 it had no rule number, so it was
+being rediscovered rather than checked for. ~48 files still contain `final class`.
+Sweeping them against "can ObjC reach this, or can KVO subclass it?" is mechanical,
+bounded, and turns a recurring reactive crash into a one-time check. Worth doing
+in the same session as the crashes because it is the same failure mode — a
+lifetime/dispatch assumption that is false across the language boundary — and one
+of the two crash stacks is `objc_opt_class`.
+
+**3. Consolidate the rules into one file.** They are split 1–22 / 23–49 across two
+handoffs, and the documentation map advertised "22 of them" pointing at one file,
+so a session that followed the map read a third of the list believing it had read
+all of it. That is a navigation bug in the one document whose whole job is to stop
+things being rediscovered.
+
+Only then go back to porting. `FileBrowserDiskOperations` (530) and
+`FileBrowserViewController` (2328) are what remain there, and neither is going
+anywhere.
+
 ## OPEN: two unexplained EXC_BAD_ACCESS crashes (2026-08-18)
 
-**Shipped in alpha.14 knowingly. Start here next session.**
+**Shipped in alpha.14 knowingly.**
 
 Two crashes, both in builds made today, both `EXC_BAD_ACCESS` on the main thread,
 both roughly 20–25 seconds after launch, neither reproducible:

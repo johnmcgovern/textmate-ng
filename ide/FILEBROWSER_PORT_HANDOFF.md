@@ -677,6 +677,23 @@ knew.
     translating it** — and say in the commit that the behaviour changed, because
     "moved verbatim" would be a false claim.
 
+49. **`final` on an `@objc` class is a promise ObjC cannot keep, and breaking it
+    is a crash, not a warning.** This has now shipped twice: `aaf43955`
+    (OakTransitionViewController, subclassed by PreferencesViewController — an
+    unbounded recursion between `init(nibName:bundle:)` and its own @objc thunk,
+    ~58,000 frames, on every Settings open in alpha.10 **and** alpha.11) and
+    `dc66d10d` (six preference classes, which KVO subclasses *at run time* — so
+    the subclass never appears in any source file you could grep). ObjC has no
+    `final`; nothing stops a subclass, and Swift meanwhile compiles initialisers
+    and dispatch on the assumption that none exists.
+    **Do not put `final` on a class that ObjC can see** — that means anything
+    `@objc(Name)` with a hand-written `.h` (rule 23), anything a nib instantiates,
+    and anything KVO observes. `final` is only sound where the class is
+    Swift-visible only. There are still ~48 files containing `final class`;
+    auditing them against "can ObjC reach this, or can KVO subclass it?" is a
+    mechanical sweep nobody has done, and it is the third occurrence of this bug
+    that the sweep would prevent.
+
 ## One build gotcha that is not a code error
 
 Ad-hoc CodeSign of **unrelated** test bundles sometimes fails with

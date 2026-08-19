@@ -31,7 +31,7 @@ private func OakCreateFolderPopUpButton() -> NSPopUpButton {
 }
 
 @objc(OFBHeaderView)
-final class OFBHeaderView: NSVisualEffectView {
+class OFBHeaderView: NSVisualEffectView {
 	@objc var folderPopUpButton: NSPopUpButton!
 	@objc var goBackButton: NSButton!
 	@objc var goForwardButton: NSButton!

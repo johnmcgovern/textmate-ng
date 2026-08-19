@@ -16,7 +16,7 @@ import Foundation
 // is not the place to change it — only `matches` was ever guarded, and it still
 // is. Recorded rather than quietly fixed.
 @objc(FFDocumentSearch)
-final class FFDocumentSearch: NSObject, @unchecked Sendable {
+class FFDocumentSearch: NSObject, @unchecked Sendable {
 
 	@objc var searchString: String?
 	@objc var options: FFFindOptions = []

@@ -10,7 +10,7 @@ import os
 // share a name, which is the `namespace TMFileReference` collision.
 
 @objc(TMFileReference)
-final class TMFileReference: NSObject {
+class TMFileReference: NSObject {
 
 	// Interned per URL, weakly, so every view of one file shares an object and
 	// therefore its KVO notifications — that sharing is the class's whole

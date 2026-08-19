@@ -4,7 +4,7 @@
 // the view is layer-backed (cheap, no redraw), and drawRect: otherwise.
 import AppKit
 
-@objc(OakBox) final class OakBox: NSView {
+@objc(OakBox) class OakBox: NSView {
 	@objc var fillColor: NSColor? {
 		didSet { needsDisplay = true }
 	}

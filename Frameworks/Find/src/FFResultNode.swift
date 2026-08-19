@@ -13,7 +13,7 @@ import AppKit
 // from Swift and none of it is stateful.
 
 @objc(FFResultNode)
-final class FFResultNode: NSObject {
+class FFResultNode: NSObject {
 
 	// Weak, as in the ObjC++: a parent owns its children through `children`, and
 	// a two-way strong link would retain the whole tree forever.

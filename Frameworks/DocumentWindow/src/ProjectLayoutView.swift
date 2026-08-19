@@ -19,7 +19,7 @@ private let kUserDefaultsFileBrowserWidthKey = "fileBrowserWidth"
 private let kUserDefaultsHTMLOutputSizeKey   = "htmlOutputSize"
 
 @objc(ProjectLayoutView)
-final class ProjectLayoutView: NSView, @preconcurrency OakUserDefaultsObserver {
+class ProjectLayoutView: NSView, @preconcurrency OakUserDefaultsObserver {
 
 	// +initialize has no Swift spelling. Registering on first construction is
 	// equivalent here because nothing reads these keys before a layout view

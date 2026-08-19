@@ -12,7 +12,7 @@ import AppKit
 
 @MainActor
 @objc(BundleEditor)
-final class BundleEditor: NSWindowController {
+class BundleEditor: NSWindowController {
 	@objc static let sharedInstance = BundleEditor()
 
 	// MARK: - Item kinds

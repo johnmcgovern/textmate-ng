@@ -15,7 +15,7 @@ import AppKit
 private let kRecordingPlaceholderString = "…"
 
 @objc(OakKeyEquivalentView)
-final class OakKeyEquivalentView: OakView {
+class OakKeyEquivalentView: OakView {
 
 	private var clearButton: OakRolloverButton?
 	private var eventMonitor: Any?

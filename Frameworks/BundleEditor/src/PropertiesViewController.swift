@@ -10,7 +10,7 @@
 //   * the `properties` key path the object controller's content is bound to
 import AppKit
 
-@objc(PropertiesViewController) final class PropertiesViewController: NSViewController {
+@objc(PropertiesViewController) class PropertiesViewController: NSViewController {
 	@IBOutlet private var objectController: NSObjectController!
 	@IBOutlet private var alignmentView: NSView!
 	@IBOutlet private var keyEquivalentView: OakKeyEquivalentView!

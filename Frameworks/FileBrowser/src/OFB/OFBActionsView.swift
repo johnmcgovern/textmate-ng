@@ -20,7 +20,7 @@ private func OakCreateImageButton(_ image: NSImage?) -> NSButton {
 }
 
 @objc(OFBActionsView)
-final class OFBActionsView: NSVisualEffectView {
+class OFBActionsView: NSVisualEffectView {
 	@objc var createButton: NSButton!
 	@objc var actionsPopUpButton: NSPopUpButton!
 	@objc var reloadButton: NSButton!

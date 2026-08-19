@@ -95,7 +95,7 @@ private func finderTagSwatchImage(size: NSSize, labelColor: NSColor?, selected: 
 }
 
 @objc(OFBFinderTagsChooser)
-final class OFBFinderTagsChooser: NSView {
+class OFBFinderTagsChooser: NSView {
 	@objc weak var target: AnyObject?
 	@objc var action: Selector?
 	@objc var chosenTag: OakFinderTag?

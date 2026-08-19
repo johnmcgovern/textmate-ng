@@ -5,7 +5,7 @@
 // Ported from Chris Thomas's 2005 ObjC original (MIT license).
 import AppKit
 
-final class CWStatusStringTransformer: ValueTransformer {
+class CWStatusStringTransformer: ValueTransformer {
 	static func register() {
 		ValueTransformer.setValueTransformer(CWStatusStringTransformer(), forName: NSValueTransformerName("CWStatusStringTransformer"))
 	}

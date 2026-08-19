@@ -76,7 +76,7 @@ private func pathsShareInode(_ lhs: String, _ rhs: String) -> Bool {
 // the `parentNode` chain, every watcher above it — from being collected.
 // -removeObserver: breaks the cycle. Dropping the token without calling it
 // leaks the chain, exactly as the ObjC++ did.
-final class KEventManagerCallback: NSObject {
+class KEventManagerCallback: NSObject {
 	let handler: (URL, UInt) -> Void
 	var node: KEventManagerNode?
 
@@ -94,7 +94,7 @@ final class KEventManagerCallback: NSObject {
 // = KEventManagerNode =
 // =====================
 
-final class KEventManagerNode: NSObject {
+class KEventManagerNode: NSObject {
 	private var dispatchSource: DispatchSourceFileSystemObject?
 	private var fileDescriptor: Int32 = -1
 	// The `[_callbacks copy]` the ObjC++ wrote at every site that notifies is
@@ -397,7 +397,7 @@ final class KEventManagerNode: NSObject {
 // =================
 
 @objc(KEventManager)
-final class KEventManager: NSObject {
+class KEventManager: NSObject {
 	// nonisolated(unsafe) rather than @MainActor: the tree is main-queue-only by
 	// contract — the sources all target the main queue — but the type is reached
 	// from ObjC++ callers Swift cannot see, and a node has to tear its own

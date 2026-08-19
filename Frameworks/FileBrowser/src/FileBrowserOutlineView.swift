@@ -14,7 +14,7 @@ import AppKit
 //
 // -performKeyEquivalent:'s C++ table stays in FileBrowserOutlineViewKeyBindings.
 @objc(FileBrowserOutlineView)
-final class FileBrowserOutlineView: NSOutlineView {
+class FileBrowserOutlineView: NSOutlineView {
 	override func expandItem(_ item: Any?, expandChildren: Bool) {
 		(delegate as? FileBrowserOutlineViewDelegate)?.outlineView(self, willExpandItem: item, expandChildren: expandChildren)
 		super.expandItem(item, expandChildren: expandChildren)

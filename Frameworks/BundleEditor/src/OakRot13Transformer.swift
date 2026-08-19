@@ -3,7 +3,7 @@
 // are the same call.
 import Foundation
 
-@objc(OakRot13Transformer) final class OakRot13Transformer: ValueTransformer {
+@objc(OakRot13Transformer) class OakRot13Transformer: ValueTransformer {
 	@objc static func register() {
 		ValueTransformer.setValueTransformer(OakRot13Transformer(), forName: NSValueTransformerName("OakRot13Transformer"))
 	}

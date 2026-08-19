@@ -4,7 +4,7 @@
 // "arrangedObjects.commit" — both need the ObjC KVC/KVO machinery.
 import Foundation
 
-@objc(CWItem) final class CWItem: NSObject, NSCopying {
+@objc(CWItem) class CWItem: NSObject, NSCopying {
 	@objc dynamic var path: String
 	@objc dynamic var commit: Bool
 	@objc dynamic var scmStatus: String

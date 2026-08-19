@@ -16,7 +16,7 @@ import UserNotifications
 // CrashReporter.h stays hand-written, so AppController was not touched.
 
 @objc(CrashReporter)
-final class CrashReporter: NSObject {
+class CrashReporter: NSObject {
 	// Deliberately NOT @MainActor, which would be a stronger contract than the
 	// ObjC++ had and a wrong one: the URLSession completion handlers below
 	// genuinely run off the main queue and touch this object. Marking the class

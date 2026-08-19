@@ -22,7 +22,7 @@ private func OakCreateScopeButton(_ label: String, _ tag: Int, _ action: Selecto
 }
 
 @objc(OakScopeBarViewController)
-final class OakScopeBarViewController: NSViewController {
+class OakScopeBarViewController: NSViewController {
 
 	private var stackView: NSStackView!
 

@@ -14,7 +14,7 @@ import AppKit
 private let kUserDefaultsFilterOutputType = "filterOutputType"
 
 @objc(OakRunCommandWindowController)
-final class OakRunCommandWindowController: NSWindowController, NSWindowDelegate {
+class OakRunCommandWindowController: NSWindowController, NSWindowDelegate {
 
 	@objc static let sharedInstance = OakRunCommandWindowController()
 

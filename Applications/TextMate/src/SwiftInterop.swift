@@ -5,7 +5,7 @@
 import Foundation
 import TMText
 
-@objc(TMSwiftInterop) final class SwiftInterop: NSObject {
+@objc(TMSwiftInterop) class SwiftInterop: NSObject {
 	@objc static func interopDescription() -> String {
 		// C++ layer: text::pad(42, 4) → "␠␠42" (figure-space padded, 4 digits wide)
 		let padded = String(text.pad(42, 4))

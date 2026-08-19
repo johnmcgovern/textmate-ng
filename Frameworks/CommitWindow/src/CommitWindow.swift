@@ -14,7 +14,7 @@ private let kOakCommitWindowCommitMessages = "commitMessages"
 private let kOakCommitWindowMinimumDocumentViewHeight: CGFloat = 195
 private let kOakCommitWindowTableViewHeight: CGFloat = 190
 
-@objc(OakCommitWindow) final class OakCommitWindow: NSWindowController, NSTableViewDelegate, NSMenuDelegate, NSMenuItemValidation {
+@objc(OakCommitWindow) class OakCommitWindow: NSWindowController, NSTableViewDelegate, NSMenuDelegate, NSMenuItemValidation {
 	private var options: [String: String]
 	private var actions: [CWCommitLogic.ActionSpec]
 	private var parameters: [String]

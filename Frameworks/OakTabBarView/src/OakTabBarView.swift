@@ -17,7 +17,7 @@ private let kUserDefaultsTabItemMaxWidthKey = "tabItemMaxWidth"
 // (not a Swift struct) because layouts round-trip through the animator's
 // NSInvocation forwarding as NSArray<OakTabFrame>, and because reloadData
 // compares two layouts with -isEqual: element by element.
-final class OakTabFrame: NSObject {
+class OakTabFrame: NSObject {
 	let tabItem: OakTabItem
 	var width: CGFloat
 
@@ -40,7 +40,7 @@ final class OakTabFrame: NSObject {
 // OakTabView) — the tab-group role is set at runtime via setAccessibilityRole.
 // NSDraggingSource is kept: it is required to pass self to beginDraggingSession.
 @objc(OakTabBarView)
-final class OakTabBarView: NSView, NSDraggingSource {
+class OakTabBarView: NSView, NSDraggingSource {
 	@objc weak var delegate: (any OakTabBarViewDelegate)?
 	@objc weak var dataSource: (any OakTabBarViewDataSource)?
 

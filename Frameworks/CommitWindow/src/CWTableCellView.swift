@@ -3,7 +3,7 @@
 // header) so fonts and styles stay identical to the rest of the app.
 import AppKit
 
-final class CWTableCellView: NSTableCellView {
+class CWTableCellView: NSTableCellView {
 	let commitCheckBox: NSButton
 	let diffButton: NSButton
 	let statusTextField: NSTextField

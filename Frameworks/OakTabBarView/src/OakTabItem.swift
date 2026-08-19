@@ -7,7 +7,7 @@
 import AppKit
 import UniformTypeIdentifiers
 
-@objc(OakTabItem) final class OakTabItem: NSObject, NSPasteboardWriting {
+@objc(OakTabItem) class OakTabItem: NSObject, NSPasteboardWriting {
 	/// Wire format. Changing this breaks drags from an older build of the app
 	/// into a newer one; it also carries the bundle id, which moved to
 	/// com.j23software during Stream 3.

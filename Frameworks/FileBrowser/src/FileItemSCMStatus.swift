@@ -11,7 +11,7 @@ import AppKit
 // +makeObserverForURL:usingBlock:), so neither needs a hand-written header.
 
 @objc(SCMStatusObserver)
-final class SCMStatusObserver: NSObject {
+class SCMStatusObserver: NSObject {
 	private var scmObserver: Any?
 
 	@objc(initWithURL:usingBlock:)
@@ -44,7 +44,7 @@ final class SCMStatusObserver: NSObject {
 }
 
 @objc(SCMStatusFileItem)
-final class SCMStatusFileItem: FileItem {
+class SCMStatusFileItem: FileItem {
 	private var repository: SCMRepository?
 	private var observer: Any?
 

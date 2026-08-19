@@ -67,7 +67,7 @@ class PreferencesViewController: OakTransitionViewController {
 // = PreferencesWindowController =
 // ===============================
 
-@objc(Preferences) final class PreferencesWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
+@objc(Preferences) class PreferencesWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
 	@objc static let sharedInstance = PreferencesWindowController()
 
 	private let preferencesViewController = PreferencesViewController()

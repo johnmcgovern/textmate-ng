@@ -9,7 +9,7 @@
 import AppKit
 
 @objc(OakFinderTag)
-final class OakFinderTag: NSObject, NSCopying {
+class OakFinderTag: NSObject, NSCopying {
 
 	@objc var displayName: String
 	@objc private(set) var label: UInt
@@ -65,7 +65,7 @@ final class OakFinderTag: NSObject, NSCopying {
 }
 
 @objc(OakFinderTagManager)
-final class OakFinderTagManager: NSObject {
+class OakFinderTagManager: NSObject {
 
 	@objc(finderTagsForURL:)
 	class func finderTags(for aURL: URL) -> [OakFinderTag] {

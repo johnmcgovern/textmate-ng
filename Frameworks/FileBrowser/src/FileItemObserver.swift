@@ -23,7 +23,7 @@ private func enumerateDirectoryContents(_ url: URL) async -> [URL] {
 // alone would miss them) from the SCM status.
 @MainActor
 @objc(FileSystemObserver)
-final class FileSystemObserver: NSObject {
+class FileSystemObserver: NSObject {
 	private let handler: ([URL]) -> Void
 
 	private var fsEventsURLs: [URL]?
@@ -92,7 +92,7 @@ final class FileSystemObserver: NSObject {
 
 @MainActor
 @objc(URLObserverClient)
-final class URLObserverClient: NSObject {
+class URLObserverClient: NSObject {
 	let handler: ([URL]) -> Void
 	// Strong, as in the ObjC++ original: the shared URLObserver is held only
 	// weakly by the registry, so the client (retained by the file browser) is
@@ -112,7 +112,7 @@ final class URLObserverClient: NSObject {
 
 @MainActor
 @objc(URLObserver)
-final class URLObserver: NSObject {
+class URLObserver: NSObject {
 	let url: NSURL
 	private var clients: [URLObserverClient] = []
 	var driver: Any?

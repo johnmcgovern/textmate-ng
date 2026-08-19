@@ -29,7 +29,7 @@ private let kFadeStartTime:  Double = 0.35
 private let kFadeFinishTime: Double = 0.70
 
 @objc(OakPopOutView)
-final class OakPopOutView: NSView, @preconcurrency CAAnimationDelegate {
+class OakPopOutView: NSView, @preconcurrency CAAnimationDelegate {
 
 	// A file-static NSMutableSet in the ObjC++. Main-actor rather than
 	// `nonisolated(unsafe)` because every path that touches it is AppKit calling

@@ -5,7 +5,7 @@
 import AppKit
 
 @objc(OakBorderlessPanel)
-final class OakBorderlessPanel: NSPanel {
+class OakBorderlessPanel: NSPanel {
 
 	// The ObjC++ read as two operations — OR in Borderless, mask out Titled — but
 	// **NSWindowStyleMaskBorderless is 0**, so the first was a no-op and always had

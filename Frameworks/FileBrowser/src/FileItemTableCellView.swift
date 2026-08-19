@@ -61,7 +61,7 @@ private final class FileItemFormatter: Formatter {
 // Draws up to three overlapping Finder-tag color dots (crescents where they
 // overlap). finderTags and rightPadding are binding targets (set via KVC), so
 // both are @objc; backgroundStyle is set directly by the cell view.
-final class FileItemFinderTagsView: NSView {
+class FileItemFinderTagsView: NSView {
 	private var storedFinderTags: [OakFinderTag] = []
 	@objc var finderTags: [OakFinderTag] {
 		get { return storedFinderTags }
@@ -163,7 +163,7 @@ final class FileItemFinderTagsView: NSView {
 }
 
 @objc(FileItemTableCellView)
-final class FileItemTableCellView: NSTableCellView, NSTextFieldDelegate {
+class FileItemTableCellView: NSTableCellView, NSTextFieldDelegate {
 	@objc var openButton: NSButton!
 	@objc var closeButton: NSButton!
 

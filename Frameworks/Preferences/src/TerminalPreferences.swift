@@ -15,7 +15,7 @@
 // the base class's help: action.
 import AppKit
 
-@objc(TerminalPreferences) final class TerminalPreferences: PreferencesPane {
+@objc(TerminalPreferences) class TerminalPreferences: PreferencesPane {
 	@IBOutlet private var installStatusText: NSTextField!
 	@IBOutlet private var installSummaryText: NSTextField!
 	@IBOutlet private var installPathPopUp: NSPopUpButton!

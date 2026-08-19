@@ -40,7 +40,7 @@ private func PreviousNode(_ node: FFResultNode?) -> FFResultNode? {
 // = OakSearchResultsCheckboxView =
 // ================================
 
-final class OakSearchResultsCheckboxView: NSTableCellView {
+class OakSearchResultsCheckboxView: NSTableCellView {
 	@objc var button: NSButton!
 
 	override init(frame frameRect: NSRect) {
@@ -106,7 +106,7 @@ class OakTableCellView: NSTableCellView {
 // = OakSearchResultsMatchCellView =
 // =================================
 
-final class OakSearchResultsMatchCellView: OakTableCellView {
+class OakSearchResultsMatchCellView: OakTableCellView {
 	// Mirrored onto this cell by the bridge above, so both the names and the KVO
 	// compliance matter.
 	@objc dynamic var replaceString: String?
@@ -168,7 +168,7 @@ final class OakSearchResultsMatchCellView: OakTableCellView {
 // = OakSearchResultsHeaderCellView =
 // ==================================
 
-final class OakSearchResultsHeaderCellView: OakTableCellView {
+class OakSearchResultsHeaderCellView: OakTableCellView {
 	@objc var countOfLeafsButton: NSButton!
 	@objc var removeButton: NSButton!
 
@@ -298,7 +298,7 @@ final class OakSearchResultsHeaderCellView: OakTableCellView {
 // ===========================
 
 @objc(FFResultsViewController)
-final class FFResultsViewController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuItemValidation {
+class FFResultsViewController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuItemValidation {
 
 	private var scrollView: NSScrollView?
 

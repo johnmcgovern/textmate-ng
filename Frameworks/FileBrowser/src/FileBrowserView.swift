@@ -20,7 +20,7 @@ import AppKit
 // ObjC++ did.
 
 @objc(FileBrowserView)
-final class FileBrowserView: NSView {
+class FileBrowserView: NSView {
 	@objc var headerView: OFBHeaderView!
 	@objc var outlineView: NSOutlineView!
 	@objc var actionsView: OFBActionsView!

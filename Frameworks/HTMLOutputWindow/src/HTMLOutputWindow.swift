@@ -9,7 +9,7 @@
 import AppKit
 
 @objc(HTMLOutputWindowController)
-final class HTMLOutputWindowController: NSWindowController, NSWindowDelegate {
+class HTMLOutputWindowController: NSWindowController, NSWindowDelegate {
 	@objc var htmlOutputView: OakHTMLOutputView
 
 	// The window keeps itself alive between showWindow: and windowWillClose:,

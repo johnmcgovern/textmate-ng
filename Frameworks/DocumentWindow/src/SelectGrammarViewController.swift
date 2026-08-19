@@ -28,7 +28,7 @@ import AppKit
 }
 
 @objc(SelectGrammarViewController)
-final class SelectGrammarViewController: NSViewController {
+class SelectGrammarViewController: NSViewController {
 
 	private var didLoadViewAlready = false
 	private var eventMonitor: Any?

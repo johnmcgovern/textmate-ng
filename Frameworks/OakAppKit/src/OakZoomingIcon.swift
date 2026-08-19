@@ -8,7 +8,7 @@ import AppKit
 import QuartzCore
 
 @objc(OakZoomingIcon)
-final class OakZoomingIcon: NSWindow {
+class OakZoomingIcon: NSWindow {
 
 	@objc(zoomIcon:fromRect:)
 	class func zoomIcon(_ icon: NSImage, fromRect aRect: NSRect) -> OakZoomingIcon {

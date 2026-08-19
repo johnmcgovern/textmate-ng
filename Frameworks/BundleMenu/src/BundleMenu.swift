@@ -20,7 +20,7 @@ private enum Actions {
 
 @MainActor
 @objc(BundleMenuDelegate)
-final class BundleMenuDelegate: NSObject, NSMenuDelegate {
+class BundleMenuDelegate: NSObject, NSMenuDelegate {
 	@objc static let sharedInstance = BundleMenuDelegate()
 
 	func menuHasKeyEquivalent(_ menu: NSMenu, for event: NSEvent, target: AutoreleasingUnsafeMutablePointer<AnyObject?>, action: UnsafeMutablePointer<Selector?>) -> Bool {
@@ -73,7 +73,7 @@ final class BundleMenuDelegate: NSObject, NSMenuDelegate {
 
 @MainActor
 @objc(BundleMenuBuilder)
-final class BundleMenuBuilder: NSObject {
+class BundleMenuBuilder: NSObject {
 	// The former OakAddBundlesToMenu. `setKeys` controls whether each item shows
 	// its inactive key equivalent and tab trigger; the disambiguation popup
 	// passes false because it assigns 1…9,0 as real key equivalents instead.
@@ -188,7 +188,7 @@ final class BundleMenuBuilder: NSObject {
 // where the bundles::item_ptr conversion lives.
 @MainActor
 @objc(BundleMenuPopup)
-final class BundleMenuPopup: NSObject {
+class BundleMenuPopup: NSObject {
 	@objc(showMenuForItems:inView:atPoint:)
 	static func showMenu(for items: [TMBundleItem], in view: NSView?, at point: NSPoint) -> TMBundleItem? {
 		guard items.count > 1 else { return items.first }

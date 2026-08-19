@@ -56,7 +56,7 @@ private let kObservedKeyPaths = [
 @MainActor private var IsSavingOnResignActive = false
 
 @objc(DocumentWindowController)
-final class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegate, NSMenuItemValidation, @preconcurrency OakTabBarViewDelegate, @preconcurrency OakTabBarViewDataSource, @preconcurrency FileBrowserDelegate, @preconcurrency OakTextViewDelegate, @preconcurrency OakUserDefaultsObserver {
+class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegate, NSMenuItemValidation, @preconcurrency OakTabBarViewDelegate, @preconcurrency OakTabBarViewDataSource, @preconcurrency FileBrowserDelegate, @preconcurrency OakTextViewDelegate, @preconcurrency OakUserDefaultsObserver {
 
 	// OakTextViewDelegate is conformed to here and FindDelegate is not, and the
 	// difference is worth stating because it is not the one the plan assumed.

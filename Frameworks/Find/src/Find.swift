@@ -54,7 +54,7 @@ private final class ObserverToken: @unchecked Sendable {
 // OakObserveUserDefaults registers its observer with `queue:NSOperationQueue.mainQueue`,
 // so -userDefaultsDidChange: only ever arrives on the main thread. The three AppKit
 // protocols beside it are already @MainActor in the SDK and need nothing.
-final class Find: NSWindowController, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation, @preconcurrency OakUserDefaultsObserver {
+class Find: NSWindowController, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation, @preconcurrency OakUserDefaultsObserver {
 
 	// ==========================================
 	// = Views, all built in code — there is no =

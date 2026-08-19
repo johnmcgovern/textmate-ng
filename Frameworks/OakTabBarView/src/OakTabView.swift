@@ -23,7 +23,7 @@ private func disableImplicitAnimation(_ handler: @escaping () -> Void) {
 // via setAccessibilityRole(.radioButton) plus the accessibility* overrides
 // below, which is what VoiceOver actually reads; the marker protocol added
 // nothing on top of that.
-final class OakTabView: NSView {
+class OakTabView: NSView {
 	weak var tabBarView: OakTabBarView?
 
 	weak var target: AnyObject?

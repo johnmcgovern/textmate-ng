@@ -12,7 +12,7 @@ import AppKit
 // class method rather than an override; it wins by ObjC dynamic dispatch over the
 // default still in FileItemObserver.mm.
 @objc(MountedVolumesFileItem)
-final class MountedVolumesFileItem: FileItem {
+class MountedVolumesFileItem: FileItem {
 	@MainActor
 	@objc(makeObserverForURL:usingBlock:)
 	override class func makeObserver(forURL url: NSURL, usingBlock handler: @escaping ([URL]) -> Void) -> Any? {
@@ -26,7 +26,7 @@ final class MountedVolumesFileItem: FileItem {
 }
 
 @objc(MountedVolumesObserver)
-final class MountedVolumesObserver: NSObject {
+class MountedVolumesObserver: NSObject {
 	private let handler: ([URL]) -> Void
 
 	@objc init(block handler: @escaping ([URL]) -> Void) {

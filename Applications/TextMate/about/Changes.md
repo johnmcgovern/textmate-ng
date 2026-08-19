@@ -2,6 +2,39 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-18 (v2026.8-alpha.15)
+
+**The intermittent crashes are fixed.** alpha.14 could die a few seconds after
+launch — often after Settings had been opened — with no obvious trigger, which is
+exactly what made it hard to pin down. It turned out to be a single
+memory-corruption bug wearing three different crash reports: something the app did
+early on quietly damaged memory, and the program then fell over later at whatever
+unrelated place happened to touch that memory next. That is why no two of the
+reports looked alike, and why none of them pointed at the actual cause.
+
+The fault is a mismatch across the Swift / Objective-C boundary that this ongoing
+rewrite keeps meeting: a Swift class marked as never-subclassed, which the system
+then subclasses anyway the moment it starts watching that object for changes.
+alpha.14 patched the six places this was known to bite; this release removes the
+mismatch everywhere it can occur — 56 classes across the app — so the whole
+category is closed rather than the handful of instances found so far. It was
+reproduced on demand under a memory-debugging tool, fixed, and confirmed gone
+under the same tool; the full test suite (658 tests) stays green.
+
+**The window frame now follows your theme.** The title bar and window chrome track
+the editor theme's light or dark appearance instead of always matching the system
+setting, so a dark theme no longer leaves a light title bar sitting on top of it.
+
+**Also fixed:** the version-control view (⇧⌘Y) now labels its two group rows —
+"Uncommitted Changes" and "Untracked Items" — which had been drawing blank since
+that view was rewritten. It turned out to be the same fault as the crash above:
+the row that draws those titles was one of the classes the fix corrected.
+
+**Known limitations in this alpha:** software update and crash-report submission
+stay switched off while the fork has no server of its own, so a new build means
+downloading a new build. Finder thumbnails are still generic; Quick Look previews
+work.
+
 ## 2026-08-18 (v2026.8-alpha.14)
 
 **Opening Settings ▸ Software Update no longer crashes the app.** If you opened

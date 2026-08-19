@@ -689,10 +689,16 @@ knew.
     **Do not put `final` on a class that ObjC can see** — that means anything
     `@objc(Name)` with a hand-written `.h` (rule 23), anything a nib instantiates,
     and anything KVO observes. `final` is only sound where the class is
-    Swift-visible only. There are still ~48 files containing `final class`;
-    auditing them against "can ObjC reach this, or can KVO subclass it?" is a
-    mechanical sweep nobody has done, and it is the third occurrence of this bug
-    that the sweep would prevent.
+    Swift-visible only.
+    **The sweep is done (`142b0059`, 2026-08-18).** The whole shipped surface was
+    audited against "can ObjC reach this, or can KVO subclass it?" and `final`
+    dropped from 56 classes across 42 files — every `@objc(Name)`/hand-`.h`,
+    nib-instantiated, KVO-observed, or bound-to class. `final` was kept only where
+    it is sound: `private final class` (Swift-visible only) and test classes.
+    Full suite stayed green (658/0) and the Release app ran clean, so this closed
+    the whole class instead of the six preference classes `dc66d10d` patched. The
+    standing rule is now the going-forward guard, not a pending task: when you add
+    a `final class`, apply the same test before shipping it.
 
 ## One build gotcha that is not a code error
 

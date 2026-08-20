@@ -11,6 +11,7 @@
 #import <OakAppKit/NSImage Additions.h>
 #import <OakAppKit/NSMenuItem Additions.h>
 #import <OakAppKit/OakPasteboard.h>
+#import <OakAppKit/OakPasteboardEntryFindOptions.h> // -[OakPasteboardEntry findOptions] (moved out of OakPasteboard.h, rule 17)
 #import <OakAppKit/OakPopOutAnimation.h>
 #import <OakAppKit/OakToolTip.h>
 #import <OakAppKit/OakSound.h>

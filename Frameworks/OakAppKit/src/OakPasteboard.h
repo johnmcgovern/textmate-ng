@@ -1,5 +1,4 @@
 #import <oak/oak.h>
-#import <regexp/find.h> // for find::options_t
 #import "OakPasteboardConstants.h" // the extern constants, split out for the Swift port (rule 19)
 
 @interface OakPasteboardEntry : NSObject
@@ -12,8 +11,7 @@
 @property (nonatomic, readonly) BOOL fullWordMatch;
 @property (nonatomic, readonly) BOOL ignoreWhitespace;
 @property (nonatomic, readonly) BOOL regularExpression;
-
-@property (nonatomic, readonly) find::options_t findOptions;
+// -findOptions (find::options_t) is in the OakPasteboardEntryFindOptions category.
 @end
 
 @interface OakPasteboard : NSObject

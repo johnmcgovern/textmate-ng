@@ -75,16 +75,7 @@ NSString* const kUserDefaultsClipboardHistoryDaysToKeep        = @"clipboardHist
 - (BOOL)fullWordMatch       { return [self.options[OakFindFullWordsOption] boolValue]; };
 - (BOOL)ignoreWhitespace    { return [self.options[OakFindIgnoreWhitespaceOption] boolValue]; };
 - (BOOL)regularExpression   { return [self.options[OakFindRegularExpressionOption] boolValue]; };
-
-- (find::options_t)findOptions
-{
-	return find::options_t(
-		([self fullWordMatch]       ? find::full_words         : find::none) |
-		([NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsFindIgnoreCase] ? find::ignore_case : find::none) |
-		([NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsFindWrapAround] ? find::wrap_around : find::none) |
-		([self ignoreWhitespace]    ? find::ignore_whitespace  : find::none) |
-		([self regularExpression]   ? find::regular_expression : find::none));
-}
+// -findOptions (find::options_t) moved to the OakPasteboardEntryFindOptions category (rule 17).
 @end
 
 @interface OakPasteboard () <OakPasteboardIdleObserving>

@@ -483,9 +483,24 @@ points at the single file. The split — 1–22 / 23–49 across two handoffs, w
 map advertising "22 of them" — was a navigation bug in the one document whose whole
 job is to stop things being rediscovered.
 
-**All three stabilise items are done and shipped in alpha.15.** Back to porting now.
-`FileBrowserDiskOperations` (530) and `FileBrowserViewController` (2328) are what
-remain in FileBrowser, and neither is going anywhere.
+**All three stabilise items are done and shipped in alpha.15.** Back to porting.
+
+**FileBrowser is finished (2026-08-20).** The line above used to say
+`FileBrowserDiskOperations` (530) and `FileBrowserViewController` (2328) remained —
+both were wrong: they had already been flipped to Swift (`53923fe4` and its peels),
+and the *actual* last portable file was `SCMManager.mm` (337), ported this session
+as `SCMManager.swift` (`e7eba79b`) on top of its selector-surface test (`c765060e`).
+The framework is now **5153 Swift vs 753 ObjC++**, and every one of those 753 lines
+is a boundary / `…Cxx.mm` / `…Support.mm` shim that is finished by design (rule 19
+externs, C++ struct holders). Counting `.mm` lines is not counting work — run the
+rule 19/20 survey before believing any of them is a port. The SCMManager port's own
+decisions (not `@MainActor` + `@unchecked Sendable`, the hand-decl header out of the
+bridging header, keeping NSApp off the deinit path) are in its commit message.
+
+**Next real port: OakAppKit's `OakPasteboard` + `Chooser` + `Selector` (1850)** —
+where that framework's actual C++ lives — then `OakFilterList` (2757), unsurveyed.
+Start each with the selector-surface test (rule 18), then the checklist rules 15–21
+encode. All 49 rules are now in `ide/RULES.md`.
 
 ## RESOLVED: the three crashes are one heap-corruption bug, `dc66d10d` (2026-08-18, evening)
 

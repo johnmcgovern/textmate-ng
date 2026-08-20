@@ -5,6 +5,7 @@
 #import <oak/oak.h>
 #import <oak/debug.h>
 #import "OakPasteboardDatabase.h"
+#import "OakPasteboardIdleObserver.h"
 
 static os_log_t const kLogSQLite     = os_log_create("Pasteboard", "sqlite");
 static os_log_t const kLogPasteboard = os_log_create("Pasteboard", "history");
@@ -86,64 +87,12 @@ NSString* const kUserDefaultsClipboardHistoryDaysToKeep        = @"clipboardHist
 }
 @end
 
-@interface OakPasteboard ()
+@interface OakPasteboard () <OakPasteboardIdleObserving>
 @property (nonatomic) NSInteger changeCount;
 @property (nonatomic, readonly) NSPasteboard* pasteboard;
 @property (nonatomic, readonly) BOOL avoidsDuplicates;
 - (void)checkForExternalPasteboardChanges;
 @end
-
-// ============================
-// = Event Loop Idle Callback =
-// ============================
-
-namespace
-{
-	struct event_loop_idle_callback_t;
-	static event_loop_idle_callback_t& idle_callback ();
-
-	struct event_loop_idle_callback_t
-	{
-		event_loop_idle_callback_t () : _running(false) { _observer = CFRunLoopObserverCreate(kCFAllocatorDefault, kCFRunLoopBeforeWaiting, true, 100, &callback, NULL); start(); }
-		~event_loop_idle_callback_t ()                  { stop(); CFRelease(_observer); }
-
-		void start ()
-		{
-			if(_running)
-				return;
-			_running = true;
-			CFRunLoopAddObserver(CFRunLoopGetCurrent(), _observer, kCFRunLoopCommonModes);
-		}
-
-		void stop ()
-		{
-			if(!_running)
-				return;
-			_running = false;
-			CFRunLoopRemoveObserver(CFRunLoopGetCurrent(), _observer, kCFRunLoopCommonModes);
-		}
-
-		void add (OakPasteboard* aPasteboard)    { _pasteboards.insert(aPasteboard); }
-		void remove (OakPasteboard* aPasteboard) { ASSERT(_pasteboards.find(aPasteboard) != _pasteboards.end()); _pasteboards.erase(aPasteboard); }
-
-	private:
-		static void callback (CFRunLoopObserverRef observer, CFRunLoopActivity activity, void* info)
-		{
-			for(auto const& it : idle_callback()._pasteboards)
-				[it checkForExternalPasteboardChanges];
-		}
-
-		bool _running;
-		CFRunLoopObserverRef _observer;
-		std::set<OakPasteboard*> _pasteboards;
-	};
-
-	static event_loop_idle_callback_t& idle_callback ()
-	{
-		static event_loop_idle_callback_t res;
-		return res;
-	}
-}
 
 @implementation OakPasteboard
 + (void)initialize
@@ -163,12 +112,12 @@ namespace
 
 + (void)applicationDidBecomeActiveNotification:(id)sender
 {
-	idle_callback().start();
+	[OakPasteboardIdleObserver.sharedInstance start];
 }
 
 + (void)applicationDidResignActiveNotification:(id)sender
 {
-	idle_callback().stop();
+	[OakPasteboardIdleObserver.sharedInstance stop];
 }
 
 + (OakPasteboard*)pasteboardWithName:(NSString*)aName systemPasteboard:(NSPasteboard*)pboard avoidsDuplicates:(BOOL)flag
@@ -178,7 +127,7 @@ namespace
 	{
 		OakPasteboard* res = [[OakPasteboard alloc] initWithName:aName systemPasteboard:pboard avoidsDuplicates:flag];
 		sharedInstances[aName] = res;
-		idle_callback().add(res);
+		[OakPasteboardIdleObserver.sharedInstance addObject:res];
 	}
 	return sharedInstances[aName];
 }

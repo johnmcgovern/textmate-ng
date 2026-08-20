@@ -28,9 +28,11 @@ about that port, which is a fair warning about how much to trust the rest._
   rather than by assertion — that number has been stated wrong here three times,
   this bullet was stale for five releases and then again for two, and it is
   cheaper to run the command than to trust the sentence.
-  **Do not cut alpha.15 until the crashes below are understood.** alpha.14 shipped
-  with them knowingly; shipping again without new information would be a choice to
-  keep a known crash in front of users rather than an oversight.
+  **The crashes are understood and shipped fixed in alpha.15 — see "RESOLVED"
+  below.** They were one heap-corruption bug (`dc66d10d`), reproduced deterministically
+  and gone on HEAD. The `final` audit that completes the fix landed as `142b0059` (56
+  classes, 42 files), and `v2026.8-alpha.15` (`824e4f4e`) is tagged and published
+  carrying both. The gate is cleared; this bullet is kept only as the trail.
 - **Builds are downloadable.** `bin/release` publishes a notarized build to
   GitHub Releases. The flow has been run six times and verified from the outside
   — download the published asset, set `com.apple.quarantine`, check `spctl`. As
@@ -459,20 +461,19 @@ The recommendation at the end of 2026-08-18, with the reasoning, so it can be
 disagreed with rather than just followed. **Three things, in this order, and none
 of them is a port.**
 
-**1. The two crashes below.** They are the only live user-facing risk, alpha.14 is
-public with them, and the next step is instrumentation that has not been run yet.
-Over-release bugs also get harder as more lands: every port adds candidate
-owners, so the cheapest day to find this is the one where the fewest commits
-stand between the last known-good build and now.
+**1. The crashes — DONE (2026-08-18, evening), shipped in alpha.15.** Reproduced and
+fixed; the write-up moved to "RESOLVED" below. They were one heap-corruption bug
+(`dc66d10d`), not two over-releases.
 
-**2. The `final` audit (rule 49).** This class of bug has now shipped **twice** —
-`aaf43955` and `dc66d10d` — and until 2026-08-18 it had no rule number, so it was
-being rediscovered rather than checked for. ~48 files still contain `final class`.
-Sweeping them against "can ObjC reach this, or can KVO subclass it?" is mechanical,
-bounded, and turns a recurring reactive crash into a one-time check. Worth doing
-in the same session as the crashes because it is the same failure mode — a
-lifetime/dispatch assumption that is false across the language boundary — and one
-of the two crash stacks is `objc_opt_class`.
+**2. The `final` audit (rule 49) — DONE, `142b0059`, shipped in alpha.15.** This class
+of bug had shipped **twice** — `aaf43955` and `dc66d10d` — and until 2026-08-18 had no
+rule number, so it was rediscovered rather than checked for. The sweep dropped `final`
+from **56 classes across 42 files** — the whole shipped surface — keeping it only where
+sound (private/test classes), and reframed rule 49 (see `FILEBROWSER_PORT_HANDOFF.md`,
+`879d3c37`) from a pending audit into the going-forward guard for *new* classes. It was
+the completion of item 1, not a separate job — same failure mode. A bonus catch rode
+along: the version-control view's blank "Uncommitted Changes" / "Untracked Items" group
+labels were the same fault, now drawing.
 
 **3. Consolidate the rules into one file.** They are split 1–22 / 23–49 across two
 handoffs, and the documentation map advertised "22 of them" pointing at one file,
@@ -484,38 +485,85 @@ Only then go back to porting. `FileBrowserDiskOperations` (530) and
 `FileBrowserViewController` (2328) are what remain there, and neither is going
 anywhere.
 
-## OPEN: two unexplained EXC_BAD_ACCESS crashes (2026-08-18)
+## RESOLVED: the three crashes are one heap-corruption bug, `dc66d10d` (2026-08-18, evening)
 
-**Shipped in alpha.14 knowingly.**
+**The instrumentation this section (as "OPEN", below) asked for was run. It
+reproduced the crash deterministically, and the A/B is clean. `dc66d10d` — which
+shipped with a message saying it was "not proven to fix the open crashes" — is proven
+now.**
 
-Two crashes, both in builds made today, both `EXC_BAD_ACCESS` on the main thread,
-both roughly 20–25 seconds after launch, neither reproducible:
+First correction: this was written as **two** crashes. There were **three** `.ips`
+files today, and it never mentioned the one that explains the other two —
+`TextMate-NG-2026-08-18-152727.ips`, 15:27:25, build .10 (alpha.14). Its stack is
+the Rosetta stone:
 
-| time | build contained | top of stack |
-| --- | --- | --- |
-| 13:20:39 | the SoftwareUpdate fix only | AppKit layout → SwiftUICore `ViewGraph` render → `objc_opt_class` |
-| 13:49:09 | + the FSEventsManager port | autorelease pool drain → `-[__NSDictionaryM dealloc]` → `objc_release` |
+> `BUG IN CLIENT OF LIBMALLOC: memory corruption of free block`
+> ← `objc_allocateClassPair` ← `_NSKVONotifyingCreateInfoWithOriginalClass`
+> ← KVO `addObserver:forKeyPath:` ← `-[NSWindow _bindTitleToContentViewController]`
+> ← `PreferencesWindowController.init()` / `sharedInstance` one-time init.
 
-Both are **over-release signatures**, not the Swift-6 isolation trap `1d587756`
-fixed — a different failure class. Neither stack contains a single frame of ours,
-which is expected for an over-release: the pool drain runs long after whoever
-released too many times has gone.
+That is Foundation building an `NSKVONotifying_` subclass of the Preferences
+content-view-controller and scribbling the malloc freelist while it does — the
+exact shape `dc66d10d` targeted, on the `final` KVO-bound preference classes.
 
-What was ruled out, so nobody repeats it: four launches totalling ~6 minutes of
-soak, with the same folder open and the same Settings pane up, produced nothing.
-The FileBrowser port is not obviously implicated, because the first crash predates
-it. `atos` against the dSYM adds nothing — there is nothing of ours to symbolicate.
+**The reproduction, so nobody doubts it.** Built the pre-fix revision `2ba05fe0`
+(= the `v2026.8-alpha.14` tag, i.e. the released build that actually crashed) in an
+isolated `git worktree`, ran it under **MallocScribble** — the same instrument
+`dc66d10d`'s message says first caught this — and opened Preferences once. It
+crashed in ~20 s with a stack **frame-for-frame identical** to the 15:27 production
+crash. HEAD (`86a57a03`, which has `dc66d10d`) under the *same* scribble harness
+with the Preferences open/close/pane-cycle path hammered: **clean, 0 malloc
+errors**. Plus a 30-minute `NSZombieEnabled` soak on HEAD, driving every implicated
+surface: **clean**. Buggy build dies in 20 s; fixed build survives 40+ minutes
+across both harnesses. That is the whole proof.
 
-**The hypothesis worth testing first is that these are older than today.** The
-only prior crash reports on this machine are alpha.11's, because alpha.12 and .13
-died at the isolation trap *first* — the trap plausibly masked a pre-existing
-over-release, and removing it revealed one. That is a claim to test, not to
-believe.
+**The mechanism, stated plainly:** `final` on a Swift class that ObjC/KVO can see is
+a lie (rules 23, 49). When AppKit binds the window title to the content view
+controller, KVO calls `objc_allocateClassPair` to make an `NSKVONotifying_` subclass
+of it; on a `final` class that allocation corrupts the heap. **It is not an
+over-release.** This section used to call crashes 1 and 2 "over-release signatures"
+and that framing was wrong: they are the *same* freelist corruption surfacing later,
+at whatever unrelated alloc (`objc_opt_class` reading a wild isa, 13:20) or free
+(`-[__NSDictionaryM dealloc]` in the pool drain, 13:49) happens to touch the poisoned
+block next. "No frames of ours" is the signature of downstream heap damage, not of a
+late-draining over-releaser. `dc66d10d`'s own message predicted "one cause, three
+signatures"; this is the reproduction it was missing.
 
-Next step is instrumentation rather than reasoning (rule 22): soak under
-`NSZombieEnabled=YES`, or a build with MallocStackLogging / AddressSanitizer,
-which is the only thing that can name the over-releaser. Do that before
-attributing it to any of today's commits.
+**What is proven vs. inferred, kept honest:**
+
+- **Crash 3 (15:27, and its harness twin): reproduced and fixed.** Deterministic,
+  under a validated instrument. This one is closed.
+- **Crashes 1 & 2 (13:20, 13:49): explained, not independently reproduced.** I did
+  not force these two specific stacks. Under scribble you *cannot* — scribble makes
+  the corruption fatal at the corruption site (crash 3) before it can drift to an
+  unrelated alloc/free, so driving always yields crash 3. Seeing 1/2 would need the
+  corruption left to propagate (no scribble), which is non-deterministic. The
+  one-root-cause argument is the strongest evidence available for them, not a
+  further repro — weigh it as that.
+
+**Two traps for the next session, both cost-free to avoid:**
+
+- **Do not re-run `NSZombieEnabled` hoping to catch this.** Zombies disable `free`
+  entirely, so by construction they cannot reproduce a *heap-corruption* bug — there
+  is no freelist to corrupt. The clean 30-min zombie soak is real but proves only the
+  over-release-*then-message* family (it would have caught 13:49 if that were a true
+  over-release; it is not). The **scribble** A/B is the evidence that matters.
+- **Build the pre-fix commit in a `git worktree`, never in place.** `master` had 42
+  uncommitted files during this session (a parallel `final` audit), and an in-place
+  `git checkout 2ba05fe0` would have collided with them. The worktree kept the
+  experiment isolated and left the working tree untouched.
+
+**Two side findings, both latent and unrelated to the fix:**
+
+- The app's crash handler makes its own reports worse. `OakExceptionHandlerDelegate`
+  (CrashReporter, via ExceptionHandling.framework) intercepts the malloc `SIGABRT`,
+  then **recursively locks an `os_unfair_lock`** and escalates to `SIGKILL` — which is
+  why the pre-fix report lands as `FOUNDATION`/`SIGKILL` instead of a clean malloc
+  abort. Only bites once something else has already crashed.
+- `OakExceptionHandlerDelegate` is a **duplicate class** — defined in the app *and* in
+  both `Dialog.tmplugin` and `Dialog2.tmplugin` (logged at every launch). objc's own
+  warning is that this "may cause spurious casting failures and mysterious crashes."
+  Not implicated in these three, but it is a loaded gun in the crash path itself.
 
 ## Distribution — done (2026-08-10)
 

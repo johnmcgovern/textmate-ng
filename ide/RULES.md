@@ -1,0 +1,485 @@
+# The numbered rules — all 49, in one place
+
+Earned across every port in this project — Find, DocumentWindowController,
+OakAppKit, FileBrowser. They live here, in one file, so a survey reads the whole
+list rather than a third of it: rules 1–22 and 23–49 used to sit in two separate
+handoffs while the documentation map pointed at one and called it "22 of them", so
+a session that followed the map read a third of the list believing it had read all
+of it.
+
+**The numbering is stable and referenced by number throughout the handoffs**
+("rule 18", "rules 15–21", "rule 49") — never renumber. Append the next rule at the
+end. The port-by-port narrative that earned each rule stays in its own handoff
+(`FIND_PORT_HANDOFF.md`, `FILEBROWSER_PORT_HANDOFF.md`); only the rule statements
+were consolidated here, verbatim, on 2026-08-18.
+
+---
+
+## Rules 1–22 — Find, DocumentWindowController, OakAppKit
+
+1. **`@objc dynamic`** for anything ObjC observes. Grep for `bind:`,
+   `addObserver:forKeyPath:`, `keyPathsForValuesAffecting`, `setValue:forKey:`.
+2. **Spell out `@objc override init()`** when an ObjC caller uses `+new`/`-init`.
+   Swift stops inheriting `-init` once another initializer exists.
+3. **`&+`/`&-`** wherever the ObjC++ relied on `NSUInteger` wraparound.
+4. **Annotate accessors, not the property**, for `getter=` — `@objc(isFoo) get`
+   plus `@objc(setFoo:) set`.
+5. **A C++ enum in a public header is an NS_OPTIONS decision**, not a port.
+   Pin it with a `static_assert` *and* a test.
+6. **Move C++ verbatim**, assembled from `git show`, never retyped; assert the
+   old text is a substring of the new file.
+7. **`const` at namespace scope has internal linkage in C++** — an exported
+   constant needs its `extern` declaration in scope at the definition.
+8. **Run the app.** `displayPath`, the excerpt builder and `lineSpan` have no
+   test coverage and never will; they only execute in the running app.
+9. **A negative grep result is not a finding.** When a survey answers "nothing
+   found", check the pattern against a line you know should match before
+   reporting it. `no C++ in any of its eight public headers` was published from a
+   pattern that could not have matched `Find.h` — `#import <…>` rather than
+   `#include <…>`, `text::` rather than `std::`.
+10. **Measure, never subtract.** Both the suite total and Find's line count have
+   been reported wrong in this project by arithmetic rather than by
+   measurement — the suite twice in one session, and Find's remaining ObjC++
+   twice more, each time because a ported file's C++ half was subtracted without
+   adding back the support file it moved into. Re-run the command.
+11. **Split a public header that declares both the class and its types.** A
+   bridging header cannot import the declaration of a class Swift defines, so
+   anything else in that header goes with it. Export both halves and cross-import
+   them with a **quoted** include — the angle form cannot resolve a framework's
+   own farm dir from inside that framework.
+12. **Read the builder, not the DSL.** `MBMenuItem`'s defaults are not the
+   obvious ones: a nil title yields a *separator*, `modifierFlags` defaults to
+   Command, and a non-nil `.delegate` alone creates a submenu. Hand-rolling a
+   menu from the call site alone gets the item count wrong.
+13. **The last shipped build is an A/B oracle.** Before calling a behaviour
+   difference a port defect, drive the previous release through the identical
+   sequence. Check that the control run actually performed the action first —
+   a control that silently did nothing agrees with any hypothesis.
+14. **`@preconcurrency` on the conformance, not `nonisolated` on the method,**
+   when a `@MainActor` class adopts a plain ObjC protocol whose delivery is
+   main-thread by contract. State *why* it is main-thread — `OakObserveUserDefaults`
+   registers with `queue: NSOperationQueue.mainQueue`, and that is checkable.
+
+The next four are from DocumentWindowController (2026-08-12). The first three are
+things a `grep` for `std::` in method signatures cannot find, and the fourth is
+the one that actually shipped a broken feature.
+
+15. **Survey block parameters, not just method parameters.** C++ in a *block*
+   signature makes the whole method uncallable from Swift, not just the block —
+   `-loadModalForWindow:completionHandler:` and `-saveModalForWindow:…` hand their
+   block an `oak::uuid_t const&`, and that alone put the document-open path and
+   all three save paths behind shims. Grep for `(^)` in any header the port
+   touches, then read each block's parameter list.
+16. **ObjC variadic methods cannot be called from Swift at all.** `-addButtons:`
+   and `+tmAlertWithMessageText:informativeText:buttons:` have no C++ in them and
+   no survey looking for C++ will find them. Grep for `, ...)` in the headers.
+17. **"Dropped by the importer" is not uniform, so check the member.** Under
+   `SWIFT_OBJC_INTEROP_MODE=objcxx` a `std::map` *return type* is dropped, but a
+   `text::range_t const&` *parameter* imports fine. That decides whether a Swift
+   class can declare a protocol conformance or has to leave it on the ObjC++
+   category: `OakTextViewDelegate` yes, `FindDelegate` no, and both protocols have
+   exactly one C++-typed member.
+18. **Pin the ObjC selector surface with `-instancesRespondToSelector:`.** Two
+   classes of defect are invisible to the compiler *and* to a green suite:
+   an action method that was never ported (a greyed-out menu item, because
+   `-targetForAction:` looks up by selector), and an `@optional` protocol method
+   whose Swift spelling does not match the imported name — that one compiles,
+   satisfies nothing, exposes no selector, and the feature silently does nothing.
+   `-performDropOfTabItem:fromTabBar:index:toTabBar:index:operation:` was written
+   with Swift's `from:`/`to:` and tab drag-and-drop was dead with no warning. A
+   test listing the selectors caught it on its first run; `t_be_interop.mm:80`
+   already did this for one selector, and it generalises.
+
+The next four are from OakAppKit and the gutter bug (2026-08-13). The first three
+say what "portable" actually means; the fourth is about debugging what you can
+see.
+
+19. **Swift can *call* a global, never *export* one.** Neither a free function nor
+   an `extern` constant can come from Swift. A file whose public surface is
+   globals — `OakUIConstructionFunctions.h` has 14 functions and 31 consumers,
+   `OakRolloverButton.h` has two `extern NSNotificationName const`, `OakView.h`
+   four mask constants — cannot become Swift while its callers are ObjC++; it can
+   only gain a forwarder `.mm`. Defer those until the consumers are Swift.
+   Corollary: a **C++ default argument** hides such a function from any survey,
+   because the call sites do not mention the parameter.
+20. **Classify portability from the implementation, not the header.** "It has a
+   class" is not enough. `OakSyntaxFormatter` looks clean and holds a
+   `parse::grammar_ptr` **ivar** — the `bundles::item_ptr` blocker, needing the
+   `DWScopeContext` treatment. `NSSavePanel Additions` looks trivial and has a
+   `+initialize`, which a Swift extension cannot provide. Grep each candidate for
+   C++ member declarations and for `+initialize` before promising it.
+21. **Rule 11 cascades.** Before porting a class, grep for its header in other
+   *public headers*, not just in `.mm` files. `OakRolloverButton.h` is imported at
+   line 1 of `OakUIConstructionFunctions.h`, which the bridging header needs — so
+   defining that one class in Swift breaks every use as
+   `__ObjC.X` vs `Module.X`, and fixing it means splitting a header 31 files
+   import.
+22. **When something renders but is invisible, bisect the view out early.**
+   Replace the suspect view with a dozen lines that fill themselves red. If that
+   is invisible too, the view is innocent and its code is a dead end — stop
+   reading it. Then set `backgroundColor`/`borderWidth` directly on the layers:
+   pure Core Animation, no `drawRect:`, no backing store. If *that* is invisible,
+   the subtree is occluded rather than failing to render, and the answer is a
+   front-to-back walk of every layer containing the point. The empty gutter cost
+   hours because six increasingly exotic facts about `GutterView` were all true
+   and all irrelevant; the occluder was found on the first run of the walk.
+   Related discipline: **`drawRect:`'s `aRect` is not clamped to the view's
+   bounds** on macOS 26 — clamp it yourself — and **embed a
+   `__DATE__`/`__TIME__` build stamp** so "am I running my own code" is a fact.
+
+---
+
+## Rules 23–49 — FileBrowser
+
+23. **Keep a ported class's `.h` as a hand-written ObjC declaration of the Swift
+    class.** For a class Swift now defines but ObjC++ still consumes (or subclasses,
+    or tests), the `DocumentWindowController.h` arrangement is the default here:
+    the `.h` declares the class, consumers `#import` it unchanged, and it is kept
+    **out of the Swift bridging header** (importing both spellings is a
+    redefinition). Nothing checks the `.h` against the Swift at build time — a
+    drift is an unrecognized selector at runtime, which is what the
+    `instancesRespondToSelector:` tests (rule 18) guard. FileBrowser has no
+    module/class-name collision (no class is named `FileBrowser`), so it *could*
+    self-import `FileBrowser-Swift.h` like OakAppKit — the hand-decl is a choice
+    for zero consumer churn and testability, not a workaround.
+
+24. **`+load`/`+initialize` registries can't be Swift — convert to explicit,
+    lazy registration first, in its own ObjC++ commit.** The `FileItem*` family
+    self-registered URL schemes from `+load`, which Swift never runs. Replacing it
+    with `+registerBuiltinClasses` (dispatch_once, from the single reader, using
+    `NSClassFromString` — safe because `-ObjC` keeps the classes linked) is a
+    behaviour-preserving prep step the suite + app validate, and it unblocks the
+    whole family. Boundary-then-translation, same as the FSEvents/SCM extractions.
+
+25. **Model files want the `-Cxx`/support-file split, not a hand-decl `.h`.**
+    A view class ports whole; a model file usually has one C++ fragment (an scm
+    map walk, a `path::` call) surrounded by ObjC. Move that fragment **verbatim**
+    (rule 6) into a small ObjC++ `…Support` class with a C++-free signature, put
+    its header in the bridging header, and the rest becomes Swift.
+    `FileItemSCMStatusSupport` / `FileItemObserverSupport` are the worked examples.
+
+26. **Swift 6: a class that hops off the main thread and back cannot capture
+    non-Sendable `self`.** The whole browser is main-thread, so mark such classes
+    `@MainActor` (which makes them Sendable), run only the *work* in a **file-scope
+    `nonisolated async` function** the `@MainActor` code `await`s, and apply the
+    result on the main actor. `DispatchQueue.global{…self…}`, `Task.detached{…self…}`,
+    and `Task{} + MainActor.run` all fail the sending checks; the await-a-nonisolated-
+    function shape is the one that compiles. `@MainActor` deinit teardown runs
+    inside `MainActor.assumeIsolated`; a mutable static that matches an
+    unsynchronised ObjC++ original is `nonisolated(unsafe)`.
+
+27. **Preserve ObjC ownership exactly — do not "improve" a weak/strong choice.**
+    `URLObserverClient.urlObserver` was strong in the ObjC++ (no `weak`), because
+    the shared observer is only weakly held by its registry and the client — held
+    by the browser — is its real owner. Making it `weak` in Swift deallocated the
+    observer before its async load delivered, and **the directory silently showed
+    empty** while every test stayed green. Read the `@property` attributes; a
+    missing `weak` is load-bearing.
+
+28. **The objcxx importer renames, and the pattern isn't uniform — let the build
+    tell you, then record it.** Seen this session: `getter=isX`/`hasX` needs
+    per-accessor `@objc(name)` (rule 4) or consumers using the property name
+    break; a factory class method imports as an initializer
+    (`+imageNamed:inSameBundleAsClass:` → `NSImage(named:inSameBundleAsClass:)`);
+    an `extern NSNotificationName const` drops its `Notification` suffix
+    (`…MouseDidEnterNotification` → `.OakRolloverButtonMouseDidEnter`); a **C++
+    default argument is not imported** so every arg must be passed
+    (`OakCreateActionPopUpButton(false)`); and `…AtURL:`/`…ForURL:` selectors trim
+    the trailing `URL` inconsistently (`repositoryAtURL:` → `repository(at:)` but
+    `addObserverToRepositoryAtURL:usingBlock:` → `addObserverToRepository(at:usingBlock:)`).
+
+The next two are from `FileBrowserView` (`53638c07`). Neither is about Swift —
+both are ways this repo's test harness lies to you.
+
+29. **Editing a test file needs a re-seed.** `seed_xcodeproj.rb` **inlines** every
+    `tests/t_*.mm` into `ide/gen/tests/<Bundle>_impl.mm` (with `#line` directives,
+    which is why failures still point at your file). Only that generated file is
+    in the project, so after editing a test `xcodebuild` finds nothing changed,
+    silently re-runs **the previous build's test code**, and reports the same
+    failure at the same line — which reads as "my fix did nothing". Re-run
+    `extract_specs.rb` + `seed_xcodeproj.rb` after any test edit, not just after
+    adding or removing files.
+
+30. **`to_s()` on an `NSString*` does not work in an ObjC++ test bundle** unless
+    `ns.h` is in scope, and nothing warns you. `ide/xctest_preamble.h` defines a
+    generic `to_s(_T const& container)` that for-in-enumerates its argument; with
+    `ns.h`'s `to_s(NSString*)` absent it binds to that template, compiles clean,
+    and dies at runtime with
+    `-[__NSCFConstantString countByEnumeratingWithState:objects:count:]:
+    unrecognized selector` pointing at `xctest_preamble.h`, not at your test.
+    `OakAppKit`'s tests get `ns.h` from their PCH; FileBrowser's do not. Compare
+    strings with `-isEqualToString:` inside `OAK_ASSERT` instead.
+
+The next three are from `FileBrowserDiskOperations` (`be5453a2`), the first port
+here that changes files on disk rather than pixels.
+
+31. **A Swift extension can add methods to an ObjC class, but never override
+    one.** Porting a *category* is otherwise straightforward — the class can stay
+    ObjC++, `self`'s ObjC properties resolve (including to Swift types the module
+    defines), and the bridging header may import the class's header as long as it
+    does not also see the declarations of the methods Swift defines (split those
+    into their own header first). The exception is an inherited method:
+    `-presentError:` overrides NSResponder's, and no Swift extension can express
+    that, so it stays a small ObjC++ category. Check for overrides *before*
+    planning the split — they decide how much has to stay behind.
+
+32. **An out-parameter that looks like a result is often an input to undo.**
+    `-trashItemAtURL:resultingItemURL:` writes back where the item landed, and
+    that URL is the *only* record of it — undo moves the item back from there.
+    A Swift translation that declares `var resultingURL: NSURL?` and never
+    assigns it onward compiles, trashes correctly, passes every test that checks
+    the file is gone, and silently makes undo a no-op. Trace where each
+    out-parameter's value is read, not just where it is written.
+
+33. **ObjC nil-messaging is behaviour, and Swift's bounds checks are not.**
+    `-undoOperation:sourceURLs:…` is called with a **nil** sourceURLs array for
+    operations that have no sources; `srcURLs[i]` answered nil for every index,
+    and the results were collected with `if(srcURL)`. Translated literally to
+    `srcURLs[i]` on a Swift array, that is a trap at the first new-file undo.
+    Same family as rule 27: read what the ObjC did with nil, not what it looks
+    like it did. Related: use `-[NSURL isEqual:]`, not Swift's `URL ==`, wherever
+    the ObjC++ compared URLs — `URL ==` normalises, and these are compared
+    against FileItem URLs.
+
+34. **A test file cannot declare an ObjC class.** `seed_xcodeproj.rb` wraps each
+    `tests/t_*.mm` body in a **C++ namespace** (hoisting its leading `#import`s
+    out), so an `@interface`/`@implementation` in one fails with "Objective-C
+    declarations may only appear in global scope" — pointing at your file, via
+    the `#line` directives, with nothing in your file to explain it. This bites
+    exactly when writing a KVO test, since ObjC KVO needs an observer object. The
+    better test anyway is to **bind a real control** the way the app does
+    (`t_file_browser_view_controller.mm` binds an NSButton's enabled state to
+    `canGoBack`): it exercises the mechanism that has to survive rather than a
+    proxy for it.
+
+35. **Extracting the C++ usually makes it testable — take the test while it is
+    cheap.** The browser's visibility rule was a private method that only ran
+    with a live tree, so nothing covered it; moved out behind a C++-free
+    signature it became a pure function of a directory URL, and the branch a port
+    is most likely to invert (hidden items go through the *include* globs,
+    everything else through *exclude*) got its first test in the same commit.
+    Two disciplines that go with it:
+    - **Assert the verbatim move, do not eyeball it** (rule 6, made concrete):
+      check the moved text is a substring of `git show HEAD:<file>`, and if you
+      re-indent afterwards, check that the re-indent changed nothing but leading
+      tabs. Both are three lines of script and they turn "I moved it carefully"
+      into a fact.
+    - **Do not assert values that come from `settings_for_path`.** They are read
+      from `.tm_properties` and the bundled defaults, so they differ per machine.
+      A first draft of the glob test asserted that a dotfile in `/tmp` passes the
+      include globs; it does not on this machine. Assert the logic you moved, not
+      the configuration it reads.
+
+The next five are from the three extraction commits (`b4fb22e7`, `b3ba8abf`,
+`6266b9a8`). The first two are both ways the survey's "seven C++ clusters"
+figure was wrong in each direction.
+
+36. **Before extracting a C++ container, check whether the thing it feeds
+    already has an ObjC-shaped API.** The inactive key-equivalents table looked
+    like a cluster to move: a `std::map<SEL, std::string>` applied with
+    `-setInactiveKeyEquivalentCxxString:`. But OakAppKit grew an NSString
+    spelling when BundleMenu was ported, and it is literally
+    `…CxxString:to_s(arg)` — the same code path one conversion earlier. So the
+    C++ disappeared with an in-place rewrite and no support method. A framework
+    this far into a port has consumers that were *already* de-C++'d for someone
+    else; grep for an NSString sibling before designing a boundary.
+
+37. **Some C++ cannot be extracted at all, because the callee is C++-typed on
+    both sides.** Rule 20 is about types that cannot cross into Swift; this is
+    worse and reads the same at a glance. `-executeBundleCommand:` fails not on
+    `bundles::item_ptr` but on `OakCommand`, whose own API takes a
+    `bundle_command_t const&` and a `std::map`. No boundary makes that method
+    Swift — it can only *move*, into ObjC++ that stays ObjC++. Check the
+    signatures of what a fragment calls, not just the types it names.
+
+38. **Delete the dead imports as part of the extraction, and expect the build to
+    fail on something the file never imported.** Removing `<bundles/bundles.h>`,
+    `<settings/settings.h>` and `<regexp/glob.h>` broke the build on `path::` at
+    three sites: `<io/path.h>` had been arriving transitively through them for
+    years. Same for `text::join`. This is worth doing *before* the translation
+    rather than after — a Swift file cannot inherit an include, so every one of
+    these would otherwise surface as a mystery at the worst moment. The cleanup
+    is also the only proof the extraction was complete: an import that is still
+    needed is C++ you did not move.
+
+39. **Check whether a C-looking type is actually C++ before designing around
+    it.** `path::device` returns `dev_t`, which looks like it belongs on the far
+    side of a boundary but is an `int32_t` from `<sys/types.h>` — it imports
+    into Swift as-is. Returning it kept the drop target stat-ed once per drag
+    instead of once per dragged item. The boundary that avoids a C++ type is not
+    automatically the boundary you want.
+
+40. **A test that cannot fail is worth nothing — prove each new one can.** Both
+    disciplines came up in the same commit. The key-equivalent test was
+    mutation-checked (swap `NSDownArrowFunctionKey` for its Up counterpart; it
+    must fail, and it does). The bundle-items test was probed the same way and
+    turned out **vacuous**: no bundle index loads in a test process, so
+    `items.count != 0` fails and its per-item loop never runs. That is written
+    into the test file rather than quietly left, because the next reader will
+    otherwise trust it to cover the menu. Where the suite genuinely cannot
+    reach — a drag session, a live `QLPreviewPanel`, a bundle command — say so
+    in the commit and check it in the app instead of inventing a test that
+    exercises AppKit.
+
+The next five are from the five peel commits (`30a3e668` … `a20346be`) and the
+promotion (`2b34881a`). The first three are all one theme: **what a header is
+allowed to say depends on who imports it.**
+
+41. **A method declared in the class's own public header cannot be defined in
+    Swift while the class is still ObjC++.** `FileBrowserViewController.h` is in
+    the bridging header — it must be, since Swift extends the class — so
+    defining one of its declared methods in a Swift extension gives that
+    selector two declarations and collides. `FileBrowserDiskOperations.h` got
+    around this by moving its declarations to a header the bridging header does
+    not see; that only works when **no outside consumer needs them**, and
+    `newFile:`/`newFolder:`/`goToURL:` and the rest are called by
+    `DocumentWindowController.swift` through the public header. So roughly
+    twenty methods cannot peel at all and must wait for the flip. Check header
+    visibility when planning a section, not just ivars and overrides.
+
+42. **Never declare a protocol conformance in a header the bridging header
+    imports.** The obvious way to let a peeled section assign `self` to a
+    delegate property is to re-state the conformance in the internal header.
+    Legal ObjC, and it breaks the build: once Swift can see *both* the protocol
+    and the conformance, the imported protocol member counts as a previous
+    declaration of that selector, and the witness fails with "method
+    'control(_:textShouldEndEditing:)' … conflicts with previous declaration".
+    The data source section only compiles because its `NSOutlineViewDataSource`
+    conformance stays invisible in the `.mm`. Let the **Swift extension** declare
+    the conformance instead — which then forces the witness `public`, an
+    artifact of imported ObjC classes being public in Swift that widens nothing.
+
+43. **The generated `-Swift.h` is not importable in this framework's `.mm`, and
+    the previous handoff was wrong to suggest it might be.** It said FileBrowser
+    "could self-import `FileBrowser-Swift.h`" because, unlike Find, no class here
+    is named after the module. That is not the binding constraint: the generated
+    header declares every class the framework's Swift defines, and the `.mm` also
+    imports the **hand-written** headers for those same classes (`FileItem.h`,
+    `FileBrowserView.h`, `FileBrowserOutlineView.h` — rule 23), so clang rejects
+    the duplicate interfaces. Hand-write a category header instead
+    (`FileBrowserActions.h`) and import it only from the `.mm`. Worth doing
+    rather than tolerating the warnings: without it, every `@selector` in the
+    menu construction becomes `-Wundeclared-selector`, which is the
+    silently-dead-menu-item failure of rule 18.
+
+44. **Unannotated ObjC types import as implicitly unwrapped optionals, and
+    interpolating one prints the wrapper.** `FileItem.localizedName` is
+    `String!`, so `"Copy “\(item.localizedName)”"` put the literal text
+    `Copy "Optional("committed.txt")"` into the context menu — with the whole
+    suite green. The same shape traps instead of printing when the value feeds a
+    force-unwrap: `(item ?? fileItem).arrangedChildren` took the test process
+    down on the very first peel. **Read the ObjC declaration's nullability
+    before translating a line that uses the value**, and prefer annotating the
+    header (`nonnull` on `selectedItems`/`previewableItems` removed a
+    meaningless unwrap from every call site) over coping at each use.
+    Interpolation is the dangerous one, because nothing fails.
+
+45. **Promote ivars to properties as its own prep commit, before the sections
+    that need them.** A Swift extension cannot see an ObjC instance variable at
+    all, so nine ivars in a `{ … }` block were pinning twenty-two otherwise
+    ordinary methods into the `.mm`. Promoting them is mechanical and provably
+    faithful: auto-synthesis backs each property with an ivar of exactly the
+    name it had, so every `_foo` still resolves and a mismatch is a compile
+    error rather than a silent rebinding. Copy the ownership across unchanged
+    (rule 27) — a promotion is not the moment to reconsider a weak/strong
+    choice. Expect the suite to be **unchanged in both directions**; the app run
+    is the only real check, so pick the checks that exercise the promoted
+    storage specifically.
+
+This last one is from `d680bbe5`, which fixed a crash the loading peel shipped.
+
+46. **When a peel replaces `_foo` with `self.foo`, check what `-foo` actually
+    is.** This is rule 45's other half and the more dangerous one: promoting
+    ivars makes them *reachable*, and the reachable thing is not always the thing
+    the ivar was. `_expandedURLs` / `_selectedURLs` are the pending expand/select
+    sets; `-expandedURLs` / `-selectedURLs` are accessors that merge them with
+    what the outline view currently shows and return `[res copy]`. Same name,
+    different value, and immutable. The loading peel took the accessors at seven
+    sites, so every read answered about the screen instead of the pending set and
+    `expandedURLs?.remove(url)` sent -removeObject: to an NSSet — **collapsing any
+    folder crashed the app, with the whole suite green.** Three disciplines:
+    - **Grep the `.mm` for a hand-written accessor before translating any
+      property access.** An ObjC property whose getter is overridden to return a
+      different type is legal, and from Swift it is invisible.
+    - **Give the ivar its own name rather than sharing one** — here
+      `pendingExpandedURLs` — and take the accessor that means something else
+      *out* of the header Swift sees. The peel could not have made this mistake
+      if the wrong name had not been in scope.
+    - **A test for this kind of defect does not fail, it crashes.** Expect the
+      "prove it can fail" step (rule 40) to look like `Restarting after
+      unexpected exit` rather than an assertion, and read the whole log — an
+      ObjC exception surfaces as "C++ exception handling detected but the Swift
+      runtime was compiled with exceptions disabled", which names neither the
+      selector nor the class.
+
+The last two are from the flip itself (`53923fe4`). Both are about the same
+thing from different directions: **once Swift defines the class, Swift's own
+view of it becomes the one that counts** — and it does not inherit what ObjC
+knew.
+
+47. **A Swift dynamic cast cannot see a conformance that only ObjC declared, and
+    cannot see through an NSProxy.** Two forms, one root, and they cost most of
+    the flip:
+    - **`as?`/`as!` to an @objc protocol the class adopts only in an ObjC
+      category fails.** Swift reads its own conformance metadata, which a
+      category does not write. `(self as AnyObject) as! NSOutlineViewDataSource`
+      compiles and dies with "Could not cast value of type
+      'NSKVONotifying_FileBrowserViewController'" — note the KVO subclass in the
+      message, which is a red herring: it fails for the plain class too.
+    - **`as?` to the class itself fails on an NSProxy.**
+      `-prepareWithInvocationTarget:` hands back a proxy, and
+      `as? FileBrowserViewController` worked for years only because the proxy
+      forwards `-isKindOfClass:` to its target and the target was an *imported
+      ObjC* class. Against a Swift class the cast reads the proxy's own isa and
+      says no.
+
+    The second is far more dangerous than the first, because it is inside an
+    `if let`: **nothing throws, nothing logs, the branch is simply skipped**, and
+    every undo in the framework quietly stopped being registered while the menu
+    item stayed enabled (the window's own undo manager keeps it that way). Three
+    disciplines:
+    - **When a flip makes a class Swift, grep the whole framework for `as?` and
+      `as!` naming that class or a protocol it adopts**, and account for each
+      one. This is not a compile-time change and the suite will not find it.
+    - **Prefer the API with no proxy in it.**
+      `-registerUndoWithTarget:handler:` replaced
+      `-prepareWithInvocationTarget:` and the problem stopped existing.
+    - **Where the conformance must stay in ObjC, do the assignment in ObjC
+      too** — a two-line `+wire…` helper taking `id`. ObjC does no conformance
+      check, which is exactly the pre-flip behaviour.
+
+48. **Verbatim is not always possible: check the arithmetic you are moving, because
+    Swift bounds-checks what C++ did not.** `MutableLongestCommonSubsequence`
+    allocated `width * height` and then indexed `matrix[width*i + j]` with `j`
+    running to `rhs.count` — the stride for that loop is `height`. Three items
+    against one addresses index 13 of an 8-element array. It had been wrong for
+    as long as it had existed and never showed, because the only path that
+    reaches it is a rename, where the two lists are usually the same length and
+    `width == height` makes the arithmetic accidentally correct. Rule 6 says move
+    it verbatim; rule 6 cannot be followed here, because the literal translation
+    traps. **When a C fragment indexes a flat buffer, re-derive the stride before
+    translating it** — and say in the commit that the behaviour changed, because
+    "moved verbatim" would be a false claim.
+
+49. **`final` on an `@objc` class is a promise ObjC cannot keep, and breaking it
+    is a crash, not a warning.** This has now shipped twice: `aaf43955`
+    (OakTransitionViewController, subclassed by PreferencesViewController — an
+    unbounded recursion between `init(nibName:bundle:)` and its own @objc thunk,
+    ~58,000 frames, on every Settings open in alpha.10 **and** alpha.11) and
+    `dc66d10d` (six preference classes, which KVO subclasses *at run time* — so
+    the subclass never appears in any source file you could grep). ObjC has no
+    `final`; nothing stops a subclass, and Swift meanwhile compiles initialisers
+    and dispatch on the assumption that none exists.
+    **Do not put `final` on a class that ObjC can see** — that means anything
+    `@objc(Name)` with a hand-written `.h` (rule 23), anything a nib instantiates,
+    and anything KVO observes. `final` is only sound where the class is
+    Swift-visible only.
+    **The sweep is done (`142b0059`, 2026-08-18).** The whole shipped surface was
+    audited against "can ObjC reach this, or can KVO subclass it?" and `final`
+    dropped from 56 classes across 42 files — every `@objc(Name)`/hand-`.h`,
+    nib-instantiated, KVO-observed, or bound-to class. `final` was kept only where
+    it is sound: `private final class` (Swift-visible only) and test classes.
+    Full suite stayed green (658/0) and the Release app ran clean, so this closed
+    the whole class instead of the six preference classes `dc66d10d` patched. The
+    standing rule is now the going-forward guard, not a pending task: when you add
+    a `final class`, apply the same test before shipping it.

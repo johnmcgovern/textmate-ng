@@ -5,9 +5,9 @@ session can start on FileBrowser without re-deriving the survey. Everything here
 was measured, not assumed; where it says "not established", it means nobody has
 checked yet, and you should._
 
-Start by reading **the numbered rules at the end of `ide/FIND_PORT_HANDOFF.md`**.
-There are 22 and 8 of them were earned by something that compiled, passed its
-tests, and was still wrong. The survey below is that checklist applied once.
+Start by reading **the numbered rules in `ide/RULES.md`**. There are 49, and many
+were earned by something that compiled, passed its tests, and was still wrong. The
+survey below is that checklist applied once.
 
 ## Progress — 2026-08-14 (steps 1 and 2 of "Suggested order" done)
 

@@ -145,14 +145,15 @@ Two diagnostic traps that cost real time, both worth remembering:
 
 ## Documentation map (read in this order)
 
-1. **The numbered rules — all 49 of them, and they live in TWO files.** Rules
-   1–22 are at the end of `ide/FIND_PORT_HANDOFF.md`; rules **23–49** continue in
-   `ide/FILEBROWSER_PORT_HANDOFF.md` under "Rules earned this session
-   (continuing FIND_PORT_HANDOFF's list at 23)". This entry said "22 of them" and
-   pointed at one file, so anyone following the map read a third of the list and
-   believed they had read all of it. **Read both, before surveying a framework.**
-   Consolidating them into one file is worth doing — the split is an accident of
-   which session earned which rule, and it will mislead again.
+1. **The numbered rules — all 49 of them, now in one file: `ide/RULES.md`.**
+   **Read it before surveying a framework.** They used to be split 1–22 in
+   `ide/FIND_PORT_HANDOFF.md` and 23–49 in `ide/FILEBROWSER_PORT_HANDOFF.md`, and
+   this entry pointed at one file while saying "22 of them" — so anyone following
+   the map read a third of the list and believed they had read all of it. That is
+   fixed (2026-08-18): the rule statements were consolidated verbatim into
+   `ide/RULES.md` and both handoffs now carry a pointer stub. Numbering is stable
+   and cross-referenced by number everywhere — append new rules at the end of
+   `RULES.md`, never renumber.
 2. `PROJECT_PHASES.md` — the 6-phase roadmap and the running record. End state =
    Swift app shell over the kept C++ core. **Phase 4 is current** (Phases 1–3 and
    2.5/2.6 are done); Phase 6, the core engine, is deliberately skipped, which is
@@ -475,15 +476,16 @@ the completion of item 1, not a separate job — same failure mode. A bonus catc
 along: the version-control view's blank "Uncommitted Changes" / "Untracked Items" group
 labels were the same fault, now drawing.
 
-**3. Consolidate the rules into one file.** They are split 1–22 / 23–49 across two
-handoffs, and the documentation map advertised "22 of them" pointing at one file,
-so a session that followed the map read a third of the list believing it had read
-all of it. That is a navigation bug in the one document whose whole job is to stop
-things being rediscovered.
+**3. Consolidate the rules into one file — DONE (2026-08-18).** All 49 rules now
+live in `ide/RULES.md`, moved verbatim; `FIND_PORT_HANDOFF.md` and
+`FILEBROWSER_PORT_HANDOFF.md` carry pointer stubs, and the documentation map above
+points at the single file. The split — 1–22 / 23–49 across two handoffs, with the
+map advertising "22 of them" — was a navigation bug in the one document whose whole
+job is to stop things being rediscovered.
 
-Only then go back to porting. `FileBrowserDiskOperations` (530) and
-`FileBrowserViewController` (2328) are what remain there, and neither is going
-anywhere.
+**All three stabilise items are done and shipped in alpha.15.** Back to porting now.
+`FileBrowserDiskOperations` (530) and `FileBrowserViewController` (2328) are what
+remain in FileBrowser, and neither is going anywhere.
 
 ## RESOLVED: the three crashes are one heap-corruption bug, `dc66d10d` (2026-08-18, evening)
 

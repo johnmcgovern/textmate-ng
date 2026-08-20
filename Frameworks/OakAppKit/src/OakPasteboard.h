@@ -1,14 +1,6 @@
 #import <oak/oak.h>
 #import <regexp/find.h> // for find::options_t
-
-extern NSNotificationName const OakPasteboardDidChangeNotification;
-
-extern NSString* const kUserDefaultsFindWrapAround;
-extern NSString* const kUserDefaultsFindIgnoreCase;
-
-extern NSString* const OakFindIgnoreWhitespaceOption;
-extern NSString* const OakFindFullWordsOption;
-extern NSString* const OakFindRegularExpressionOption;
+#import "OakPasteboardConstants.h" // the extern constants, split out for the Swift port (rule 19)
 
 @interface OakPasteboardEntry : NSObject
 @property (nonatomic, readonly) NSString* string;

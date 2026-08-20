@@ -9,17 +9,12 @@
 static os_log_t const kLogSQLite     = os_log_create("Pasteboard", "sqlite");
 static os_log_t const kLogPasteboard = os_log_create("Pasteboard", "history");
 
-NSNotificationName const OakPasteboardDidChangeNotification = @"OakClipboardDidChangeNotification";
+// OakPasteboardDidChangeNotification and the five find-option / find-default
+// constants moved to OakPasteboardConstants.mm (rule 19). The pasteboard-type and
+// clipboard-history names below are used only in this file and stay with it.
 
 NSString* const OakReplacePboard                   = @"OakReplacePboard";
 NSString* const OakPasteboardOptionsPboardType     = @"OakPasteboardOptionsPboardType";
-
-NSString* const kUserDefaultsFindWrapAround        = @"findWrapAround";
-NSString* const kUserDefaultsFindIgnoreCase        = @"findIgnoreCase";
-
-NSString* const OakFindIgnoreWhitespaceOption      = @"ignoreWhitespace";
-NSString* const OakFindFullWordsOption             = @"fullWordMatch";
-NSString* const OakFindRegularExpressionOption     = @"regularExpression";
 
 NSString* const kUserDefaultsDisablePersistentClipboardHistory = @"disablePersistentClipboardHistory";
 NSString* const kUserDefaultsClipboardHistoryKeepAtLeast       = @"clipboardHistoryKeepAtLeast";

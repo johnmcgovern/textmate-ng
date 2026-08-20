@@ -31,6 +31,7 @@
 #import "OakRolloverButton.h"
 #import "OakUIConstructionFunctions.h"
 #import "OakAppKitSupport.h"
+#import "OakAppKit.h" // OakPerformTableViewActionFromSelector / OakPerformTableViewActionResult (OakPasteboardSelector.swift)
 
 // The C++-free boundaries OakPasteboard.swift stands on: the exported constants, the
 // SQLite store, the run-loop idle observer (and its protocol), and the selector
@@ -40,4 +41,3 @@
 #import "OakPasteboardConstants.h"
 #import "OakPasteboardDatabase.h"
 #import "OakPasteboardIdleObserver.h"
-#import "OakPasteboardSelector.h"

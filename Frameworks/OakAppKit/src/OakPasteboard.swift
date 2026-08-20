@@ -501,7 +501,7 @@ class OakPasteboard: NSObject, OakPasteboardIdleObserving {
 		let entries = self.entries()
 
 		let selectedRow = currentEntry.flatMap { entries.firstIndex(of: $0) } ?? 0
-		let pasteboardSelector = OakPasteboardSelector.sharedInstance!
+		let pasteboardSelector = OakPasteboardSelector.sharedInstance
 		pasteboardSelector.setEntries(entries)
 		pasteboardSelector.setIndex(UInt(selectedRow))
 		if width != 0 {

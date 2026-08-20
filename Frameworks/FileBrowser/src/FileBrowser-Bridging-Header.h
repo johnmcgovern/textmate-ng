@@ -43,9 +43,16 @@
 #import <OakFoundation/OakFoundation.h>
 #import <Preferences/Keys.h>
 
-// The SCM data source (FileItemSCMStatus.swift): SCMManager/SCMRepository — the
-// C++-free public header — and the ObjC++ helper holding the scm-map walk.
-#import "SCMManager.h"
+// The SCM data source (FileItemSCMStatus.swift): the ObjC++ helper holding the
+// scm-map walk. **SCMManager.h is deliberately absent as of its port** — Swift
+// defines SCMManager/SCMRepository now (SCMManager.swift), so importing the
+// hand-written declaration here would give each two, per this file's opening note.
+// Its ObjC++ consumers (FileItemSCMStatusSupport.mm, FileItemObserverSupport.mm)
+// import that header directly, and so does the test bundle; the support headers
+// below name SCMRepository only through a forward declaration. SCMSupport.h (the
+// C++-free SCMDriver / SCMStatus boundary) still comes in here — SCMManager.swift
+// needs it, and it used to arrive through SCMManager.h.
+#import "SCMSupport.h"
 #import "FileItemSCMStatusSupport.h"
 
 // FSEventStream, which FSEventsManager.swift owns one of. This is the ObjC shell

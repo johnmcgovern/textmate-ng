@@ -8,7 +8,12 @@
 // the Swift SCMStatusObserver calls these. The signatures are C++-free
 // (SCMRepository* comes from the now-C++-free SCMManager.h), so the bridging
 // header can import this.
-#import "SCMManager.h"
+#import <Foundation/Foundation.h>
+
+// SCMRepository is Swift-defined (SCMManager.swift); a forward declaration keeps
+// this header bridging-header-safe (importing the hand-written SCMManager.h would
+// collide with FileBrowser-Swift.h). The .mm imports SCMManager.h for the full type.
+@class SCMRepository;
 
 @interface FileItemSCMStatusSupport : NSObject
 + (NSArray<NSURL*>*)unstagedURLsInRepository:(SCMRepository*)repository;

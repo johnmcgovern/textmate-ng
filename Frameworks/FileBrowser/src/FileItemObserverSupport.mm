@@ -1,4 +1,5 @@
 #import "FileItemObserverSupport.h"
+#import "SCMManager.h"
 #import "SCMSupportCxx.h"
 #import <io/path.h>
 #import <ns/ns.h>

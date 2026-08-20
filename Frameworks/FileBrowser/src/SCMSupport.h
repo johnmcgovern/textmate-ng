@@ -31,7 +31,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 // Walks the ordered driver table and returns the first driver that has a working
 // copy at `path` (driver_t::has_info_for_directory), or nil if none does.
-+ (nullable SCMDriver*)driverWithInfoForDirectory:(NSString*)path;
+// NS_SWIFT_NAME pins the Swift spelling: a `driver…With…For…` name confuses the
+// importer's factory/preposition heuristics (it drops `driver` and `driverWithInfo`
+// both), and SCMManager.swift is the only Swift caller (rule 28).
++ (nullable SCMDriver*)driverWithInfoForDirectory:(NSString*)path NS_SWIFT_NAME(driverWithInfo(forDirectory:));
 
 @property (nonatomic, readonly) BOOL tracksDirectories;
 

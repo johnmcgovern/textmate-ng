@@ -11,7 +11,7 @@
 @end
 
 @interface OakPasteboardIdleObserver : NSObject
-+ (instancetype)sharedInstance;
++ (nonnull instancetype)sharedInstance;
 - (void)addObject:(id<OakPasteboardIdleObserving>)object;
 - (void)start;
 - (void)stop;

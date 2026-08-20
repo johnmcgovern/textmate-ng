@@ -12,7 +12,7 @@
 // Opens (and, first time, migrates + creates) the shared PasteboardHistory.db, or an
 // in-memory database when disablePersistentClipboardHistory is set, exactly as
 // +[OakPasteboard SQLDatabase] did.
-+ (instancetype)sharedInstance;
++ (nonnull instancetype)sharedInstance;
 
 // Runs one or more `;`-separated statements. Returns nil on error. The result shape
 // is moved verbatim from RunSQLStatement (rule 6): for a single row-returning

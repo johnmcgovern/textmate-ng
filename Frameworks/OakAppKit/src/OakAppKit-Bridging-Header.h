@@ -31,3 +31,13 @@
 #import "OakRolloverButton.h"
 #import "OakUIConstructionFunctions.h"
 #import "OakAppKitSupport.h"
+
+// The C++-free boundaries OakPasteboard.swift stands on: the exported constants, the
+// SQLite store, the run-loop idle observer (and its protocol), and the selector
+// panel it drives. OakPasteboard.h itself is deliberately absent — Swift defines
+// OakPasteboard / OakPasteboardEntry, so importing the hand-declaration here would
+// collide with the generated OakAppKit-Swift.h.
+#import "OakPasteboardConstants.h"
+#import "OakPasteboardDatabase.h"
+#import "OakPasteboardIdleObserver.h"
+#import "OakPasteboardSelector.h"

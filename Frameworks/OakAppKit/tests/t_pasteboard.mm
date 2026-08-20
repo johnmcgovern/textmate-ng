@@ -1,5 +1,7 @@
 #import <OakAppKit/OakPasteboard.h>
 #import <OakAppKit/OakPasteboardDatabase.h>
+#import <OakAppKit/OakPasteboardSelector.h>
+#import <OakAppKit/OakPasteboardChooser.h>
 
 // Written against the ObjC++ OakPasteboard, before the Swift port, so it judges the
 // original and not the translation (the DocumentWindowController lesson, rule 18).
@@ -98,6 +100,38 @@ void test_oak_pasteboard_keeps_its_instance_surface ()
 	};
 	for(SEL selector : selectors)
 		OAK_ASSERT([OakPasteboard instancesRespondToSelector:selector]);
+}
+
+void test_oak_pasteboard_selector_keeps_its_surface ()
+{
+	// The panel OakPasteboard.selectItemForControl: drives; FFTextFieldViewController
+	// also reaches +sharedInstance. Pure -respondsToSelector: (no XIB load). Rule 18.
+	OAK_ASSERT([OakPasteboardSelector respondsToSelector:@selector(sharedInstance)]);
+	SEL const selectors[] = {
+		@selector(setIndex:),
+		@selector(setEntries:),
+		@selector(showAtLocation:),
+		@selector(setWidth:),
+		@selector(setPerformsActionOnSingleClick),
+		@selector(entries),
+	};
+	for(SEL selector : selectors)
+		OAK_ASSERT([OakPasteboardSelector instancesRespondToSelector:selector]);
+}
+
+void test_oak_pasteboard_chooser_keeps_its_surface ()
+{
+	// The clipboard-history chooser, opened from OakDocumentView. Rule 18.
+	OAK_ASSERT([OakPasteboardChooser instancesRespondToSelector:@selector(showWindowRelativeToFrame:)]);
+	OAK_ASSERT([OakPasteboardChooser respondsToSelector:@selector(sharedChooserForPasteboard:)]);
+	SEL const selectors[] = {
+		@selector(filterString),  @selector(setFilterString:),
+		@selector(action),        @selector(setAction:),
+		@selector(alternateAction), @selector(setAlternateAction:),
+		@selector(target),        @selector(setTarget:),
+	};
+	for(SEL selector : selectors)
+		OAK_ASSERT([OakPasteboardChooser instancesRespondToSelector:selector]);
 }
 
 void test_oak_pasteboard_entry_keeps_its_surface ()

@@ -32,6 +32,7 @@
 #import "OakUIConstructionFunctions.h"
 #import "OakAppKitSupport.h"
 #import "OakAppKit.h" // OakPerformTableViewActionFromSelector / OakPerformTableViewActionResult (OakPasteboardSelector.swift)
+#import "OakSyntaxFormatter.h" // regexp styling in OakPasteboardChooser.swift's displayString (C++-free header)
 
 // The C++-free boundaries OakPasteboard.swift stands on: the exported constants, the
 // SQLite store, the run-loop idle observer (and its protocol), and the selector

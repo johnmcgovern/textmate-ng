@@ -289,7 +289,8 @@ What remains, and why each is where it is:
 
 | file | lines | status |
 | --- | --- | --- |
-| `OakPasteboard` + `Chooser` + `Selector` | 1850 | **the real next job here** — a session of its own, and where this framework's actual C++ lives |
+| `OakPasteboard` | — | **done** (`0389638f`, Swift); its store/observer/constants/find-options are the new boundary files |
+| `OakPasteboardChooser` + `OakPasteboardSelector` | 1010 | **the real next job here** — the two panels OakPasteboard drives |
 | `OakUIConstructionFunctions`, `OakAppKit.mm`, `OakSound`, `OakToolTip`, `NSColor`/`NSAlert Additions` | ~700 | deferred: free functions / C variadics, want Swift callers first |
 | `OakEncodingPopUpButton` | 345 | not surveyed; 23 C++ hits, the densest left |
 | `NSMenuItem Additions` | 234 | C++-typed selectors, needs a support split |
@@ -497,10 +498,22 @@ rule 19/20 survey before believing any of them is a port. The SCMManager port's 
 decisions (not `@MainActor` + `@unchecked Sendable`, the hand-decl header out of the
 bridging header, keeping NSApp off the deinit path) are in its commit message.
 
-**Next real port: OakAppKit's `OakPasteboard` + `Chooser` + `Selector` (1850)** —
-where that framework's actual C++ lives — then `OakFilterList` (2757), unsurveyed.
-Start each with the selector-surface test (rule 18), then the checklist rules 15–21
-encode. All 49 rules are now in `ide/RULES.md`.
+**`OakPasteboard` is done (2026-08-20, `0389638f`).** It went over six commits, the
+shape worth copying for a C++-heavy class: a selector-surface test (`6605c31e`), then
+one boundary extraction per C++ blocker while the class stayed ObjC++ — the exported
+constants (rule 19), the SQLite store behind `OakPasteboardDatabase`, the CFRunLoop
+idle observer, and `-findOptions` (`find::options_t`, rule 17) into a category — each
+built and tested on its own, and only then the translation. The hand-decl header is
+`OakScopeBarView.h`'s pattern; no consumer changed. Its decisions are in the commit
+messages.
+
+**Next real port: `OakPasteboardChooser` (656) and `OakPasteboardSelector` (354)** —
+the two panels `OakPasteboard` drives, still ObjC++. The chooser leans on the
+pasteboard's internals (a `DisplayString` category, `entries`/`currentEntry`,
+`updatePasteboardWithEntries:`); the selector is independent and its only C++ is
+`std::count`/`std::clamp`/`to_s` for cell layout. Then `OakFilterList` (2757),
+unsurveyed. Start each with the selector-surface test (rule 18), then the checklist
+rules 15–21 encode. All 49 rules are in `ide/RULES.md`.
 
 ## RESOLVED: the three crashes are one heap-corruption bug, `dc66d10d` (2026-08-18, evening)
 

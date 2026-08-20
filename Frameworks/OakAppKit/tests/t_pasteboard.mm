@@ -1,4 +1,5 @@
 #import <OakAppKit/OakPasteboard.h>
+#import <OakAppKit/OakPasteboardDatabase.h>
 
 // Written against the ObjC++ OakPasteboard, before the Swift port, so it judges the
 // original and not the translation (the DocumentWindowController lesson, rule 18).
@@ -23,6 +24,47 @@
 void setup ()
 {
 	NSApplicationLoad();
+	// Open the store in memory, before it is first touched, so these tests neither
+	// read nor write the real PasteboardHistory.db.
+	[NSUserDefaults.standardUserDefaults setBool:YES forKey:@"disablePersistentClipboardHistory"];
+}
+
+// These judge OakPasteboardDatabase — the SQLite store the port extracted out of
+// OakPasteboard.mm — directly, so the extraction is covered before OakPasteboard.mm
+// becomes Swift. There was no pasteboard test at all before; the store is the
+// riskiest piece to move, and the whole point of extracting it while OakPasteboard
+// is still ObjC++ is that a test can judge the shim (the two-commit shape).
+
+void test_pasteboard_database_round_trips_a_text_row ()
+{
+	// prepare → bind_text(:name) → step → ColumnsAsDictionary(SQLITE_TEXT), the core
+	// path the extraction moved. Schema is created on first access.
+	OakPasteboardDatabase* db = OakPasteboardDatabase.sharedInstance;
+	[db executeQuery:@"INSERT INTO clipboards ('name') VALUES (:name);" variables:@{ @":name": @"t_pasteboard_TestBoard" }];
+
+	NSArray* rows = [db executeQuery:@"SELECT name FROM clipboards WHERE name = :name;" variables:@{ @":name": @"t_pasteboard_TestBoard" }];
+	OAK_ASSERT_EQ(rows.count, 1);
+	OAK_ASSERT([rows.firstObject[@"name"] isEqualToString:@"t_pasteboard_TestBoard"]);
+}
+
+void test_pasteboard_database_binds_and_reads_a_number ()
+{
+	// Exercises the @encode → sqlite3_bind_int64 dispatch table (an NSNumber :n) and
+	// SQLITE_INTEGER read-back, without needing a table.
+	OakPasteboardDatabase* db = OakPasteboardDatabase.sharedInstance;
+	NSArray* rows = [db executeQuery:@"SELECT :n + 1 AS result;" variables:@{ @":n": @(41) }];
+	OAK_ASSERT_EQ(rows.count, 1);
+	OAK_ASSERT_EQ([rows.firstObject[@"result"] integerValue], 42);
+}
+
+void test_pasteboard_database_absent_binding_is_not_a_crash ()
+{
+	// A query naming a variable the dictionary does not supply logs "no variable" and
+	// binds nothing — it must not crash (the std::map find/end path the port replaced
+	// with an NSDictionary lookup, rule 33).
+	OakPasteboardDatabase* db = OakPasteboardDatabase.sharedInstance;
+	NSArray* rows = [db executeQuery:@"SELECT :missing AS result;" variables:@{}];
+	OAK_ASSERT_EQ(rows.count, 1);
 }
 
 void test_oak_pasteboard_keeps_its_class_surface ()

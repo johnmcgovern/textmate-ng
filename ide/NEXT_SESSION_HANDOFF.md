@@ -290,7 +290,7 @@ What remains, and why each is where it is:
 | file | lines | status |
 | --- | --- | --- |
 | `OakPasteboard` | — | **done** (`0389638f`, Swift); its store/observer/constants/find-options are the new boundary files |
-| `OakPasteboardChooser` + `OakPasteboardSelector` | 1010 | **the real next job here** — the two panels OakPasteboard drives |
+| `OakPasteboardChooser` + `OakPasteboardSelector` | — | **done** (`b89edee4` / `dab6b442`, Swift); whole pasteboard cluster is now Swift |
 | `OakUIConstructionFunctions`, `OakAppKit.mm`, `OakSound`, `OakToolTip`, `NSColor`/`NSAlert Additions` | ~700 | deferred: free functions / C variadics, want Swift callers first |
 | `OakEncodingPopUpButton` | 345 | not surveyed; 23 C++ hits, the densest left |
 | `NSMenuItem Additions` | 234 | C++-typed selectors, needs a support split |
@@ -507,13 +507,25 @@ built and tested on its own, and only then the translation. The hand-decl header
 `OakScopeBarView.h`'s pattern; no consumer changed. Its decisions are in the commit
 messages.
 
-**Next real port: `OakPasteboardChooser` (656) and `OakPasteboardSelector` (354)** —
-the two panels `OakPasteboard` drives, still ObjC++. The chooser leans on the
-pasteboard's internals (a `DisplayString` category, `entries`/`currentEntry`,
-`updatePasteboardWithEntries:`); the selector is independent and its only C++ is
-`std::count`/`std::clamp`/`to_s` for cell layout. Then `OakFilterList` (2757),
-unsurveyed. Start each with the selector-surface test (rule 18), then the checklist
-rules 15–21 encode. All 49 rules are in `ide/RULES.md`.
+**`OakPasteboardChooser` (`b89edee4`) and `OakPasteboardSelector` (`dab6b442`) are
+done (2026-08-20).** Both were straight translations, no boundary extraction — the
+chooser's `DisplayString` C++ became a private `displayString` extension over
+`OakSyntaxFormatter`, and the selector's `std::count`/`std::clamp`/`to_s` cell layout
+became plain Swift. Both are XIB-loaded `NSWindowController`s: the `@objc(...)` class
+name and the `@IBOutlet` are load-bearing (the nib names them). Both got hand-decl
+headers (`OakScopeBarView.h`'s pattern) for their cross-framework callers,
+`OakDocumentView.mm` / `FFTextFieldViewController`. Decisions are in the commits.
+That closes the whole pasteboard cluster — every `OakPasteboard*` file is Swift now
+except the four C++-free boundary shims, which are finished by design.
+
+**Not visually verified.** Both panels compile, pass their pinned selector surface,
+and the app launches clean, but the ⌥⌘V history panel and the chooser window were
+never driven on screen this session (no Screen Recording permission). Worth an
+eyes-on pass before relying on them.
+
+**Next real port: `OakFilterList` (2757), unsurveyed.** Start with the
+selector-surface test (rule 18), then the checklist rules 15–21 encode. All 49 rules
+are in `ide/RULES.md`.
 
 ## RESOLVED: the three crashes are one heap-corruption bug, `dc66d10d` (2026-08-18, evening)
 

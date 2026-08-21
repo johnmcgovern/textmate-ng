@@ -1326,28 +1326,6 @@ SKIPPED_TESTS = {
   # default-bundles provisioning supplies. Recheck once `bl` can reach its server.
   "file_t_typeTests/test_file_type"           => "needs installed grammars (DefaultBundles)",
   "file_t_typeTests/test_create_glob"         => "needs installed grammars (DefaultBundles)",
-  # Crashes the test *runner* rather than failing, so it takes its whole bundle with
-  # it. Both tests build the Settings window, and making a PreferencesViewController a
-  # window's contentViewController makes AppKit bind the window title to it, so KVO
-  # duplicates the class and Swift's swift_objc_classCopyFixupHandler mishandles the
-  # copy — the same fixup handler rule 49 names. The damage is a poisoned heap block,
-  # so the crash surfaces later and elsewhere (Foundation's NSValueTransformer
-  # registry, from FilesPreferences.init) and disappears under Guard Malloc or ASan.
-  #
-  # Bisected 2026-08-21: clean for a plain NSViewController, for the @objc base
-  # OakTransitionViewController, for an empty Swift subclass of it, and for a subclass
-  # overriding an ObjC method; it takes a subclass carrying *Swift-only* vtable entries
-  # to break, which PreferencesViewController does. @objc dynamic on the property,
-  # @objc on the two Swift-only methods, and @objcMembers on the class were each tried
-  # and each still crashed, so the fix is structural, not an annotation. Full diagnosis
-  # in NEXT_SESSION_HANDOFF.md.
-  #
-  # Skipped, not deleted: it has crashed on every run since at least 2026-08-18 while
-  # CI called it green about half the time, so leaving it in makes the Test step
-  # permanently red now that a crashed runner is detected. Note this *disables the
-  # guard for the Settings crash that shipped in alpha.10/11* — restore it with the fix.
-  # The Settings window itself works in the app (opened, panes switched, 2026-08-21).
-  "PreferencesWindowTests"                    => "crashes the runner: KVO class-copy fixup, see the note above",
   # Genuine behaviour mismatches in code under test — real bugs or stale fixtures.
   "file_t_saveTests/test_save_translit"       => "transliteration output differs",
   "file_t_saveTests/test_export_filter"       => "export filter did not run",

@@ -47,6 +47,8 @@ class PreferencesViewController: OakTransitionViewController {
 
 		guard let newViewController = viewController(forIdentifier: identifier) else { return }
 		title = newViewController.title ?? "Preferences"
+		// The window title came from the title binding before; set it directly now.
+		view.window?.title = title ?? "Preferences"
 
 		subview = newViewController.view
 
@@ -73,7 +75,15 @@ class PreferencesViewController: OakTransitionViewController {
 	private let preferencesViewController = PreferencesViewController()
 
 	init() {
-		let window = NSPanel(contentViewController: preferencesViewController)
+		// Deliberately NOT NSPanel(contentViewController:). That setter calls
+		// -[NSWindow _bindTitleToContentViewController], which makes KVO build an
+		// NSKVONotifying_ subclass of this Swift view controller — and that class copy
+		// corrupts the heap, killing the app the moment Settings opens in a Release build
+		// (alpha.15 shipped it; see the handoff). Owning the content view directly avoids
+		// the binding entirely; the two things the binding gave us — the window title
+		// following the pane, and -viewWillAppear firing — are done explicitly below.
+		let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+		window.contentView = preferencesViewController.view
 		super.init(window: window)
 
 		if let topLeft = UserDefaults.standard.string(forKey: kMASPreferencesFrameTopLeftKey) {
@@ -110,6 +120,13 @@ class PreferencesViewController: OakTransitionViewController {
 	@available(*, unavailable)
 	required init?(coder: NSCoder) {
 		fatalError("init(coder:) is not supported — Preferences is a singleton built in code")
+	}
+
+	// AppKit called -viewWillAppear itself while the panel owned a contentViewController;
+	// it is the hook that restores the last selected pane, so drive it on show.
+	override func showWindow(_ sender: Any?) {
+		preferencesViewController.viewWillAppear()
+		super.showWindow(sender)
 	}
 
 	func windowDidMove(_ notification: Notification) {

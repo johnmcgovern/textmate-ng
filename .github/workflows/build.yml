@@ -86,11 +86,11 @@ jobs:
       # that reliably marks it, so grep for it and fail regardless of the exit status.
       run: |
         set -o pipefail
-        status=0
-        xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug 2>&1 | tee /tmp/test.log || status=$?
+        test_status=0
+        xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug 2>&1 | tee /tmp/test.log || test_status=$?
         if grep -q "Restarting after unexpected exit, crash, or test timeout" /tmp/test.log; then
           echo "::error::A test process crashed (not an assertion failure). The tests that were running when it died:"
           grep -B2 "Restarting after unexpected exit" /tmp/test.log | grep "Test Case" || true
           exit 1
         fi
-        exit $status
+        exit $test_status

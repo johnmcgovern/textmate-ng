@@ -574,6 +574,54 @@ chooser is worth doing early next session.
 
 All 51 rules are in `ide/RULES.md`.
 
+## OPEN: `PreferencesWindowTests` crashes the runner — KVO class-copy fixup (2026-08-21)
+
+**Skipped in `SKIPPED_TESTS`, and that disables the guard for the Settings crash that
+shipped in alpha.10/11. Restore it with the fix.** The Settings window itself is fine:
+it was opened in the app and its panes switched on 2026-08-21. Nothing user-facing.
+
+**What happens.** Both tests build `Preferences.sharedInstance`. Making a
+`PreferencesViewController` a window's `contentViewController` makes AppKit bind the
+window title to it, KVO duplicates the class, and Swift's
+`swift_objc_classCopyFixupHandler` mishandles the copy — the same fixup handler rule 49
+names. It does not fault there: it poisons a heap block, so the crash lands later and
+somewhere unrelated (`EXC_BAD_ACCESS` at a constant `0x20aa0007f3` inside CoreFoundation,
+messaging a Swift value-witness-table pointer read out of Foundation's
+`NSValueTransformer` registry, reached from `FilesPreferences.init`).
+
+**Why it looked flaky and was not.** The crash is 100% reproducible; only the *reporting*
+flapped, which is why CI called it green about half the time and the local full-suite
+check called it a pass — see the CI commit `7bd897f1`, which now fails on
+`Restarting after unexpected exit`. It is also why `valueTransformerForName:` is a red
+herring: in the app that registry is already built, and any first `NSMutableDictionary`
+insert can crash instead. It vanishes under Guard Malloc and under ASan (ASan reports
+nothing, because the corrupting write is in system code, not ours).
+
+**Bisected 2026-08-21**, each case a fresh process at the same breakpoint, confirmed over
+two identical passes, using a 300-dictionary probe — a single-dictionary probe is too
+weak to trust, because whether you hit the poisoned block depends on allocation layout:
+
+| window's contentViewController | result |
+| --- | --- |
+| plain `NSViewController` | clean |
+| `OakTransitionViewController` (the `@objc` Swift base) | clean |
+| empty Swift subclass of it | clean |
+| subclass overriding an **ObjC** method | clean |
+| subclass adding a **Swift-only** method | traps in `swift_objc_classCopyFixupHandler` |
+| the real `PreferencesViewController` | poisons the heap |
+
+So it takes a Swift subclass carrying *Swift-only* vtable entries over an `@objc`-exposed
+Swift base. **Annotations do not fix it** — `@objc dynamic` on `selectedViewIdentifier`,
+`@objc` on the two Swift-only methods, and `@objcMembers` on the class were each built and
+run, and each still crashed. Do not re-try those.
+
+**What is left to try** is structural: collapse the Swift-subclass-of-a-Swift-class layer
+(fold `PreferencesViewController` into `OakTransitionViewController`, or give it an ObjC
+base), or stop the window from KVO-ing the controller at all (something other than
+`NSPanel(contentViewController:)`). Note the same shape exists elsewhere — anything that
+subclasses `OakTransitionViewController` in Swift and ends up as a window's
+contentViewController is exposed.
+
 ## RESOLVED: the three crashes are one heap-corruption bug, `dc66d10d` (2026-08-18, evening)
 
 **The instrumentation this section (as "OPEN", below) asked for was run. It

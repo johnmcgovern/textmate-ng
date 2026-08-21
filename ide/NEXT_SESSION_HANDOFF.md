@@ -341,7 +341,10 @@ The resolved preconditions, so nobody re-checks them: the `.rave` globs have
 `shared_ptr` ivar, and the bridging-header/hand-declared-`.h` arrangement is
 settled and proven.
 
-`OakFilterList` is **not** surveyed. What is already known:
+`OakFilterList` is **now surveyed and half ported** — see the OakFilterList section
+near the end of this file for what is done, what is left, and rules 50–51. The notes
+below predate that work and are kept only for the two items still standing
+(`FileBrowserViewController`'s `variables`, and the MenuBuilder/HTMLOutput ordering):
 
 - `FileBrowserViewController` declares `- (std::map<std::string, std::string>)variables`,
   so it has the `OakTextViewDelegate` shape of problem already, and
@@ -477,8 +480,9 @@ the completion of item 1, not a separate job — same failure mode. A bonus catc
 along: the version-control view's blank "Uncommitted Changes" / "Untracked Items" group
 labels were the same fault, now drawing.
 
-**3. Consolidate the rules into one file — DONE (2026-08-18).** All 49 rules now
-live in `ide/RULES.md`, moved verbatim; `FIND_PORT_HANDOFF.md` and
+**3. Consolidate the rules into one file — DONE (2026-08-18).** All the rules now
+live in `ide/RULES.md`, moved verbatim (49 then; 51 since — OakFilterList added 50
+and 51 on 2026-08-20); `FIND_PORT_HANDOFF.md` and
 `FILEBROWSER_PORT_HANDOFF.md` carry pointer stubs, and the documentation map above
 points at the single file. The split — 1–22 / 23–49 across two handoffs, with the
 map advertising "22 of them" — was a navigation bug in the one document whose whole
@@ -523,9 +527,52 @@ and the app launches clean, but the ⌥⌘V history panel and the chooser window
 never driven on screen this session (no Screen Recording permission). Worth an
 eyes-on pass before relying on them.
 
-**Next real port: `OakFilterList` (2757), unsurveyed.** Start with the
-selector-surface test (rule 18), then the checklist rules 15–21 encode. All 49 rules
-are in `ide/RULES.md`.
+## `OakFilterList`: bottom half done, three choosers left (2026-08-20)
+
+Ported bottom-up, each in the two-commit shape (pin, then translate), each verified
+with the framework bundle plus the full app build. **Done:** `ui/TableView`
+(`1dd34459`), `ui/SearchField` (`15155fdf`), `OakAbbreviations` (`d75eefc5`),
+`OakFileTableCellView` (`bbaaa24c`) and the base class `OakChooser` (`1a97557a`).
+`CreateAttributedStringWithMarkedUpRanges` was extracted first into
+`OakChooserMarkup.{h,mm}` (`820db82f`) and **stays ObjC++** (rule 19).
+
+**Left, in this order — smallest and least C++ first:** `SymbolChooser` (167 lines,
+12 C++ hits), `FileChooser` (705, 35), `BundleItemChooser` (1057, 71). All three are
+`OakChooser` subclasses and all three call `CreateAttributedStringWithMarkedUpRanges`,
+so each needs its ranker C++ dealt with the way rule 17 and the OakPasteboard port
+describe. This framework's bridging header is `src/OakFilterList-Bridging-Header.h`
+(new this session); its test bundle is new too, so `default.rave` already carries
+`tests` and a `.swift` glob.
+
+**The base class earned two new rules, 50 and 51 — read them before the subclasses.**
+Rule 50 is the important one and it cost a crash: on a Swift class that ObjC
+subclasses, **every `@objc` member must also be `dynamic`**, not just the hooks you
+expect to be overridden, because a statically compiled ObjC subclass has no Swift
+vtable. The failure was `EXC_BAD_ACCESS` inside the `items` setter by way of the
+*lazy `itemCountTextField` getter* — not a hook at all — and it looks like memory
+corruption rather than a dispatch bug. `t_chooser.mm` pins it with an ObjC subclass
+that counts the base's calls into its own overrides (`OakChooserTestSubclass.h`,
+defined in a header per the `DWKVORecorder` pattern, because gen_xctest namespaces
+test bodies). Rule 51: `remove(atOffsets:)` is **SwiftUI**, not stdlib — it links the
+whole framework against SwiftUICore and breaks unrelated consumers' links.
+
+Two more `OakChooser` decisions the subclasses depend on: the `firstResponder`
+observation stays **classic KVO registered on self**, because
+`BundleItemChooser`'s `-observeValueForKeyPath:` override piggybacks on that
+registration *and* forwards unknown contexts to `super` — a block-based token would
+silently break both; and `OakChooser.h` is now the hand-decl header for four ObjC++
+subclasses, three here plus `FavoriteChooser` in the app target. **That app-side
+subclass is easy to miss** — it also uses `OakFileTableCellView` and the markup
+function, and both times the framework built fine and only the app link failed, so
+grep `Applications/` too when changing anything in this framework's public surface.
+
+**Not visually verified.** The choosers build, pass their pins, and the app launches
+clean with all four subclasses on the Swift base, but no chooser panel (⌘T, ⇧⌘T, the
+file chooser) was opened on screen this session — no Screen Recording permission.
+Given rule 50's failure mode was invisible to a green build, an eyes-on open of a
+chooser is worth doing early next session.
+
+All 51 rules are in `ide/RULES.md`.
 
 ## RESOLVED: the three crashes are one heap-corruption bug, `dc66d10d` (2026-08-18, evening)
 

@@ -1,7 +1,7 @@
-# The numbered rules — all 49, in one place
+# The numbered rules — all 51, in one place
 
 Earned across every port in this project — Find, DocumentWindowController,
-OakAppKit, FileBrowser. They live here, in one file, so a survey reads the whole
+OakAppKit, FileBrowser, OakFilterList. They live here, in one file, so a survey reads the whole
 list rather than a third of it: rules 1–22 and 23–49 used to sit in two separate
 handoffs while the documentation map pointed at one and called it "22 of them", so
 a session that followed the map read a third of the list believing it had read all
@@ -11,7 +11,9 @@ of it.
 ("rule 18", "rules 15–21", "rule 49") — never renumber. Append the next rule at the
 end. The port-by-port narrative that earned each rule stays in its own handoff
 (`FIND_PORT_HANDOFF.md`, `FILEBROWSER_PORT_HANDOFF.md`); only the rule statements
-were consolidated here, verbatim, on 2026-08-18.
+were consolidated here, verbatim, on 2026-08-18. Rules 50–51 were added on
+2026-08-20 from the OakFilterList port and are stated in full below, that handoff
+being NEXT_SESSION_HANDOFF.md.
 
 ---
 
@@ -483,3 +485,31 @@ knew.
     the whole class instead of the six preference classes `dc66d10d` patched. The
     standing rule is now the going-forward guard, not a pending task: when you add
     a `final class`, apply the same test before shipping it.
+
+---
+
+## Rules 50–51 — OakFilterList
+
+50. **On a Swift class that ObjC subclasses, every `@objc` member must also be
+    `dynamic` — not just the methods you expect to be overridden.** A statically
+    compiled ObjC subclass has no Swift vtable. Any base-internal Swift call that
+    dispatches through one therefore reads past the ObjC class metadata and jumps
+    into data as soon as `self` is a subclass instance. Found porting `OakChooser`
+    (`1a97557a`), whose four subclasses are ObjC++: the crash was `EXC_BAD_ACCESS`
+    in the `items` setter, and the offending call was not a hook at all but the
+    innocuous lazy `itemCountTextField` getter. Marking only the overridable hooks
+    `dynamic` is not enough and fails in a way that looks like memory corruption
+    rather than a dispatch bug. `dynamic` forces `objc_msgSend` throughout, which
+    is *also* what makes a subclass override win when the base calls the method on
+    `self` — the two problems have one fix. This is rule 49's sibling: 49 is what
+    ObjC subclassing does to `final`, 50 is what it does to dispatch. Pin it the
+    way `t_chooser.mm` does — an ObjC subclass in the test bundle that counts the
+    base's calls into its own overrides — because nothing else catches it: the
+    build is clean and every Swift-only test passes.
+
+51. **`remove(atOffsets:)` is SwiftUI, not the standard library.** Using it on a
+    plain `Array` in a framework compiles, then auto-links SwiftUI into the static
+    archive and breaks the link of *every* consumer that is not allowed to link
+    `SwiftUICore` (`OakChooser` took out `CommitWindowTests`). The error names an
+    undefined `RangeReplaceableCollection.remove(atOffsets:)` symbol and points at
+    the consumer, not at the file that caused it. Remove by reversed index instead.

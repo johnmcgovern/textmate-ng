@@ -1,7 +1,3 @@
-@interface OakFileTableCellView : NSTableCellView
-- (instancetype)initWithCloseButton:(NSButton*)closeButton;
-@end
-
 @interface OakChooser : NSWindowController
 @property (nonatomic) SEL action;
 @property (nonatomic, weak) id target;

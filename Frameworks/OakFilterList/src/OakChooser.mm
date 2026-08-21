@@ -1,90 +1,10 @@
 #import "OakChooser.h"
 #import "ui/TableView.h"
 #import "ui/SearchField.h"
-#import <OakAppKit/NSColor Additions.h>
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakFoundation/OakFoundation.h>
 #import <OakFoundation/NSString Additions.h>
-
-@interface OakFileTableCellView ()
-@property (nonatomic) NSTextField* folderTextField;
-@property (nonatomic) NSButton* closeButton;
-@end
-
-@implementation OakFileTableCellView
-- (instancetype)initWithCloseButton:(NSButton*)closeButton
-{
-	if((self = [super init]))
-	{
-		NSImageView* imageView = [NSImageView new];
-		[imageView setContentHuggingPriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
-		[imageView setContentCompressionResistancePriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
-
-		NSTextField* fileTextField = OakCreateLabel(@"", [NSFont systemFontOfSize:13]);
-		NSTextField* folderTextField = OakCreateLabel(@"", [NSFont controlContentFontOfSize:10]);
-
-		fileTextField.lineBreakMode        = NSLineBreakByTruncatingTail;
-		fileTextField.cell.lineBreakMode   = NSLineBreakByTruncatingTail;
-		folderTextField.lineBreakMode      = NSLineBreakByTruncatingHead;
-		folderTextField.cell.lineBreakMode = NSLineBreakByTruncatingHead;
-
-		NSDictionary* views = @{ @"icon": imageView, @"file": fileTextField, @"folder": folderTextField, @"close": closeButton };
-		OakAddAutoLayoutViewsToSuperview([views allValues], self);
-
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-(4)-[icon]-(4)-[file]-(4)-[close(==16)]-(8)-|" options:0 metrics:nil views:views]];
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[file]-(2)-[folder]-(5)-|" options:NSLayoutFormatAlignAllLeading|NSLayoutFormatAlignAllTrailing metrics:nil views:views]];
-		[imageView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active   = YES;
-		[closeButton.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active = YES;
-
-		[imageView bind:NSValueBinding toObject:self withKeyPath:@"objectValue.icon" options:nil];
-		[fileTextField bind:NSValueBinding toObject:self withKeyPath:@"objectValue.name" options:nil];
-		[folderTextField bind:NSValueBinding toObject:self withKeyPath:@"objectValue.folder" options:nil];
-
-		self.imageView       = imageView;
-		self.textField       = fileTextField;
-		self.folderTextField = folderTextField;
-		self.closeButton     = closeButton;
-	}
-	return self;
-}
-
-- (NSAttributedString*)selectedStringForString:(id)aString
-{
-	NSMutableAttributedString* str = [aString isKindOfClass:[NSString class]] ? [[NSMutableAttributedString alloc] initWithString:aString attributes:nil] : [aString mutableCopy];
-	[str enumerateAttributesInRange:NSMakeRange(0, str.length) options:NSAttributedStringEnumerationLongestEffectiveRangeNotRequired usingBlock:^(NSDictionary* attrs, NSRange range, BOOL *stop){
-		if(attrs[NSBackgroundColorAttributeName] != nil)
-			[str addAttribute:NSBackgroundColorAttributeName value:[NSColor tmMatchedTextSelectedBackgroundColor] range:range];
-		if(attrs[NSUnderlineColorAttributeName] != nil)
-			[str addAttribute:NSUnderlineColorAttributeName value:[NSColor tmMatchedTextSelectedUnderlineColor] range:range];
-	}];
-	return str;
-}
-
-- (void)setBackgroundStyle:(NSBackgroundStyle)backgroundStyle
-{
-	[super setBackgroundStyle:backgroundStyle];
-	if(backgroundStyle == NSBackgroundStyleDark)
-	{
-		self.textField.objectValue       = [self selectedStringForString:[self valueForKeyPath:@"objectValue.name"]];
-		self.folderTextField.textColor   = [NSColor colorWithCalibratedWhite:0.9 alpha:1];
-		self.folderTextField.objectValue = [self selectedStringForString:[self valueForKeyPath:@"objectValue.folder"]];
-	}
-	else
-	{
-		self.textField.objectValue       = [self valueForKeyPath:@"objectValue.name"];
-		self.folderTextField.textColor   = [NSColor colorWithCalibratedWhite:0.5 alpha:1];
-		self.folderTextField.objectValue = [self valueForKeyPath:@"objectValue.folder"];
-	}
-}
-
-- (id)accessibilityAttributeValue:(NSString*)attribute
-{
-	if([attribute isEqualToString:NSAccessibilityChildrenAttribute])
-			return @[ self.textField.cell, self.folderTextField.cell, self.closeButton.cell, self.imageView.cell ];
-	else	return [super accessibilityAttributeValue:attribute];
-}
-@end
 
 @interface OakChooser () <NSWindowDelegate, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate>
 {

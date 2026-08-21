@@ -1,6 +1,7 @@
 #import "Favorites.h"
 #import <OakFilterList/OakAbbreviations.h>
 #import <OakFilterList/OakChooserMarkup.h>
+#import <OakFilterList/OakFileTableCellView.h>
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakAppKit/OakScopeBarView.h>

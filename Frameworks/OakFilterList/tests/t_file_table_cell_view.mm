@@ -1,4 +1,4 @@
-#import "../src/OakChooser.h"
+#import "../src/OakFileTableCellView.h"
 
 // Written against the ObjC++ OakFileTableCellView, before its Swift port (rule 18). The
 // file/bundle choosers show it for each row; its contract is that -initWithCloseButton:

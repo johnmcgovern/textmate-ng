@@ -15,3 +15,8 @@
 
 // OakIsEmptyString / OakNotEmptyString (OakAbbreviations.swift).
 #import <OakFoundation/OakFoundation.h>
+
+// OakCreateLabel / OakAddAutoLayoutViewsToSuperview and the tmMatchedText* colours
+// (OakFileTableCellView.swift).
+#import <OakAppKit/OakUIConstructionFunctions.h>
+#import <OakAppKit/NSColor Additions.h>

@@ -20,3 +20,7 @@
 // (OakFileTableCellView.swift).
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakAppKit/NSColor Additions.h>
+
+// OakPerformTableViewActionFromSelector / OakPerformTableViewActionResult and
+// OakStatusBarFont (OakChooser.swift).
+#import <OakAppKit/OakAppKit.h>

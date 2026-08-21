@@ -13,12 +13,12 @@
 // class rather than inherited — the SymbolChooser lesson, and here it is what removes the
 // key-equivalent observer and the event monitor.
 //
-// AppController.mm is the only consumer and it is ObjC++, so it also sets `scope`, which
-// today is a scope::context_t property (rule 17). That C++ type cannot survive the port;
-// this file pins the *behaviour* around it — the panel is constructible and answers its
-// accessors — rather than the spelling, which the port is expected to change to the
-// existing C++-free TMScopeContext box. The wildcard-vs-empty distinction that goes with
-// that change is asserted in the port's own commit, not here.
+// AppController.mm is the only consumer and it is ObjC++, so it also sets `scope`. That
+// was a scope::context_t property when this file was written; the boundary work swapped it
+// for TMScopeContext, the C++-free box (rule 17), and this assertion moved with it. The
+// wildcard matters and is asserted by name: it is AppController's fallback when nothing
+// answers -scopeContext, and TMScopeContext's own +currentScope falls back to the *empty*
+// scope instead, which matches only selectors that accept it and would empty this panel.
 
 void setup ()
 {
@@ -65,7 +65,8 @@ void test_bundle_item_chooser_accepts_a_scope ()
 	// and it is NOT the empty scope: wildcard matches every selector, empty matches only
 	// those that accept it. A port that swaps one for the other shows an empty panel.
 	BundleItemChooser* chooser = [BundleItemChooser new];
-	chooser.scope = scope::wildcard;
+	chooser.scope = TMScopeContext.wildcardScope;
+	OAK_ASSERT(chooser.scope == TMScopeContext.wildcardScope);
 	OAK_ASSERT(chooser.items != nil);
 }
 

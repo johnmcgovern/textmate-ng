@@ -15,6 +15,7 @@
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/OakPasteboard.h>
 #import <OakFilterList/BundleItemChooser.h>
+#import <TMBundleModel/TMBundleModelCxx.h>
 #import <OakFoundation/OakFoundation.h>
 #import <OakFoundation/NSString Additions.h>
 #import <OakTextView/OakDocumentView.h>
@@ -769,7 +770,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 	chooser.editAction = @selector(editBundleItem:);
 
 	OakTextView* textView = [NSApp targetForAction:@selector(scopeContext)];
-	chooser.scope        = textView ? [textView scopeContext] : scope::wildcard;
+	chooser.scope        = textView ? [TMScopeContext scopeContextWithCxxContext:[textView scopeContext]] : TMScopeContext.wildcardScope;
 	chooser.hasSelection = [textView hasSelection];
 
 	if(DocumentWindowController* controller = [NSApp targetForAction:@selector(selectedDocument)])

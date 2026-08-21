@@ -1,6 +1,5 @@
 #import "BundleItemChooser.h"
 #import "BundleItemChooserSupport.h"
-#import <TMBundleModel/TMBundleModelCxx.h>
 #import "OakChooserMarkup.h"
 #import "OakAbbreviations.h"
 #import <OakAppKit/OakAppKit.h>
@@ -421,7 +420,7 @@ static void* kRecordingObserverContext = &kRecordingObserverContext;
 	[self updateItems:self];
 }
 
-- (void)setScope:(scope::context_t)aScope
+- (void)setScope:(TMScopeContext*)aScope
 {
 	_scope = aScope;
 	_unfilteredItems = nil;
@@ -494,7 +493,7 @@ static void* kRecordingObserverContext = &kRecordingObserverContext;
 - (NSArray<ActionItem*>*)unfilteredItems
 {
 	if(_unfilteredItems == nil)
-		_unfilteredItems = [BundleItemChooserSupport unfilteredItemsForScope:[TMScopeContext scopeContextWithCxxContext:self.scope] hasSelection:self.hasSelection searchSource:self.searchSource searchAllScopes:self.searchAllScopes documentPath:self.path documentDirectory:self.directory];
+		_unfilteredItems = [BundleItemChooserSupport unfilteredItemsForScope:self.scope hasSelection:self.hasSelection searchSource:self.searchSource searchAllScopes:self.searchAllScopes documentPath:self.path documentDirectory:self.directory];
 	return _unfilteredItems;
 }
 

@@ -1,6 +1,7 @@
 #import "FileChooser.h"
 #import "OakChooserMarkup.h"
 #import "OakFileTableCellView.h"
+#import "FileChooserItem.h"
 #import "OakAbbreviations.h"
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/OakUIConstructionFunctions.h>
@@ -30,159 +31,6 @@ static NSString* const kUserDefaultsFileChooserSourceIndexKey = @"fileChooserSou
 NSUInteger const kFileChooserAllSourceIndex                = 0;
 NSUInteger const kFileChooserOpenDocumentsSourceIndex      = 1;
 NSUInteger const kFileChooserUncommittedChangesSourceIndex = 2;
-
-@interface FileChooserItem : NSObject
-{
-	std::string _path;
-	std::string _directory;
-	std::string _file;
-	NSInteger _lruRank;
-
-	BOOL _isCurrent;
-	double _rank;
-
-	std::vector<std::pair<size_t, size_t>> _coverDirectory;
-	std::vector<std::pair<size_t, size_t>> _coverFile;
-
-	NSAttributedString* _name;
-	NSAttributedString* _folder;
-}
-@property (nonatomic) OakDocument* document;
-@property (nonatomic, readonly) NSImage* icon;
-@property (nonatomic, readonly) NSAttributedString* name;
-@property (nonatomic, readonly) NSAttributedString* folder;
-@property (nonatomic, getter = isCloseDisabled, readonly) BOOL closeDisabled;
-@property (nonatomic, getter = isMatched) BOOL matched;
-@end
-
-@implementation FileChooserItem
-+ (NSSet*)keyPathsForValuesAffectingIcon
-{
-	return [NSSet setWithObjects:@"document.icon", nil];
-}
-
-+ (NSSet*)keyPathsForValuesAffectingCloseDisabled
-{
-	return [NSSet setWithObjects:@"document.open", @"document.path", nil];
-}
-
-- (NSImage*)icon
-{
-	NSImage* image = [_document.icon copy];
-	[image setSize:NSMakeSize(32, 32)];
-	return image;
-}
-
-- (BOOL)isCloseDisabled
-{
-	return !_document.open || !_document.path;
-}
-
-- (instancetype)initWithDocument:(OakDocument*)aDocument base:(std::string const&)base isCurrent:(BOOL)isCurrent
-{
-	if(self = [super init])
-	{
-		_document  = aDocument;
-		_path      = to_s(_document.path);
-		_directory = _document.path ? path::relative_to(path::parent(_path), base) : "";
-		_file      = _document.path ? path::name(_path) : to_s(_document.displayName);
-		_lruRank   = [OakDocumentController.sharedInstance lruRankForDocument:_document];
-		_isCurrent = isCurrent;
-
-		if(_directory.empty() && _document.path)
-			_directory = ".";
-	}
-	return self;
-}
-
-- (void)reset
-{
-	_matched = NO;
-	_name    = nil;
-	_folder  = nil;
-	_rank    = 0;
-	_coverDirectory.clear();
-	_coverFile.clear();
-}
-
-- (void)updateRankUsingFilter:(std::string const&)filter bindings:(std::vector<std::string> const&)bindings
-{
-	[self reset];
-
-	double rank = _isCurrent ? 0.1 : 3;
-	if(!filter.empty() && filter != NULL_STR)
-	{
-		std::vector<std::pair<size_t, size_t>> cover;
-		if(rank = oak::rank(filter, _file, &_coverFile))
-		{
-			rank += 1;
-
-			auto it = std::find(bindings.begin(), bindings.end(), _path);
-			if(it != bindings.end())
-				rank = 2 + (bindings.end() - it) / (double)bindings.size();
-		}
-		else if(rank = oak::rank(filter, _directory + "/" + _file, &cover))
-		{
-			for(auto pair : cover)
-			{
-				if(pair.first < _directory.size())
-					_coverDirectory.emplace_back(pair.first, std::min(pair.second, _directory.size()));
-				if(_directory.size() + 1 < pair.second)
-					_coverFile.emplace_back(std::max(pair.first, _directory.size() + 1) - _directory.size() - 1, pair.second - _directory.size() - 1);
-			}
-		}
-	}
-
-	if(rank)
-	{
-		_matched = YES;
-		_rank = 3 - rank;
-	}
-}
-
-- (void)updateRankUsingGlob:(path::glob_t const&)glob
-{
-	[self reset];
-	_matched = glob.does_match(_path);
-}
-
-- (NSAttributedString*)name
-{
-	if(!_name)
-		_name = CreateAttributedStringWithMarkedUpRanges(_file, _coverFile, NSLineBreakByTruncatingTail);
-	return _name;
-}
-
-- (NSAttributedString*)folder
-{
-	if(!_folder)
-		_folder = CreateAttributedStringWithMarkedUpRanges(_directory, _coverDirectory, NSLineBreakByTruncatingHead);
-	return _folder;
-}
-
-- (BOOL)isDirectoryMatched
-{
-	return !_coverDirectory.empty();
-}
-
-- (NSComparisonResult)rankCompare:(FileChooserItem*)otherItem
-{
-	if(_rank < otherItem->_rank)
-		return NSOrderedAscending;
-	else if(_rank > otherItem->_rank)
-		return NSOrderedDescending;
-	else if(_lruRank > otherItem->_lruRank)
-		return NSOrderedAscending;
-	else if(_lruRank < otherItem->_lruRank)
-		return NSOrderedDescending;
-	return [self compare:otherItem];
-}
-
-- (NSComparisonResult)compare:(FileChooserItem*)otherItem
-{
-	return [to_ns(_file) localizedCompare:to_ns(otherItem->_file)];
-}
-@end
 
 static NSDictionary* globs_for_path (std::string const& path)
 {
@@ -366,42 +214,20 @@ static NSDictionary* globs_for_path (std::string const& path)
 
 - (void)addRecordsForDocuments:(NSArray<OakDocument*>*)documents
 {
-	std::string const path = to_s(_path);
-
 	NSUInteger firstDirty = _records.count;
 	for(OakDocument* doc in documents)
-		[_records addObject:[[FileChooserItem alloc] initWithDocument:doc base:path isCurrent:[doc.identifier isEqual:_currentDocument]]];
+		[_records addObject:[[FileChooserItem alloc] initWithDocument:doc base:_path isCurrent:[doc.identifier isEqual:_currentDocument]]];
 
 	[self updateRecordsFrom:firstDirty];
 }
 
 - (void)updateRecordsFrom:(NSUInteger)first
 {
-	SEL compareSelector = @selector(compare:);
-	if(OakNotEmptyString(_globString))
-	{
-		path::glob_t const glob(to_s(_globString), false, false);
-		[_records enumerateObjectsAtIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(first, _records.count - first)] options:NSEnumerationConcurrent usingBlock:^(FileChooserItem* item, NSUInteger idx, BOOL* stop){
-			[item updateRankUsingGlob:glob];
-		}];
-	}
-	else
-	{
-		compareSelector = @selector(rankCompare:);
-
-		std::string const filter = to_s(_filterString);
-
-		std::vector<std::string> bindings;
-		for(NSString* str in [[OakAbbreviations abbreviationsForName:@"OakFileChooserBindings"] stringsForAbbreviation:_filterString])
-			bindings.push_back(to_s(str));
-
-		[_records enumerateObjectsAtIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(first, _records.count - first)] options:NSEnumerationConcurrent usingBlock:^(FileChooserItem* item, NSUInteger idx, BOOL* stop){
-			[item updateRankUsingFilter:filter bindings:bindings];
-		}];
-	}
-
-	NSArray* array = [_records filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"isMatched == YES"]];
-	self.items = [array sortedArrayUsingSelector:compareSelector];
+	// OakNotEmptyString, matching the batch ranker's own test exactly: the original only
+	// looked up abbreviations on the filter branch, and a nil-vs-empty mismatch here would
+	// silently drop the user's learned bindings.
+	NSArray<NSString*>* bindings = OakNotEmptyString(_globString) ? nil : [[OakAbbreviations abbreviationsForName:@"OakFileChooserBindings"] stringsForAbbreviation:_filterString];
+	self.items = [FileChooserItem rankedItemsFromRecords:_records fromIndex:first globString:_globString filterString:_filterString bindings:bindings];
 }
 
 // ========

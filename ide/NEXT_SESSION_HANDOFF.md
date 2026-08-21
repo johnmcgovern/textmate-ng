@@ -578,14 +578,31 @@ subclass is easy to miss** — it also uses `OakFileTableCellView` and the marku
 function, and both times the framework built fine and only the app link failed, so
 grep `Applications/` too when changing anything in this framework's public surface.
 
-**Still not visually verified, and this is the standing debt of the whole port.** Every
-chooser builds, passes its pin, and the app launches clean with all four subclasses on the
-Swift base — but no chooser panel (⌘T, ⇧⌘T, ⌃⌘T) has been opened on screen. The pins cannot
-reach the live paths by construction: `FileChooser`'s directory search and SCM status need a
-real project on disk, `SymbolChooser`'s ranking needs an open document, and
-`BundleItemChooser`'s entire item list needs the bundle index (rule 8). Rule 50's failure
-mode was invisible to a green build and was found by luck; treat an eyes-on open of all
-three as the first task of the next session, not an optional check.
+**Visually verified on 2026-08-21** — all three panels driven in the running app through
+the accessibility API (Screen Recording is unavailable, but System Events is not, and it
+reads real UI state rather than pixels). This was the standing debt of the port, because the
+pins cannot reach these paths by construction (rule 8):
+
+- **⌘T Open Quickly** — the background search found 1254 files in this repo, titled the
+  window `~/Developer/textmate-ng`, showed `1 254 items` (localised formatting) and a
+  *relative* status path. Typing `bundleitemchooser` narrowed it to 5, top hit
+  `BundleItemChooser.h`. That is `startSearch`'s semaphore and poll timer, the concurrent
+  ranking, and `path:relativeTo:` — none of which any test touches.
+- **⇧⌘T Jump to Symbol** — 7 symbols for the frontmost document, titled
+  `Jump to Symbol — FFResultNode.swift`, arrowing moved the status through distinct
+  positions, and filtering `result` gave 4. (`init` gives 0 because nothing matches, not
+  because the ranker is broken — checked.)
+- **⌃⌘T Select Bundle Item** — 527 items from the bundle index; the scope bar switches
+  Actions 526 / Settings 52 / Other 73, which re-gathers each time and exercises the
+  `scopeContext.cxxContext.right` access the settings path needs; filtering `comment` gave
+  15; and ⌘2 swapped the titlebar for the key-equivalent recorder, where recording ⌘S
+  filtered to `1 item`. That last one drives the classic KVO on `recording`, the
+  `preserveOrder` ranking branch, and the base's `drawTableViewAsHighlighted` setter reached
+  from a subclass KVO callback — rule 50's exact failure shape, working.
+
+No crash reports, and the app survived every step. One thing not chased: Actions reports 527
+on first open and 526 afterwards. A one-item difference in a menu-derived list is most
+likely a menu item's availability changing, but it was not investigated.
 
 All 51 rules are in `ide/RULES.md`.
 

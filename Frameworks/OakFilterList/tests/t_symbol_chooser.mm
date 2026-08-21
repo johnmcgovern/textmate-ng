@@ -1,4 +1,5 @@
 #import "../src/SymbolChooser.h"
+#import <objc/runtime.h>
 
 // Written against the ObjC++ SymbolChooser, before the Swift port (rule 18). This is the
 // ⇧⌘T "Jump to Symbol" panel: a shared OakChooser subclass driven entirely from
@@ -50,6 +51,24 @@ void test_symbol_chooser_keeps_its_selector_surface ()
 	for(SEL selector : selectors)
 		OAK_ASSERT([SymbolChooser instancesRespondToSelector:selector]);
 	OAK_ASSERT([SymbolChooser respondsToSelector:@selector(sharedInstance)]);
+}
+
+void test_symbol_chooser_implements_windowWillClose_itself ()
+{
+	// -windowWillClose: is how the panel drops its document reference, and it arrives via
+	// the window delegate OakChooser installs. NSWindowController does not implement it, so
+	// a -respondsToSelector: check alone would also pass on a port where the method existed
+	// but was never exposed to ObjC — the delegate call would simply go nowhere and the
+	// document would stay retained with a stale title. Assert the implementation is on this
+	// class, not merely reachable from it.
+	unsigned int count = 0;
+	Method* methods = class_copyMethodList(SymbolChooser.class, &count);
+	BOOL found = NO;
+	for(unsigned int i = 0; i < count; ++i)
+		found = found || method_getName(methods[i]) == @selector(windowWillClose:);
+	free(methods);
+
+	OAK_ASSERT(found);
 }
 
 void test_symbol_chooser_without_a_document_is_empty_and_titled ()

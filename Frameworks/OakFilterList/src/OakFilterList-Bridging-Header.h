@@ -24,3 +24,10 @@
 // OakPerformTableViewActionFromSelector / OakPerformTableViewActionResult and
 // OakStatusBarFont (OakChooser.swift).
 #import <OakAppKit/OakAppKit.h>
+
+// OakDocument (SymbolChooser.swift's TMDocument) and the C++ SymbolChooser left behind
+// when the panel was ported. OakDocument's own C++-typed members — notably
+// -enumerateSymbolsUsingBlock:, whose block takes a text::pos_t const& — simply do not
+// import (rule 17); that method is exactly what SymbolChooserSupport exists to wrap.
+#import <document/OakDocument.h>
+#import "SymbolChooserSupport.h"

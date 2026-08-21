@@ -38,3 +38,8 @@
 #import <document/OakDocumentController.h>
 #import "FileChooserItem.h"
 #import "FileChooserSupport.h"
+
+// BundleItemChooser.swift: the key-equivalent recorder and event-string formatter it hosts,
+// and its own C++ boundary (which brings TMScopeContext with it).
+#import <OakAppKit/OakKeyEquivalentView.h>
+#import "BundleItemChooserSupport.h"

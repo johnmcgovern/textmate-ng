@@ -83,6 +83,12 @@ extern NSUInteger const kSearchSourceKeyBindingItems;
 // inside the app bundle shows the app icon — all of it bundles:: or path:: work.
 + (NSImage*)iconForItem:(ActionItem*)item;
 
+// OakAttributedStringForEventString, which renders "⌃⌘T" from a stored key-equivalent
+// string. It is a free function declared in ns/event.h, and that header has `namespace ns`
+// and std::string in it, so it can never reach a bridging header (rule 19) — the cell view
+// gets it from here instead.
++ (NSAttributedString*)attributedStringForEventString:(NSString*)eventString font:(NSFont*)font;
+
 + (BOOL)canAcceptItem:(ActionItem*)item;
 + (NSString*)abbreviationIdentifierForItem:(ActionItem*)item;
 @end

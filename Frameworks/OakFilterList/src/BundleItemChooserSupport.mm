@@ -18,6 +18,7 @@
 #import <text/ctype.h>
 #import <regexp/format_string.h>
 #import <ns/ns.h>
+#import <ns/event.h>
 #import <TMBundleModel/TMBundleModelCxx.h>
 
 // The C++ half of BundleItemChooser, moved from BundleItemChooser.mm (2026-08-21); see
@@ -480,6 +481,11 @@ static std::vector<bundles::item_ptr> relevant_items_in_scope (scope::context_t 
 	image = [image copy];
 	[image setSize:NSMakeSize(32, 32)];
 	return image;
+}
+
++ (NSAttributedString*)attributedStringForEventString:(NSString*)eventString font:(NSFont*)font
+{
+	return OakAttributedStringForEventString(eventString, font);
 }
 
 + (BOOL)canAcceptItem:(ActionItem*)item

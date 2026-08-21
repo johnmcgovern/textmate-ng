@@ -2,6 +2,36 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-21 (v2026.8-alpha.16)
+
+**Opening Settings no longer crashes the app.** In alpha.15 — and in alpha.10 and
+alpha.11 before it — choosing TextMate‑NG ▸ Settings killed the app instantly. If
+you have been unable to change a preference, this is why, and it is fixed.
+
+The cause is worth stating because it hid for so long: building the Settings window
+made the system start watching one of its objects for changes, and the machinery
+that does that watching corrupts memory when it is pointed at a Swift object of the
+shape this window used. The damage was silent — the program carried on and fell over
+later somewhere unrelated, which is why the crash reports never pointed at Settings.
+Debug builds hid it entirely, so it looked fine in testing and died for users. The
+window is now built so that watching never starts, and a test that opens it runs on
+every commit.
+
+**Everything else here is the ongoing Objective‑C++ to Swift rewrite, and should look
+no different.** Rewritten this round: **Open Quickly** (⌘T), **Jump to Symbol**
+(⇧⌘T), **Select Bundle Item** (⌃⌘T), the **clipboard history** panel and its ⌥⌘V
+picker, and the version‑control status behind the file browser. All were opened and
+driven in this build before it was cut — searched, filtered, switched between
+sources, and in Select Bundle Item's case used to record a keyboard shortcut. If one
+of them behaves oddly, that is the change to blame and it is worth reporting.
+
+One fix you may notice: rows in those panels could draw blank instead of showing the
+matched text. That was caught during the work rather than shipped.
+
+**For the curious:** the build now fails when a test *crashes* rather than only when
+one fails an assertion. That gap is what let the Settings crash sit in a green test
+suite for weeks.
+
 ## 2026-08-18 (v2026.8-alpha.15)
 
 **The intermittent crashes are fixed.** alpha.14 could die a few seconds after

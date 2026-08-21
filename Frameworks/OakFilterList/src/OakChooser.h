@@ -1,5 +1,3 @@
-NSMutableAttributedString* CreateAttributedStringWithMarkedUpRanges (std::string const& in, std::vector< std::pair<size_t, size_t> > const& ranges, NSLineBreakMode lineBreakMode = NSLineBreakByTruncatingMiddle);
-
 @interface OakFileTableCellView : NSTableCellView
 - (instancetype)initWithCloseButton:(NSButton*)closeButton;
 @end

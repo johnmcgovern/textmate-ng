@@ -1,4 +1,5 @@
 #import "SymbolChooser.h"
+#import "OakChooserMarkup.h"
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakFoundation/NSString Additions.h>
 #import <OakFoundation/OakFoundation.h>

@@ -454,7 +454,13 @@ class OakChooser: NSWindowController, NSWindowDelegate, NSTextFieldDelegate, NST
 			label.identifier = identifier
 			return label
 		}()
-		res.stringValue = ((_items[row] as? NSObject)?.value(forKey: identifier.rawValue) as? String) ?? ""
+		// objectValue, not stringValue-as-String: the original passed whatever
+		// -objectForKey: returned straight to -setStringValue:, and for SymbolChooser —
+		// the one subclass that uses this base implementation — that value is an
+		// NSAttributedString carrying the match highlighting. ObjC's setStringValue:
+		// stores such an object as the cell's objectValue and draws it with its
+		// attributes; a Swift `as? String` would fail the cast and blank every row.
+		res.objectValue = (_items[row] as? NSObject)?.value(forKey: identifier.rawValue)
 		return res
 	}
 

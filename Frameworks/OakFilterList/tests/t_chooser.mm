@@ -89,6 +89,27 @@ void test_chooser_dispatches_internal_calls_to_subclass_overrides ()
 	OAK_ASSERT(chooser.updateItemsCalls > 0);
 }
 
+void test_chooser_row_view_renders_an_attributed_name ()
+{
+	// SymbolChooser is the one subclass that uses the base's
+	// -tableView:viewForTableColumn:row:, and its items' "name" is an NSAttributedString
+	// carrying the match highlighting, never an NSString. The ObjC++ passed it straight to
+	// -setStringValue:, which stores a non-string as the cell's objectValue and draws it
+	// with its attributes. A translation that narrows the value to String instead blanks
+	// every row in Jump to Symbol, with nothing else to notice it — so pin it here.
+	OakChooser* chooser = [OakChooser new];
+	NSAttributedString* name = [[NSAttributedString alloc] initWithString:@"symbolName" attributes:@{ NSBackgroundColorAttributeName: NSColor.yellowColor }];
+	chooser.items = @[ @{ @"name": name } ];
+
+	NSTableColumn* column = chooser.tableView.tableColumns.firstObject;
+	NSTextField* view = (NSTextField*)[(id<NSTableViewDelegate>)chooser tableView:chooser.tableView viewForTableColumn:column row:0];
+
+	OAK_ASSERT(view != nil);
+	OAK_ASSERT([view.stringValue isEqualToString:@"symbolName"]);
+	OAK_ASSERT([view.attributedStringValue.string isEqualToString:@"symbolName"]);
+	OAK_ASSERT([view.attributedStringValue attribute:NSBackgroundColorAttributeName atIndex:0 effectiveRange:NULL] != nil);
+}
+
 void test_chooser_keeps_its_public_selector_surface ()
 {
 	SEL const selectors[] = {

@@ -2,6 +2,7 @@
 #import "OakChooserMarkup.h"
 #import "OakFileTableCellView.h"
 #import "FileChooserItem.h"
+#import "FileChooserSupport.h"
 #import "OakAbbreviations.h"
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/OakUIConstructionFunctions.h>
@@ -11,16 +12,6 @@
 #import <OakFoundation/OakFoundation.h>
 #import <document/OakDocument.h>
 #import <document/OakDocumentController.h>
-#import <scm/scm.h>
-#import <ns/ns.h>
-#import <regexp/glob.h>
-#import <text/format.h>
-#import <text/parse.h>
-#import <text/ctype.h>
-#import <text/ranker.h>
-#import <settings/settings.h>
-#import <oak/algorithm.h>
-#import <oak/duration.h>
 
 @interface NSObject (FileBrowserDelegate)
 - (void)fileBrowser:(id)aFileBrowser closeURL:(NSURL*)anURL;
@@ -32,53 +23,12 @@ NSUInteger const kFileChooserAllSourceIndex                = 0;
 NSUInteger const kFileChooserOpenDocumentsSourceIndex      = 1;
 NSUInteger const kFileChooserUncommittedChangesSourceIndex = 2;
 
-static NSDictionary* globs_for_path (std::string const& path)
-{
-	static std::map<std::string, NSString*> const map = {
-		{ kSettingsExcludeDirectoriesInFileChooserKey, kSearchExcludeDirectoryGlobsKey },
-		{ kSettingsExcludeDirectoriesKey,              kSearchExcludeDirectoryGlobsKey },
-		{ kSettingsExcludeFilesInFileChooserKey,       kSearchExcludeFileGlobsKey      },
-		{ kSettingsExcludeFilesKey,                    kSearchExcludeFileGlobsKey      },
-		{ kSettingsExcludeInFileChooserKey,            kSearchExcludeGlobsKey          },
-		{ kSettingsExcludeKey,                         kSearchExcludeGlobsKey          },
-		{ kSettingsBinaryKey,                          kSearchExcludeGlobsKey          },
-		{ kSettingsIncludeDirectoriesKey,              kSearchDirectoryGlobsKey        },
-		{ kSettingsIncludeFilesInFileChooserKey,       kSearchFileGlobsKey             },
-		{ kSettingsIncludeFilesKey,                    kSearchFileGlobsKey             },
-		{ kSettingsIncludeInFileChooserKey,            kSearchGlobsKey                 },
-		{ kSettingsIncludeKey,                         kSearchGlobsKey                 },
-	};
-
-	NSMutableDictionary* res = [NSMutableDictionary dictionary];
-
-	settings_t const settings = settings_for_path(NULL_STR, "", path);
-	for(auto const& pair : map)
-	{
-		if(NSString* glob = to_ns(settings.get(pair.first)))
-		{
-			if(!res[pair.second])
-				res[pair.second] = [NSMutableArray array];
-			[res[pair.second] addObject:glob];
-		}
-	}
-
-	if(!res[kSearchDirectoryGlobsKey] && !res[kSearchGlobsKey])
-		res[kSearchDirectoryGlobsKey] = @[ @"*" ];
-	if(!res[kSearchFileGlobsKey] && !res[kSearchGlobsKey])
-		res[kSearchFileGlobsKey] = @[ @"*" ];
-
-	return res;
-}
-
 @interface FileChooser ()
 {
-	scm::info_ptr                     _scmInfo;
+	FileChooserSCMInfo*               _scmInfo;
 	NSMutableArray<FileChooserItem*>* _records;
 
-	NSString* _globString;
-	NSString* _filterString;
-	NSString* _selectionString;
-	NSString* _symbolString;
+	FileChooserFilter* _filter;
 
 	BOOL _searching;
 	NSString* _searchPath;
@@ -172,7 +122,7 @@ static NSDictionary* globs_for_path (std::string const& path)
 - (void)windowWillClose:(NSNotification*)aNotification
 {
 	[self stopSearch];
-	_scmInfo.reset();
+	_scmInfo = nil;
 	_records = nil;
 
 	self.items = @[ ];
@@ -226,8 +176,8 @@ static NSDictionary* globs_for_path (std::string const& path)
 	// OakNotEmptyString, matching the batch ranker's own test exactly: the original only
 	// looked up abbreviations on the filter branch, and a nil-vs-empty mismatch here would
 	// silently drop the user's learned bindings.
-	NSArray<NSString*>* bindings = OakNotEmptyString(_globString) ? nil : [[OakAbbreviations abbreviationsForName:@"OakFileChooserBindings"] stringsForAbbreviation:_filterString];
-	self.items = [FileChooserItem rankedItemsFromRecords:_records fromIndex:first globString:_globString filterString:_filterString bindings:bindings];
+	NSArray<NSString*>* bindings = OakNotEmptyString(_filter.globString) ? nil : [[OakAbbreviations abbreviationsForName:@"OakFileChooserBindings"] stringsForAbbreviation:_filter.filterString];
+	self.items = [FileChooserItem rankedItemsFromRecords:_records fromIndex:first globString:_filter.globString filterString:_filter.filterString bindings:bindings];
 }
 
 // ========
@@ -239,7 +189,7 @@ static NSDictionary* globs_for_path (std::string const& path)
 	if(_path == aString || [_path isEqualToString:aString])
 		return;
 	_path = aString;
-	_scmInfo.reset();
+	_scmInfo = nil;
 
 	if(_sourceIndex == kFileChooserAllSourceIndex)
 		[self startSearch:_path];
@@ -251,7 +201,7 @@ static NSDictionary* globs_for_path (std::string const& path)
 - (void)reload
 {
 	[self stopSearch];
-	_scmInfo.reset();
+	_scmInfo = nil;
 
 	switch(_sourceIndex)
 	{
@@ -278,23 +228,22 @@ static NSDictionary* globs_for_path (std::string const& path)
 
 - (void)reloadSCMStatus
 {
-	if(!_scmInfo && (_scmInfo = scm::info(to_s(_path))))
+	if(!_scmInfo && (_scmInfo = [FileChooserSCMInfo infoForPath:_path]))
 	{
-		_scmInfo->push_callback(^(scm::info_t const& info){
-			if(_sourceIndex == kFileChooserUncommittedChangesSourceIndex)
-				[self reloadSCMStatus];
-		});
+		__weak FileChooser* weakSelf = self;
+		[_scmInfo addStatusCallback:^{
+			FileChooser* strongSelf = weakSelf;
+			if(strongSelf.sourceIndex == kFileChooserUncommittedChangesSourceIndex)
+				[strongSelf reloadSCMStatus];
+		}];
 	}
 
 	_records = [NSMutableArray array];
 	if(_scmInfo)
 	{
 		NSMutableArray<OakDocument*>* scmStatus = [NSMutableArray array];
-		for(auto pair : _scmInfo->status())
-		{
-			if(pair.second & (scm::status::modified|scm::status::added|scm::status::deleted|scm::status::conflicted))
-				[scmStatus addObject:[OakDocument documentWithPath:to_ns(pair.first)]];
-		}
+		for(NSString* path in [_scmInfo uncommittedPaths])
+			[scmStatus addObject:[OakDocument documentWithPath:path]];
 		[self addRecordsForDocuments:scmStatus];
 	}
 }
@@ -310,10 +259,7 @@ static NSDictionary* globs_for_path (std::string const& path)
 	if(!path)
 		return;
 
-	settings_t const settings = settings_for_path(NULL_STR, "", to_s(path));
-	NSMutableDictionary* options = [globs_for_path(to_s(path)) mutableCopy];
-	options[kSearchFollowDirectoryLinksKey] = @(settings.get(kSettingsFollowSymbolicLinksKey, false));
-	options[kSearchIgnoreOrderingKey] = @YES;
+	NSDictionary* options = [FileChooserSupport searchOptionsForPath:path];
 
 	size_t searchToken = _lastSearchToken;
 	_searching = YES;
@@ -371,7 +317,7 @@ static NSDictionary* globs_for_path (std::string const& path)
 
 	if(_searching)
 	{
-		_pollInterval = std::min(_pollInterval * 2, 0.32);
+		_pollInterval = MIN(_pollInterval * 2, 0.32);
 		_pollTimer = [NSTimer scheduledTimerWithTimeInterval:_pollInterval target:self selector:@selector(handleSearchResults:) userInfo:nil repeats:NO];
 	}
 	else
@@ -383,8 +329,11 @@ static NSDictionary* globs_for_path (std::string const& path)
 
 - (void)stopSearch
 {
-	if(std::exchange(_searching, NO))
+	if(_searching)
+	{
+		_searching = NO;
 		++_lastSearchToken;
+	}
 
 	[NSObject cancelPreviousPerformRequestsWithTarget:_progressIndicator selector:@selector(startAnimation:) object:self];
 	[_progressIndicator stopAnimation:self];
@@ -394,17 +343,10 @@ static NSDictionary* globs_for_path (std::string const& path)
 
 - (void)updateFilterString:(NSString*)aString
 {
-	NSString* oldFilter = [(_globString ?: _filterString ?: @"") copy];
-	aString = [aString decomposedStringWithCanonicalMapping];
+	NSString* oldFilter = [_filter.effectiveFilter ?: @"" copy];
+	_filter = [FileChooserFilter filterWithString:aString];
 
-	NSRegularExpression* const ptrn = [NSRegularExpression regularExpressionWithPattern:@"\\A(?:(.*?\\*.*?)|(.*?))(?::([\\d+:-x\\+]*)|@(.*))?\\z" options:NSAnchoredSearch error:nil];
-	NSTextCheckingResult* m = aString ? [ptrn firstMatchInString:aString options:NSMatchingAnchored range:NSMakeRange(0, [aString length])] : nil;
-	_globString      = m && [m rangeAtIndex:1].location != NSNotFound ? [aString substringWithRange:[m rangeAtIndex:1]] : nil;
-	_filterString    = m && [m rangeAtIndex:2].location != NSNotFound ? [NSString stringWithCxxString:oak::normalize_filter(to_s([aString substringWithRange:[m rangeAtIndex:2]]))] : nil;
-	_selectionString = m && [m rangeAtIndex:3].location != NSNotFound ? [aString substringWithRange:[m rangeAtIndex:3]] : nil;
-	_symbolString    = m && [m rangeAtIndex:4].location != NSNotFound ? [aString substringWithRange:[m rangeAtIndex:4]] : nil;
-
-	if(![oldFilter isEqualToString:_globString ?: _filterString ?: @""])
+	if(![oldFilter isEqualToString:_filter.effectiveFilter])
 		[super updateFilterString:aString];
 }
 
@@ -417,9 +359,9 @@ static NSDictionary* globs_for_path (std::string const& path)
 {
 	if(_searching)
 	{
-		std::string path = path::relative_to(to_s(_searchPath), to_s(_path));
+		NSString* path = [FileChooserSupport path:_searchPath relativeTo:_path];
 		[self.statusTextField.cell setLineBreakMode:NSLineBreakByTruncatingMiddle];
-		self.statusTextField.stringValue = [NSString stringWithFormat:@"Searching “%@”…", [NSString stringWithCxxString:path]];
+		self.statusTextField.stringValue = [NSString stringWithFormat:@"Searching “%@”…", path];
 	}
 	else if(self.tableView.selectedRow == -1)
 	{
@@ -433,7 +375,7 @@ static NSDictionary* globs_for_path (std::string const& path)
 		if(path)
 		{
 			if(self.path && [path hasPrefix:self.path])
-					path = to_ns(path::relative_to(to_s(path), to_s(self.path)));
+					path = [FileChooserSupport path:path relativeTo:self.path];
 			else	path = [path stringByAbbreviatingWithTildeInPath];
 		}
 		else // untitled file
@@ -452,8 +394,8 @@ static NSDictionary* globs_for_path (std::string const& path)
 	for(FileChooserItem* record in [self.items objectsAtIndexes:self.tableView.selectedRowIndexes])
 	{
 		NSMutableDictionary* item = [NSMutableDictionary dictionary];
-		if(OakNotEmptyString(_selectionString))
-			item[@"selectionString"] = _selectionString;
+		if(OakNotEmptyString(_filter.selectionString))
+			item[@"selectionString"] = _filter.selectionString;
 		if(record.document.path)
 				item[@"path"] = record.document.path;
 		else	item[@"identifier"] = record.document.identifier.UUIDString;
@@ -491,12 +433,12 @@ static NSDictionary* globs_for_path (std::string const& path)
 
 - (void)accept:(id)sender
 {
-	if(OakNotEmptyString(_filterString))
+	if(OakNotEmptyString(_filter.filterString))
 	{
 		for(FileChooserItem* item in [self.items objectsAtIndexes:self.tableView.selectedRowIndexes])
 		{
 			if(!item.isDirectoryMatched && item.document.path)
-				[[OakAbbreviations abbreviationsForName:@"OakFileChooserBindings"] learnAbbreviation:_filterString forString:item.document.path];
+				[[OakAbbreviations abbreviationsForName:@"OakFileChooserBindings"] learnAbbreviation:_filter.filterString forString:item.document.path];
 		}
 	}
 
@@ -527,7 +469,7 @@ static NSDictionary* globs_for_path (std::string const& path)
 {
 	BOOL activate = YES;
 	if([item action] == @selector(goToParentFolder:))
-		activate = _sourceIndex == kFileChooserAllSourceIndex && to_s(_path) != path::parent(to_s(_path));
+		activate = _sourceIndex == kFileChooserAllSourceIndex && [FileChooserSupport pathHasParent:_path];
 	return activate;
 }
 @end

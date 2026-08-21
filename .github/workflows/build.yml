@@ -73,4 +73,24 @@ jobs:
     # in ide/seed_xcodeproj.rb, which records why each one fails). Green therefore
     # means "nothing got worse", and any new failure here is a real regression.
     - name: Test
-      run: xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug
+      # Piped through a crash check rather than trusting the exit status alone: when a
+      # test *crashes* the runner rather than failing an assertion, XCTest relaunches
+      # and re-reports, and the final relaunch — which has no tests left to run —
+      # prints "Test Suite … passed". xcodebuild's own status flaps between 0 and 65
+      # across runs of the identical crash, so a crashing test could land as a green
+      # build. That is not hypothetical: PreferencesWindowTests has crashed the runner
+      # on every run since at least 2026-08-18 while CI reported success roughly half
+      # the time, and local full-suite runs counted the empty relaunch as a pass.
+      #
+      # "Restarting after unexpected exit, crash, or test timeout" is the only line
+      # that reliably marks it, so grep for it and fail regardless of the exit status.
+      run: |
+        set -o pipefail
+        status=0
+        xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug 2>&1 | tee /tmp/test.log || status=$?
+        if grep -q "Restarting after unexpected exit, crash, or test timeout" /tmp/test.log; then
+          echo "::error::A test process crashed (not an assertion failure). The tests that were running when it died:"
+          grep -B2 "Restarting after unexpected exit" /tmp/test.log | grep "Test Case" || true
+          exit 1
+        fi
+        exit $status

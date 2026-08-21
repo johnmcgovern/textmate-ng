@@ -38,6 +38,10 @@
 
 require "fileutils"
 
+# Scan test sources as UTF-8 regardless of the shell's locale (see the note in
+# seed_xcodeproj.rb) so a non-ASCII byte in a test file can't crash the scan.
+Encoding.default_external = Encoding::UTF_8
+
 ROOT     = File.expand_path("..", __dir__)
 PREAMBLE = File.join(__dir__, "xctest_preamble.h")
 

@@ -19,6 +19,12 @@ require "pathname"
 require "fileutils"
 require "json"
 require "set"
+
+# Read/scan every file as UTF-8 regardless of the shell's locale. Several inputs
+# carry non-ASCII bytes (Changes.md release notes, a couple of default.rave files,
+# entitlement templates), and a US-ASCII/C external encoding makes String#=~ and #[]
+# raise "invalid byte sequence" mid-run. Pin it once instead of per File.read.
+Encoding.default_external = Encoding::UTF_8
 require "shellwords"
 require_relative "optimize_icons"
 

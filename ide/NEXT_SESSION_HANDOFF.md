@@ -527,7 +527,7 @@ and the app launches clean, but the ⌥⌘V history panel and the chooser window
 never driven on screen this session (no Screen Recording permission). Worth an
 eyes-on pass before relying on them.
 
-## `OakFilterList`: bottom half done, three choosers left (2026-08-20)
+## `OakFilterList`: DONE (2026-08-21)
 
 Ported bottom-up, each in the two-commit shape (pin, then translate), each verified
 with the framework bundle plus the full app build. **Done:** `ui/TableView`
@@ -536,13 +536,25 @@ with the framework bundle plus the full app build. **Done:** `ui/TableView`
 `CreateAttributedStringWithMarkedUpRanges` was extracted first into
 `OakChooserMarkup.{h,mm}` (`820db82f`) and **stays ObjC++** (rule 19).
 
-**Left, in this order — smallest and least C++ first:** `SymbolChooser` (167 lines,
-12 C++ hits), `FileChooser` (705, 35), `BundleItemChooser` (1057, 71). All three are
-`OakChooser` subclasses and all three call `CreateAttributedStringWithMarkedUpRanges`,
-so each needs its ranker C++ dealt with the way rule 17 and the OakPasteboard port
-describe. This framework's bridging header is `src/OakFilterList-Bridging-Header.h`
-(new this session); its test bundle is new too, so `default.rave` already carries
-`tests` and a `.swift` glob.
+**The three subclasses are done too**, each pinned first and each with its C++ extracted
+before translating: `SymbolChooser` (`2a4e1f1d`), `FileChooser` (`a0781aa0`),
+`BundleItemChooser` (`527b4796`). Nothing in this framework is left to port.
+
+**What remains is 976 lines across five boundary files, and none of them can move:**
+`OakChooserMarkup` and the free functions in it (rule 19); `SymbolChooserSupport` (rule 15 —
+`-[OakDocument enumerateSymbolsUsingBlock:]` hands its block a `text::pos_t const&`, and a
+C++ type in a *block parameter* makes the method uncallable from Swift at any price);
+`FileChooserItem` (rule 20 — `std::string`/`std::vector` as *ivars*); `FileChooserSupport`;
+and `BundleItemChooserSupport`, the largest at 500 lines, holding the gathering that reads
+the bundle index, the settings index, the main menu and the key-binding plists.
+
+**Reuse before boxing a C++ type.** `BundleItemChooser`'s public `scope::context_t` property
+looked like a wall until `TMScopeContext` turned up in TMBundleModel — a C++-free box for
+exactly that, with a `(Cxx)` category for ObjC++ callers, already used by BundleMenu and
+BundleEditor. Check there first. But read what you reuse: its `+currentScope` falls back to
+the **empty** scope, while this panel's caller wants the **wildcard**, and taking the
+convenient one would have shown an empty panel whenever no text view had focus — no build
+error, no failing test.
 
 **The base class earned two new rules, 50 and 51 — read them before the subclasses.**
 Rule 50 is the important one and it cost a crash: on a Swift class that ObjC
@@ -566,11 +578,14 @@ subclass is easy to miss** — it also uses `OakFileTableCellView` and the marku
 function, and both times the framework built fine and only the app link failed, so
 grep `Applications/` too when changing anything in this framework's public surface.
 
-**Not visually verified.** The choosers build, pass their pins, and the app launches
-clean with all four subclasses on the Swift base, but no chooser panel (⌘T, ⇧⌘T, the
-file chooser) was opened on screen this session — no Screen Recording permission.
-Given rule 50's failure mode was invisible to a green build, an eyes-on open of a
-chooser is worth doing early next session.
+**Still not visually verified, and this is the standing debt of the whole port.** Every
+chooser builds, passes its pin, and the app launches clean with all four subclasses on the
+Swift base — but no chooser panel (⌘T, ⇧⌘T, ⌃⌘T) has been opened on screen. The pins cannot
+reach the live paths by construction: `FileChooser`'s directory search and SCM status need a
+real project on disk, `SymbolChooser`'s ranking needs an open document, and
+`BundleItemChooser`'s entire item list needs the bundle index (rule 8). Rule 50's failure
+mode was invisible to a green build and was found by luck; treat an eyes-on open of all
+three as the first task of the next session, not an optional check.
 
 All 51 rules are in `ide/RULES.md`.
 

@@ -600,9 +600,22 @@ pins cannot reach these paths by construction (rule 8):
   `preserveOrder` ranking branch, and the base's `drawTableViewAsHighlighted` setter reached
   from a subclass KVO callback — rule 50's exact failure shape, working.
 
-No crash reports, and the app survived every step. One thing not chased: Actions reports 527
-on first open and 526 afterwards. A one-item difference in a menu-derived list is most
-likely a menu item's availability changing, but it was not investigated.
+No crash reports, and the app survived every step.
+
+**The Actions count is not stable, and that is inherent rather than a port artifact.** It
+read 527 then 526 in one session and 503 in the next, so it was chased: `copy_menu_items`
+walks `NSApp.mainMenu` and keeps an item only when `[NSApp targetForAction:]` finds a target
+*and* `validateMenuItem:` passes, so the number is a snapshot of how much of the menu tree
+AppKit has realized and what the responder chain looks like at that moment. Demonstrated
+directly — with no code change, same binary, same session, merely enumerating the eight
+top-level menus took Actions from **503 to 524**, because reading a menu forces its submenus
+to populate. A one- or twenty-item difference is noise in that channel.
+
+Not from the port: `copy_menu_items` is byte-identical to the ObjC++ (asserted), and the
+cache-invalidation points match the original one for one. Note the limit of that claim — the
+pre-port build was **not** rebuilt and A/B'd; the argument rests on identical code, identical
+invalidation, and the in-session swing above. Worth knowing if anyone ever tries to write a
+test that pins this count: it cannot be pinned.
 
 All 51 rules are in `ide/RULES.md`.
 

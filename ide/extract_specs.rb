@@ -82,7 +82,9 @@ SPEC_FILES.each do |path|
   # kind :root | :target | :config | :arch
   stack = [{ kind: :root, vars: base.dup, target: nil }]
 
-  File.foreach(path) do |line|
+  # Read as UTF-8 regardless of the shell's locale: a couple of default.rave files
+  # carry non-ASCII bytes, which crash line.match under a US-ASCII external encoding.
+  File.foreach(path, encoding: "UTF-8") do |line|
     m = line.match(LINE_RE)
     next unless m
     close, comment, command, params, open = m[1], m[2], m[3], m[4], m[5]

@@ -20,6 +20,15 @@
 // retitles the window, and it also persists to NSUserDefaults — in this process that is
 // the test bundle's own domain, never the app's.
 
+// The three source indices. FileChooser.h used to export these as extern NSUInteger
+// constants; the Swift port made them private, since nothing outside the panel ever read
+// them. Spelling the literals here is if anything a stronger pin than the constants were:
+// sourceIndex is persisted to NSUserDefaults, so 0/1/2 are an on-disk contract and a
+// renumbering would silently reopen the panel on the wrong source.
+static NSUInteger const kAllSourceIndex                = 0;
+static NSUInteger const kOpenDocumentsSourceIndex      = 1;
+static NSUInteger const kUncommittedChangesSourceIndex = 2;
+
 void setup ()
 {
 	NSApplicationLoad();
@@ -50,26 +59,26 @@ void test_file_chooser_source_index_drives_the_window_title ()
 {
 	FileChooser* chooser = [FileChooser new];
 
-	chooser.sourceIndex = kFileChooserOpenDocumentsSourceIndex;
-	OAK_ASSERT(chooser.sourceIndex == kFileChooserOpenDocumentsSourceIndex);
+	chooser.sourceIndex = kOpenDocumentsSourceIndex;
+	OAK_ASSERT(chooser.sourceIndex == kOpenDocumentsSourceIndex);
 	OAK_ASSERT([chooser.window.title isEqualToString:@"Open Documents"]);
 
-	chooser.sourceIndex = kFileChooserUncommittedChangesSourceIndex;
+	chooser.sourceIndex = kUncommittedChangesSourceIndex;
 	OAK_ASSERT([chooser.window.title isEqualToString:@"Uncommitted Documents"]);
 
 	// The "all" source titles with the path, and falls back when there is none.
-	chooser.sourceIndex = kFileChooserAllSourceIndex;
+	chooser.sourceIndex = kAllSourceIndex;
 	OAK_ASSERT([chooser.window.title isEqualToString:@"Open Quickly"]);
 }
 
 void test_file_chooser_path_appears_in_the_title ()
 {
 	FileChooser* chooser = [FileChooser new];
-	chooser.sourceIndex = kFileChooserOpenDocumentsSourceIndex; // no directory search
+	chooser.sourceIndex = kOpenDocumentsSourceIndex; // no directory search
 	chooser.path = @"/usr/share";
 	OAK_ASSERT([chooser.path isEqualToString:@"/usr/share"]);
 
-	chooser.sourceIndex = kFileChooserAllSourceIndex;
+	chooser.sourceIndex = kAllSourceIndex;
 	OAK_ASSERT([chooser.window.title isEqualToString:@"/usr/share"]);
 }
 
@@ -78,11 +87,11 @@ void test_file_chooser_go_to_parent_folder_validation ()
 	FileChooser* chooser = [FileChooser new];
 	NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:@"Parent" action:@selector(goToParentFolder:) keyEquivalent:@""];
 
-	chooser.sourceIndex = kFileChooserOpenDocumentsSourceIndex;
+	chooser.sourceIndex = kOpenDocumentsSourceIndex;
 	chooser.path = @"/usr/share";
 	OAK_ASSERT([chooser validateMenuItem:item] == NO); // wrong source: disabled
 
-	chooser.sourceIndex = kFileChooserAllSourceIndex;
+	chooser.sourceIndex = kAllSourceIndex;
 	OAK_ASSERT([chooser validateMenuItem:item] == YES); // has a parent
 
 	chooser.path = @"/";
@@ -132,7 +141,7 @@ void test_file_chooser_implements_windowWillClose_itself ()
 void test_file_chooser_closing_clears_its_items ()
 {
 	FileChooser* chooser = [FileChooser new];
-	chooser.sourceIndex = kFileChooserOpenDocumentsSourceIndex;
+	chooser.sourceIndex = kOpenDocumentsSourceIndex;
 	[chooser windowWillClose:nil];
 	OAK_ASSERT(chooser.items.count == 0);
 }

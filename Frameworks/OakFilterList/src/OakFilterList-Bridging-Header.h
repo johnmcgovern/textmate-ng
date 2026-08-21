@@ -31,3 +31,10 @@
 // import (rule 17); that method is exactly what SymbolChooserSupport exists to wrap.
 #import <document/OakDocument.h>
 #import "SymbolChooserSupport.h"
+
+// FileChooser.swift: the scope bar and key-view-loop helpers it builds its titlebar from,
+// the document controller it searches through, and its own two C++ boundaries.
+#import <OakAppKit/OakScopeBarView.h>
+#import <document/OakDocumentController.h>
+#import "FileChooserItem.h"
+#import "FileChooserSupport.h"

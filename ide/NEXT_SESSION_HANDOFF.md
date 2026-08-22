@@ -279,6 +279,11 @@ tests 14 → 29. `d8f7ac4e`, `2912e3cb`, `1df5ed0b`, `965970be`. Full account in
 `PROJECT_PHASES.md`; the transferable part is rules 19–22 in
 `ide/FIND_PORT_HANDOFF.md`.
 
+Since then (2026-08-21) `OakRolloverButton` also went Swift, taking `src/*.mm`
+to **2271** and this bundle's tests to **48**. The tree total is **748 across 38
+bundles**, measured the way the test-count bullet above insists on — bundle-level
+`Executed N tests` lines only, cross-checked against `Test Case … started`.
+
 **The one thing to absorb before touching this framework again:** most of what is
 left is *not* waiting on effort, it is waiting on its callers. Swift cannot
 export a free function or an `extern` constant, and `OakUIConstructionFunctions.h`
@@ -295,16 +300,38 @@ What remains, and why each is where it is:
 | `OakEncodingPopUpButton` | 345 | not surveyed; 23 C++ hits, the densest left |
 | `NSMenuItem Additions` | 234 | C++-typed selectors, needs a support split |
 | `OakOpenWithMenu`, `OakSavePanel` | 329 | not surveyed |
-| `OakRolloverButton` | 176 | blocked by rule 21 — see below |
+| `OakRolloverButton` | — | **done** (`53fd67da`, Swift); rule 21 cleared first by `004c3f37` |
 | `OakSyntaxFormatter` | 115 | holds a `parse::grammar_ptr` **ivar**; needs the `DWScopeContext` treatment |
 | `NSSavePanel Additions` | 41 | `+initialize` needs a new home first |
 | `OakView` | 51 | four `extern` mask constants would have to stay in a `.mm` |
 
-`OakRolloverButton` is the interesting blocker and the one to fix deliberately:
-its header is imported **at line 1 of `OakUIConstructionFunctions.h`**, which the
-bridging header needs, so defining the class in Swift breaks every use as
-`__ObjC.X` vs `OakAppKit.X`. Splitting that header is a change 31 files see, and
-it unblocks more than one port — worth doing on purpose rather than mid-port.
+**`OakRolloverButton` was the interesting blocker, and it is now cleared**
+(2026-08-21). Its header was imported at line 1 of `OakUIConstructionFunctions.h`,
+which nine frameworks' bridging headers import, so defining the class in Swift
+would have dragged its hand declaration into OakAppKit's own bridging header and
+split every consumer into `__ObjC.X` vs `OakAppKit.X`. `004c3f37` replaced that
+import with a forward declaration, `2d08175f` pinned the class's behaviour, and
+`53fd67da` ported it. Three things worth carrying forward:
+
+- **The split was cheaper than "31 files" suggested — but not free, and the build
+  is what told me which.** A forward declaration imports into Swift as an *opaque*
+  type: not an `NSButton`, no `.target`. Exactly one file broke
+  (`OakFilterList`'s `FileChooser.swift`); `OakTabBarView` had been relying on the
+  transitive import and now says so. That is rule 52.
+- **The pin found a real trap and corrected me once.** `-updateImage` has two
+  asymmetries that read like bugs and are not (an inactive button under the
+  pointer shows the *active* pressed image; with no inactive artwork the alternate
+  falls back to the regular image, not the pressed one). Separately, my own test
+  asserted that unhiding a window-less button leaves it outside and **failed** —
+  `-convertPoint:fromView:nil` with no window returns the point unchanged, so the
+  origin is always inside bounds. Pinned as it is, not as I expected.
+- **Verified on screen only as far as construction.** "Close tab" is an
+  `OakRolloverButton` and it is in the running app's accessibility tree with its
+  label. I could **not** confirm the click path: the exposed close button overlaps
+  the "Create new tab" button and does not respond to `AXPress`, and I did not
+  establish whether that predates the port. It is not something this port touched
+  (no layout, no action wiring changed), but do not read the green suite as
+  covering it.
 
 ## Next: finish `FileBrowser` (~572 lines left), then `OakFilterList` (2757)
 

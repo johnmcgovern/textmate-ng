@@ -301,7 +301,7 @@ What remains, and why each is where it is:
 | `NSMenuItem Additions` | 234 | C++-typed selectors, needs a support split |
 | `OakOpenWithMenu`, `OakSavePanel` | 329 | not surveyed |
 | `OakRolloverButton` | — | **done** (`53fd67da`, Swift); rule 21 cleared first by `004c3f37` |
-| `OakSyntaxFormatter` | 115 | holds a `parse::grammar_ptr` **ivar**; needs the `DWScopeContext` treatment |
+| `OakSyntaxFormatter` | — | **done** (`0a72f5ce` pin, `551dba28` extraction, Swift); the ivar went into `OakSyntaxFormatterSupport` |
 | `NSSavePanel Additions` | 41 | `+initialize` needs a new home first |
 | `OakView` | 51 | four `extern` mask constants would have to stay in a `.mm` |
 

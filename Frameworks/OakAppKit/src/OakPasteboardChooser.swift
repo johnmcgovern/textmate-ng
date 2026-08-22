@@ -31,7 +31,7 @@ private extension OakPasteboardEntry {
 
 		let res = NSMutableAttributedString()
 		if (options[OakFindRegularExpressionOption] as? NSNumber)?.boolValue ?? false {
-			let formatter = OakSyntaxFormatter(grammarName: "source.regexp.oniguruma")!
+			let formatter = OakSyntaxFormatter(grammarName: "source.regexp.oniguruma")
 			formatter.enabled = true
 			res.setAttributedString(NSMutableAttributedString(string: string, attributes: defaultAttributes))
 			formatter.addStyles(to: res)

@@ -37,7 +37,11 @@
 #import "OakUIConstructionFunctions.h"
 #import "OakAppKitSupport.h"
 #import "OakAppKit.h" // OakPerformTableViewActionFromSelector / OakPerformTableViewActionResult (OakPasteboardSelector.swift)
-#import "OakSyntaxFormatter.h" // regexp styling in OakPasteboardChooser.swift's displayString (C++-free header)
+// The styler behind OakSyntaxFormatter.swift. The formatter's own header is
+// deliberately absent for the same reason OakPasteboard's and
+// OakRolloverButton's are: Swift defines the class, so its hand declaration
+// would collide with the generated OakAppKit-Swift.h (rule 43).
+#import "OakSyntaxFormatterSupport.h"
 
 // The C++-free boundaries OakPasteboard.swift stands on: the exported constants, the
 // SQLite store, the run-loop idle observer (and its protocol), and the selector

@@ -15,6 +15,7 @@
 #import "../src/OakRolloverButton.h"
 #import "../src/OakEncodingPopUpButton.h"
 #import "../src/OakOpenWithMenu.h"
+#import "../src/OakSavePanel.h" // brings <file/encoding.h> with it
 #import <OakFoundation/OakFoundation.h> // OakUserDefaultsObserver
 
 @interface OakFinderTag (Testing)
@@ -66,4 +67,18 @@
 @property (nonatomic, readwrite, getter = isDefaultApplication) BOOL defaultApplication;
 @property (nonatomic, readwrite, getter = hasMultipleVersions)  BOOL multipleVersions;
 @property (nonatomic, readwrite, getter = hasMultipleCopies)    BOOL multipleCopies;
+@end
+
+// OakEncodingSaveOptionsViewController is declared only in OakSavePanel.mm — it
+// is the save panel's accessory view and the whole of its behaviour. The panel
+// itself cannot be tested (it wants a window and a modal sheet), so this is
+// where the coverage has to go.
+@interface OakEncodingSaveOptionsViewController : NSViewController
+- (id)initWithEncodingOptions:(encoding::type const&)someEncodingOptions fileType:(NSString*)aFileType;
+- (encoding::type)encodingForURL:(NSURL*)anURL;
+- (void)updateSettings:(encoding::type const&)encoding;
+@property (nonatomic) NSString* fileType;
+@property (nonatomic) NSString* lineEndings;
+@property (nonatomic) NSString* encoding;
+@property (nonatomic) NSSavePanel* savePanel;
 @end

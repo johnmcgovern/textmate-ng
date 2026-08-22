@@ -28,7 +28,12 @@
 // OakCreateCloseButton; their C++ default arguments are simply invisible to
 // Swift, which spells the arguments out instead.
 #import "OakView.h"
-#import "OakRolloverButton.h"
+// OakRolloverButton itself is deliberately absent: it is defined in
+// OakRolloverButton.swift, so importing its hand declaration here would collide
+// with the generated OakAppKit-Swift.h (rule 43). Only the two notification
+// names it posts are needed on this side, and Swift cannot export those
+// (rule 19), so they live in their own C header — as OakPasteboard's do.
+#import "OakRolloverButtonConstants.h"
 #import "OakUIConstructionFunctions.h"
 #import "OakAppKitSupport.h"
 #import "OakAppKit.h" // OakPerformTableViewActionFromSelector / OakPerformTableViewActionResult (OakPasteboardSelector.swift)

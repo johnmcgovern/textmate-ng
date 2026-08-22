@@ -513,3 +513,23 @@ knew.
     `SwiftUICore` (`OakChooser` took out `CommitWindowTests`). The error names an
     undefined `RangeReplaceableCollection.remove(atOffsets:)` symbol and points at
     the consumer, not at the file that caused it. Remove by reversed index instead.
+
+---
+
+## Rule 52 — OakRolloverButton
+
+52. **A forward declaration is not a type in Swift.** `@class X;` in a header that
+    reaches Swift through a bridging header imports as an *opaque* type: no
+    superclass, no inherited members. Not "an NSButton whose extras are missing" —
+    `.target` and `.action` are unreachable, and it will not convert to `NSButton`.
+    So breaking a rule-21 cycle by replacing an import with a forward declaration
+    does not make the dependency go away; it moves the import to every consumer
+    that *uses* the value, not merely to those that subclass or extend it. Budget
+    for that, and let the build enumerate them: splitting `OakRolloverButton.h` out
+    of `OakUIConstructionFunctions.h` (`004c3f37`) built the whole app and then
+    failed in exactly one file, `OakFilterList`'s `FileChooser.swift`, with `value
+    of type 'OakRolloverButton' has no member 'target'`. The corollary is that the
+    split is still the right move: the forward declaration is what lets nine
+    bridging headers keep importing the free functions without dragging a Swift
+    class's hand declaration back into its own framework's bridging header
+    (rule 43).

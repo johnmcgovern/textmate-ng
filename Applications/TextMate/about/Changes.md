@@ -2,6 +2,48 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-21 (v2026.8-alpha.17)
+
+**This release is entirely the ongoing Objective-C++ to Swift rewrite, and nothing in
+it is meant to look different.** There is no new feature and no fix for anything you
+reported. It is worth installing only because each of these rounds is easier to check
+while it is recent.
+
+What was rewritten this time is a layer you never see directly but touch constantly —
+the small controls the rest of the app is built from:
+
+* the **close buttons** on tabs and on file-browser rows, including the way they fade
+  in under the pointer and go quiet when the window is inactive;
+* the **encoding pop-up** wherever it appears — the Save As sheet, the "reopen with
+  encoding" dialog, and Settings ▸ Files — together with its **Customize List…**
+  window;
+* the **Save As sheet's** encoding and line-ending controls, and the rule that picks
+  a default for a brand-new file;
+* the **Open With** submenu;
+* the **syntax colouring in the Find field** when "Regular expression" is on, and the
+  same colouring in the ⌥⌘V clipboard-history picker;
+* the menu plumbing behind **file icons in menus**, the grey tab-trigger and shortcut
+  hints in the Bundles menu, and the bullet marking a modified document.
+
+**Where to look if something is off.** Anything in that list is the change to blame.
+Most of it was driven in this build before it was cut: a tab's close button, Settings ▸
+Files, the encoding pop-up's whole menu, the Customize List… window, and the Save As
+sheet's encoding and line-ending pop-ups. Two things were *not* exercised by hand and
+are the likeliest place for a surprise — the **Open With** submenu, and the grey
+shortcut hints in the Bundles menu.
+
+**One part has no automated coverage:** the **Customize List…** window inside the
+encoding pop-up. It is built from an interface file rather than from code, and the
+tests cannot open it. It was opened and read in this exact build before it was cut —
+all 126 encodings listed, each with its checkbox — but nothing checks it on every
+commit the way the rest is checked. If a checkbox does not stick, that is the first
+thing to report.
+
+**For the curious:** the test suite is 810 tests, up from 737, and every one of the
+files above was pinned by tests written against the old code *before* it was
+rewritten — which is how three genuine behaviours that read like bugs were kept
+rather than tidied away.
+
 ## 2026-08-21 (v2026.8-alpha.16)
 
 **Opening Settings no longer crashes the app.** In alpha.15 — and in alpha.10 and

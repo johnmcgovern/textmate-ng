@@ -48,6 +48,11 @@
 // button's own header is absent for the usual reason (rule 43).
 #import "OakEncodingSupport.h"
 
+// The encoding box and the settings rule behind OakSavePanel.swift. OakSavePanel.h
+// itself is absent: it hand-declares a Swift class *and* carries a C++ include,
+// so it could not go here on either count (rules 43 and 17).
+#import "OakSavePanelSupport.h"
+
 // The C++-free boundaries OakPasteboard.swift stands on: the exported constants, the
 // SQLite store, the run-loop idle observer (and its protocol), and the selector
 // panel it drives. OakPasteboard.h itself is deliberately absent — Swift defines

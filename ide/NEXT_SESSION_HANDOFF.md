@@ -298,7 +298,7 @@ What remains, and why each is where it is:
 | `OakPasteboardChooser` + `OakPasteboardSelector` | — | **done** (`b89edee4` / `dab6b442`, Swift); whole pasteboard cluster is now Swift |
 | `OakUIConstructionFunctions`, `OakAppKit.mm`, `OakSound`, `OakToolTip`, `NSColor`/`NSAlert Additions` | ~700 | deferred: free functions / C variadics, want Swift callers first |
 | `OakEncodingPopUpButton` | — | **done** (`0706cf37` pin, `e6113d20` extraction, Swift); `+initialize` moved to `OakEncodingSupport` |
-| `NSMenuItem Additions` | 234 | C++-typed selectors, needs a support split |
+| `NSMenuItem Additions` | — | **done** (`649b1ca3` pin, Swift); the three `…CxxString:` selectors live in `NSMenuItemCxx.mm` |
 | `OakOpenWithMenu`, `OakSavePanel` | 329 | not surveyed |
 | `OakRolloverButton` | — | **done** (`53fd67da`, Swift); rule 21 cleared first by `004c3f37` |
 | `OakSyntaxFormatter` | — | **done** (`0a72f5ce` pin, `551dba28` extraction, Swift); the ivar went into `OakSyntaxFormatterSupport` |

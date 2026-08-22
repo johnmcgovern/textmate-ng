@@ -7,6 +7,7 @@
 #import <cf/cf.h>
 #import <ns/ns.h>
 #import <OakAppKit/NSMenuItem Additions.h>
+#import <OakAppKit/NSMenuItemCxx.h> // -setKeyEquivalentCxxString:
 #import <OakAppKit/OakToolTip.h>
 #import <MenuBuilder/MenuBuilder.h>
 #import <OakFoundation/NSString Additions.h>

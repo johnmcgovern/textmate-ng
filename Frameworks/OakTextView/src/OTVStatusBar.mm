@@ -2,6 +2,7 @@
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/NSImage Additions.h>
 #import <OakAppKit/NSMenuItem Additions.h>
+#import <OakAppKit/NSMenuItemCxx.h> // -setKeyEquivalentCxxString:
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakFoundation/NSString Additions.h>
 #import <MenuBuilder/MenuBuilder.h>

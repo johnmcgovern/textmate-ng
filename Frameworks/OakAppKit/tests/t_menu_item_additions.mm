@@ -1,5 +1,6 @@
 #import "OakAppKitTesting.h"
 #import "../src/NSMenuItem Additions.h"
+#import "../src/NSMenuItemCxx.h"
 #import <ns/ns.h> // to_s(NSString*)
 #import <Cocoa/Cocoa.h>
 

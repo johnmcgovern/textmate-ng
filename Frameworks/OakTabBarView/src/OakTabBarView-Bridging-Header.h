@@ -13,7 +13,11 @@
 #include "../../../Shared/PCH/prelude.cc"
 #import <Cocoa/Cocoa.h>
 
-#import <OakAppKit/OakUIConstructionFunctions.h> // OakCreateLabel + OakRolloverButton
+#import <OakAppKit/OakUIConstructionFunctions.h> // OakCreateLabel
+// OakTabView builds its close and overflow buttons directly, so it needs the
+// class and not just the name. This used to arrive transitively through
+// OakUIConstructionFunctions.h, which no longer imports it (rule 21).
+#import <OakAppKit/OakRolloverButton.h>
 #import <OakAppKit/NSMenuItem Additions.h>       // -setModifiedState:
 #import <OakFoundation/OakFoundation.h>          // OakNotEmptyString
 #import <TMFileReference/TMFileReference.h>       // +imageForURL:size:

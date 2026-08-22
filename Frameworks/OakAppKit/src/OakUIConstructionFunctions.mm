@@ -1,4 +1,5 @@
 #import "OakUIConstructionFunctions.h"
+#import "OakRolloverButton.h" // OakCreateCloseButton sets its rollover images; the header only forward-declares it
 #import "NSColor Additions.h"
 #import "NSImage Additions.h"
 

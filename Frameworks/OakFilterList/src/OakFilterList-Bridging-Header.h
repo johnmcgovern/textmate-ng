@@ -19,6 +19,11 @@
 // OakCreateLabel / OakAddAutoLayoutViewsToSuperview and the tmMatchedText* colours
 // (OakFileTableCellView.swift).
 #import <OakAppKit/OakUIConstructionFunctions.h>
+// OakCreateCloseButton's return type. That header only forward-declares the class
+// (rule 21), and a forward declaration imports into Swift as an opaque type with no
+// superclass — so FileChooser.swift could not even reach the button's .target until
+// this line existed.
+#import <OakAppKit/OakRolloverButton.h>
 #import <OakAppKit/NSColor Additions.h>
 
 // OakPerformTableViewActionFromSelector / OakPerformTableViewActionResult and

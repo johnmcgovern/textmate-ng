@@ -1,4 +1,21 @@
-#import "OakRolloverButton.h"
+// OakRolloverButton is forward-declared, deliberately, and this header must not
+// import it.
+//
+// Nine frameworks' bridging headers import this file (plus OakTextView's
+// LiveSearchView.h), and it used to pull OakRolloverButton.h in at line 1. That
+// transitive import is what rule 21 is about: the moment OakRolloverButton is
+// defined in Swift, its hand-declared header (rule 23) arrives inside OakAppKit's
+// *own* bridging header through this file, collides with OakAppKit-Swift.h, and
+// every consumer splits into __ObjC.OakRolloverButton vs OakAppKit.OakRolloverButton.
+//
+// Only OakCreateCloseButton's return type needs the name here, and a return type
+// needs nothing but the name. Callers that use the returned button at all import
+// <OakAppKit/OakRolloverButton.h> themselves — OakAppKit, OakTabBarView, FileBrowser
+// and OakFilterList each do. Swift consumers have no choice about this: a forward
+// declaration imports as an opaque type that is not even an NSButton, so `.target`
+// on the result of OakCreateCloseButton does not compile without the real header.
+@class OakRolloverButton;
+
 typedef NS_ENUM(NSUInteger, OakBackgroundFillViewStyle) {
 	OakBackgroundFillViewStyleNone = 0,
 	OakBackgroundFillViewStyleHeader,

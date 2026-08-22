@@ -23,6 +23,11 @@ static NSString* const kAvailableEncodingsKey = @"availableEncodings";
 static NSArray* g_migratedFromLegacy;
 static NSArray* g_registeredDefaults;
 
+static OakEncodingPopUpButton* make_button ()
+{
+	return [[OakEncodingPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+}
+
 void setup ()
 {
 	NSApplicationLoad();
@@ -34,7 +39,11 @@ void setup ()
 	// absent, which is exactly the condition +initialize tests for.
 	[defaults setObject:@[ @"UTF-8", @"UTF-16BE", @"UTF-32LE", @"MACROMAN", @"UTF-16LE//BOM" ] forKey:kAvailableEncodingsKey];
 
-	(void)[OakEncodingPopUpButton class]; // the message that fires +initialize
+	// Creating a button is the trigger, not messaging the class. +initialize
+	// fired on the first message and Swift cannot define it, so the registration
+	// moved into the initialisers — and this line has to work against both the
+	// ObjC++ and the port, or the pin stops meaning anything across the change.
+	(void)make_button();
 
 	g_migratedFromLegacy = [defaults stringArrayForKey:kAvailableEncodingsKey];
 	g_registeredDefaults = [[defaults volatileDomainForName:NSRegistrationDomain] objectForKey:kAvailableEncodingsKey];
@@ -81,11 +90,6 @@ private:
 // leaned on ambiently, so a test's menu shape does not depend on what ran before
 // it.
 #define OAK_DEFAULT_ENCODINGS @[ @"WINDOWS-1252", @"MACROMAN", @"ISO-8859-1", @"UTF-8", @"UTF-16LE//BOM", @"UTF-16BE//BOM", @"SHIFT_JIS", @"GB18030" ]
-
-static OakEncodingPopUpButton* make_button ()
-{
-	return [[OakEncodingPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
-}
 
 static std::string describe (NSArray* array)
 {

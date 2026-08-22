@@ -1,97 +1,54 @@
 #import "OakEncodingPopUpButton.h"
+#import "OakEncodingSupport.h"
 #import <OakFoundation/OakFoundation.h>
-#import <OakFoundation/NSString Additions.h>
-#import <io/path.h>
-#import <ns/ns.h>
-#import <text/parse.h>
-#import <oak/oak.h>
 
-static NSString* const kUserDefaultsAvailableEncodingsKey = @"availableEncodings";
+// What is left after the C++ moved to OakEncodingSupport: two NSPopUpButton
+// subclasses' worth of AppKit, and no std::, path::, plist:: or text:: at all.
+//
+// The one structural change is that +initialize is gone. Swift cannot define it,
+// so the work it did now lives in +[OakEncodingSupport registerDefaultEncodings]
+// and every initialiser calls it before reading the enabled list. That call is
+// not optional bookkeeping — it is what puts the eight defaults in the
+// registration domain, and -updateAvailableEncodings reads them on the next line.
 
-namespace // encoding_list
+static NSMenuItem* PopulateMenuFlat (NSMenu* menu, NSArray<OakCharset*>* items, id target, SEL action, NSString* selected)
 {
-	struct charset_t
+	NSMenuItem* res = nil;
+	for(OakCharset* item in items)
 	{
-		charset_t (std::string const& name, std::string const& code) : _name(name), _code(code) { }
+		NSMenuItem* menuItem = [menu addItemWithTitle:[NSString stringWithFormat:@"%@ – %@", item.group, item.title] action:action keyEquivalent:@""];
+		[menuItem setRepresentedObject:item.code];
+		[menuItem setTarget:target];
 
-		std::string const& name () const { return _name; };
-		std::string const& code () const { return _code; };
-
-	private:
-		std::string _name;
-		std::string _code;
-	};
-
-	static std::vector<charset_t> encoding_list ()
-	{
-		std::vector<charset_t> res;
-
-		std::string path = path::join(path::home(), "Library/Application Support/TextMate/Charsets.plist");
-		if(!path::exists(path))
-			path = to_s([[NSBundle bundleForClass:[OakEncodingPopUpButton class]] pathForResource:@"Charsets" ofType:@"plist"]);
-
-		plist::array_t encodings;
-		if(plist::get_key_path(plist::load(path), "encodings", encodings))
-		{
-			for(auto const& item : encodings)
-			{
-				std::string name, code;
-				if(plist::get_key_path(item, "name", name) && plist::get_key_path(item, "code", code))
-					res.emplace_back(name, code);
-			}
-		}
-
-		return res;
+		if([item.code isEqualToString:selected])
+			res = menuItem;
 	}
+	return res;
 }
 
-namespace // PopulateMenu{Flat,Hierarchical}
+static void PopulateMenuHierarchical (NSMenu* containingMenu, NSArray<OakCharset*>* items, id target, SEL action, NSString* selected)
 {
-	struct menu_item_t
+	NSString* groupName = nil;
+	NSMenu* menu = nil;
+	for(OakCharset* item in items)
 	{
-		menu_item_t (std::string const& group, std::string const& title, std::string const& represented_object) : group(group), title(title), represented_object(represented_object) { }
-
-		std::string group;
-		std::string title;
-		std::string represented_object;
-	};
-
-	static NSMenuItem* PopulateMenuFlat (NSMenu* menu, std::vector<menu_item_t> const& items, id target, SEL action, std::string const& selected)
-	{
-		NSMenuItem* res = nil;
-		for(auto const& item : items)
+		// A new submenu per *contiguous run* of a group, as before: the charset
+		// list is already grouped, and a group that reappeared later would get a
+		// second submenu rather than joining the first.
+		if(![groupName isEqualToString:item.group])
 		{
-			NSMenuItem* menuItem = [menu addItemWithTitle:[NSString stringWithCxxString:item.group + " – " + item.title] action:action keyEquivalent:@""];
-			[menuItem setRepresentedObject:[NSString stringWithCxxString:item.represented_object]];
-			[menuItem setTarget:target];
+			groupName = item.group;
 
-			if(item.represented_object == selected)
-				res = menuItem;
+			menu = [NSMenu new];
+			[menu setAutoenablesItems:NO];
+			[[containingMenu addItemWithTitle:groupName action:NULL keyEquivalent:@""] setSubmenu:menu];
 		}
-		return res;
-	}
 
-	static void PopulateMenuHierarchical (NSMenu* containingMenu, std::vector<menu_item_t> const& items, id target, SEL action, std::string const& selected)
-	{
-		std::string groupName = NULL_STR;
-		NSMenu* menu = nil;
-		for(auto const& item : items)
-		{
-			if(groupName != item.group)
-			{
-				groupName = item.group;
-
-				menu = [NSMenu new];
-				[menu setAutoenablesItems:NO];
-				[[containingMenu addItemWithTitle:[NSString stringWithCxxString:groupName] action:NULL keyEquivalent:@""] setSubmenu:menu];
-			}
-
-			NSMenuItem* menuItem = [menu addItemWithTitle:[NSString stringWithCxxString:item.title] action:action keyEquivalent:@""];
-			[menuItem setRepresentedObject:[NSString stringWithCxxString:item.represented_object]];
-			[menuItem setTarget:target];
-			if(selected == item.represented_object)
-				[menuItem setState:NSControlStateValueOn];
-		}
+		NSMenuItem* menuItem = [menu addItemWithTitle:item.title action:action keyEquivalent:@""];
+		[menuItem setRepresentedObject:item.code];
+		[menuItem setTarget:target];
+		if([selected isEqualToString:item.code])
+			[menuItem setState:NSControlStateValueOn];
 	}
 }
 
@@ -108,29 +65,10 @@ namespace // PopulateMenu{Flat,Hierarchical}
 @end
 
 @implementation OakEncodingPopUpButton
-+ (void)initialize
-{
-	NSArray* encodings = @[ @"WINDOWS-1252", @"MACROMAN", @"ISO-8859-1", @"UTF-8", @"UTF-16LE//BOM", @"UTF-16BE//BOM", @"SHIFT_JIS", @"GB18030" ];
-	[NSUserDefaults.standardUserDefaults registerDefaults:@{ kUserDefaultsAvailableEncodingsKey: encodings }];
-
-	// LEGACY format used prior to 2.0-beta.10
-	NSArray* legacy = [NSUserDefaults.standardUserDefaults stringArrayForKey:kUserDefaultsAvailableEncodingsKey];
-	if([legacy containsObject:@"UTF-16BE"] && ![legacy containsObject:@"UTF-16BE//BOM"])
-	{
-		NSMutableArray* updatedList = [NSMutableArray array];
-		for(NSString* charset in legacy)
-		{
-			BOOL legacyName = ([charset hasPrefix:@"UTF-16"] || [charset hasPrefix:@"UTF-32"]) && ![charset hasSuffix:@"//BOM"];
-			[updatedList addObject:legacyName ? [charset stringByAppendingString:@"//BOM"] : charset];
-		}
-		[NSUserDefaults.standardUserDefaults setObject:updatedList forKey:kUserDefaultsAvailableEncodingsKey];
-	}
-}
-
 - (void)updateAvailableEncodings
 {
 	NSMutableArray* encodings = [NSMutableArray array];
-	for(NSString* str in [NSUserDefaults.standardUserDefaults stringArrayForKey:kUserDefaultsAvailableEncodingsKey])
+	for(NSString* str in [NSUserDefaults.standardUserDefaults stringArrayForKey:OakEncodingSupport.availableEncodingsKey])
 		[encodings addObject:str];
 
 	if(self.encoding && ![encodings containsObject:self.encoding])
@@ -143,17 +81,18 @@ namespace // PopulateMenu{Flat,Hierarchical}
 {
 	NSString* currentEncodingsTitle = self.encoding;
 
-	std::vector<menu_item_t> items;
-	for(auto const& charset : encoding_list())
+	NSMutableArray<OakCharset*>* items = [NSMutableArray array];
+	for(OakCharset* charset in OakEncodingSupport.charsets)
 	{
-		if([self.availableEncodings containsObject:[NSString stringWithCxxString:charset.code()]])
+		if([self.availableEncodings containsObject:charset.code])
 		{
-			auto v = text::split(charset.name(), " – ");
-			if(v.size() == 2)
+			// charset.group is nil unless the name split into exactly two parts,
+			// which is the filter the C++ applied via text::split's result size.
+			if(charset.group)
 			{
-				items.push_back(menu_item_t(v.front(), v.back(), charset.code()));
-				if(to_s(self.encoding) == charset.code())
-					currentEncodingsTitle = to_ns(charset.name());
+				[items addObject:charset];
+				if([self.encoding isEqualToString:charset.code])
+					currentEncodingsTitle = charset.name;
 			}
 		}
 	}
@@ -161,9 +100,9 @@ namespace // PopulateMenu{Flat,Hierarchical}
 	[self.menu removeAllItems];
 	self.firstMenuItem = nil;
 
-	if(items.size() < 10)
+	if(items.count < 10)
 	{
-		if(NSMenuItem* currentItem = PopulateMenuFlat(self.menu, items, self, @selector(selectEncoding:), to_s(self.encoding)))
+		if(NSMenuItem* currentItem = PopulateMenuFlat(self.menu, items, self, @selector(selectEncoding:), self.encoding))
 			[self selectItem:currentItem];
 	}
 	else
@@ -174,7 +113,7 @@ namespace // PopulateMenu{Flat,Hierarchical}
 			[self.menu addItem:[NSMenuItem separatorItem]];
 			[self selectItem:self.firstMenuItem];
 		}
-		PopulateMenuHierarchical(self.menu, items, self, @selector(selectEncoding:), to_s(self.encoding));
+		PopulateMenuHierarchical(self.menu, items, self, @selector(selectEncoding:), self.encoding);
 	}
 
 	[self.menu addItem:[NSMenuItem separatorItem]];
@@ -185,6 +124,7 @@ namespace // PopulateMenu{Flat,Hierarchical}
 {
 	if(self = [super initWithCoder:aCoder])
 	{
+		[OakEncodingSupport registerDefaultEncodings];
 		self.encoding = @"UTF-8";
 		[self updateAvailableEncodings];
 		[self updateMenu];
@@ -197,6 +137,7 @@ namespace // PopulateMenu{Flat,Hierarchical}
 {
 	if(self = [super initWithFrame:aRect pullsDown:flag])
 	{
+		[OakEncodingSupport registerDefaultEncodings];
 		self.encoding = @"UTF-8";
 		[self updateAvailableEncodings];
 		[self updateMenu];
@@ -287,18 +228,19 @@ namespace // PopulateMenu{Flat,Hierarchical}
 {
 	if(self = [super initWithWindowNibName:@"CustomizeEncodings"])
 	{
-		std::set<std::string> enabledEncodings;
-		for(NSString* encoding in [NSUserDefaults.standardUserDefaults stringArrayForKey:kUserDefaultsAvailableEncodingsKey])
-			enabledEncodings.insert(to_s(encoding));
+		[OakEncodingSupport registerDefaultEncodings];
+
+		NSSet* enabledEncodings = [NSSet setWithArray:[NSUserDefaults.standardUserDefaults stringArrayForKey:OakEncodingSupport.availableEncodingsKey] ?: @[]];
 
 		encodings = [NSMutableArray new];
-		for(auto const& charset : encoding_list())
+		// Every charset, including the ones whose name does not split — the
+		// customize list is not filtered the way the menu is.
+		for(OakCharset* charset in OakEncodingSupport.charsets)
 		{
-			bool enabled = enabledEncodings.find(charset.code()) != enabledEncodings.end();
 			id item = [NSMutableDictionary dictionaryWithObjectsAndKeys:
-				@(enabled), @"enabled",
-				[NSString stringWithCxxString:charset.name()], @"name",
-				[NSString stringWithCxxString:charset.code()], @"charset",
+				@([enabledEncodings containsObject:charset.code]), @"enabled",
+				charset.name, @"name",
+				charset.code, @"charset",
 				nil];
 			[encodings addObject:item];
 		}
@@ -340,6 +282,6 @@ namespace // PopulateMenu{Flat,Hierarchical}
 			[newEncodings addObject:[encoding objectForKey:@"charset"]];
 	}
 
-	[NSUserDefaults.standardUserDefaults setObject:newEncodings forKey:kUserDefaultsAvailableEncodingsKey];
+	[NSUserDefaults.standardUserDefaults setObject:newEncodings forKey:OakEncodingSupport.availableEncodingsKey];
 }
 @end

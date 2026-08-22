@@ -279,10 +279,24 @@ tests 14 → 29. `d8f7ac4e`, `2912e3cb`, `1df5ed0b`, `965970be`. Full account in
 `PROJECT_PHASES.md`; the transferable part is rules 19–22 in
 `ide/FIND_PORT_HANDOFF.md`.
 
-Since then (2026-08-21) `OakRolloverButton` also went Swift, taking `src/*.mm`
-to **2271** and this bundle's tests to **48**. The tree total is **748 across 38
-bundles**, measured the way the test-count bullet above insists on — bundle-level
-`Executed N tests` lines only, cross-checked against `Test Case … started`.
+**That was the start of it. As of 2026-08-21 the framework's portable list is
+empty.** Six more files went Swift in one session — `OakRolloverButton`,
+`OakSyntaxFormatter`, `OakEncodingPopUpButton`, `NSMenuItem (FileIcon)`,
+`OakOpenWithMenu` and `OakSavePanel` — taking `src/*.mm` from **2438 to 1583** and
+this bundle's tests from 37 to **110**. The tree total is **810 across 38
+bundles**, measured the way the test-count bullet above insists on: bundle-level
+`Executed N tests` lines only, cross-checked against `Test Case … started`, and
+**with the crash counter checked too** (see rule 54 — a crashed process reports
+zero failures, and that hid a real bug twice this session).
+
+Shipped as **`v2026.8-alpha.17`** (`94028066`), notarized, stapled, and verified
+from outside: downloaded from the release, quarantined, Gatekeeper-accepted.
+Smoke-passed in the **Release** build before it was cut — Settings opens (the
+alpha.16 fix holds), the encoding pop-up's menu is exactly what the pin asserts,
+the Customize List… window lists all 126 charsets with their checkboxes, and the
+Save As sheet shows "Unicode – UTF-8" / "LF" from the resolution rule. **Not**
+exercised by hand: the Open With submenu and the Bundles menu's grey shortcut
+hints; both are called out in the release notes.
 
 **The one thing to absorb before touching this framework again:** most of what is
 left is *not* waiting on effort, it is waiting on its callers. Swift cannot

@@ -14,6 +14,7 @@
 #import "../src/NSImage Additions.h"
 #import "../src/OakRolloverButton.h"
 #import "../src/OakEncodingPopUpButton.h"
+#import "../src/OakOpenWithMenu.h"
 #import <OakFoundation/OakFoundation.h> // OakUserDefaultsObserver
 
 @interface OakFinderTag (Testing)
@@ -51,4 +52,18 @@
 // renamed, which is exactly what pinning them is for.
 - (void)selectEncoding:(NSMenuItem*)sender;
 - (void)customizeAvailableEncodings:(id)sender;
+@end
+
+@interface OakOpenWithApplicationInfo (Testing)
+// The initialiser and the three writable halves, all of which live in the .mm's
+// class extension. -displayName is a function of the three flags and cannot be
+// exercised without them.
+//
+// Note the getter names: `defaultApplication` is what the sort descriptors use
+// as a KVC key, `isDefaultApplication` is what -menuNeedsUpdate: calls. A Swift
+// port has to keep *both* spellings, which is rule 4's whole point.
+- (instancetype)initWithBundleURL:(NSURL*)url;
+@property (nonatomic, readwrite, getter = isDefaultApplication) BOOL defaultApplication;
+@property (nonatomic, readwrite, getter = hasMultipleVersions)  BOOL multipleVersions;
+@property (nonatomic, readwrite, getter = hasMultipleCopies)    BOOL multipleCopies;
 @end

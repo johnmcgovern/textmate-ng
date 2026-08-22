@@ -43,6 +43,11 @@
 // would collide with the generated OakAppKit-Swift.h (rule 43).
 #import "OakSyntaxFormatterSupport.h"
 
+// The charset list and the registerDefaultEncodings call that replaced
+// OakEncodingPopUpButton's +initialize, which Swift cannot define. The
+// button's own header is absent for the usual reason (rule 43).
+#import "OakEncodingSupport.h"
+
 // The C++-free boundaries OakPasteboard.swift stands on: the exported constants, the
 // SQLite store, the run-loop idle observer (and its protocol), and the selector
 // panel it drives. OakPasteboard.h itself is deliberately absent — Swift defines

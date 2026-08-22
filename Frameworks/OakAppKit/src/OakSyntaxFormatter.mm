@@ -1,21 +1,16 @@
 #import "OakSyntaxFormatter.h"
+#import "OakSyntaxFormatterSupport.h"
 #import <OakFoundation/OakFoundation.h>
-#import <bundles/query.h>
-#import <theme/OakTheme.h>
-#import <parse/parse.h>
-#import <parse/grammar.h>
-#import <text/utf16.h>
-#import <ns/ns.h>
 
-static size_t kParseSizeLimit = 1024;
+// What is left after the C++ moved to OakSyntaxFormatterSupport: an NSFormatter
+// and one AppKit pass over an attributed string. No std::, no parse::, no
+// scope::, and OakTheme is reached only through the styler — which is the whole
+// point, because this file is the next one to become Swift.
 
 @interface OakSyntaxFormatter ()
 {
 	NSString* _grammarName;
-
-	BOOL _didLoadGrammarAndTheme;
-	parse::grammar_ptr _grammar;
-	OakTheme* _theme;
+	OakSyntaxStyler* _styler;
 }
 @end
 
@@ -48,26 +43,6 @@ static size_t kParseSizeLimit = 1024;
 	return styled;
 }
 
-- (BOOL)tryLoadGrammarAndTheme
-{
-	if(_didLoadGrammarAndTheme == NO)
-	{
-		for(auto const& bundleItem : bundles::query(bundles::kFieldGrammarScope, to_s(_grammarName), scope::wildcard, bundles::kItemTypeGrammar))
-		{
-			if(_grammar = parse::parse_grammar(bundleItem))
-				break;
-		}
-
-		_theme = [OakTheme theme];
-
-		if(!_grammar)
-			NSLog(@"Failed to load grammar: %@", _grammarName);
-
-		_didLoadGrammarAndTheme = YES;
-	}
-	return _grammar && _theme;
-}
-
 - (void)addStylesToString:(NSMutableAttributedString*)styled
 {
 	NSString* plain = styled.string;
@@ -79,34 +54,28 @@ static size_t kParseSizeLimit = 1024;
 	[styled addAttributes:@{ NSForegroundColorAttributeName: NSColor.controlTextColor } range:NSMakeRange(0, plain.length)];
 	[styled applyFontTraits:NSUnboldFontMask|NSUnitalicFontMask range:NSMakeRange(0, plain.length)];
 
-	if(_enabled && [self tryLoadGrammarAndTheme])
+	if(_enabled)
 	{
-		std::string str = to_s(plain);
-		std::map<size_t, scope::scope_t> scopes;
-		parse::parse(str.data(), str.data() + std::min(str.size(), kParseSizeLimit), _grammar->seed(), scopes, true);
+		// Built on first use, not in the initializer: loading a grammar is the
+		// expensive part and a formatter that is never enabled must never pay it.
+		if(!_styler)
+			_styler = [[OakSyntaxStyler alloc] initWithGrammarName:_grammarName];
 
-		size_t from = 0, pos = 0;
-		for(auto pair = scopes.begin(); pair != scopes.end(); )
+		// nil when the grammar failed to load, and iterating nil is the same
+		// nothing the old `_enabled && [self tryLoadGrammarAndTheme]` guard did.
+		for(OakSyntaxStyleRun* run in [_styler styleRunsForString:plain])
 		{
-			OakThemeStyles* styles = [_theme stylesForScope:pair->second];
+			if(run.fontTraits)
+				[styled applyFontTraits:run.fontTraits range:run.range];
 
-			size_t to = ++pair != scopes.end() ? pair->first : str.size();
-			size_t len = utf16::distance(str.data() + from, str.data() + to);
-
-			if(styles.fontTraits)
-				[styled applyFontTraits:styles.fontTraits range:NSMakeRange(pos, len)];
-
-			NSMutableDictionary* attributes = [NSMutableDictionary dictionaryWithObject:styles.foregroundColor forKey:NSForegroundColorAttributeName];
-			if(![styles.backgroundColor isEqual:_theme.backgroundColor])
-				attributes[NSBackgroundColorAttributeName] = styles.backgroundColor;
-			if(styles.underlined)
+			NSMutableDictionary* attributes = [NSMutableDictionary dictionaryWithObject:run.foregroundColor forKey:NSForegroundColorAttributeName];
+			if(run.backgroundColor)
+				attributes[NSBackgroundColorAttributeName] = run.backgroundColor;
+			if(run.underlined)
 				attributes[NSUnderlineStyleAttributeName] = @(NSUnderlineStyleSingle);
-			if(styles.strikethrough)
+			if(run.strikethrough)
 				attributes[NSStrikethroughStyleAttributeName] = @(NSUnderlineStyleSingle);
-			[styled addAttributes:attributes range:NSMakeRange(pos, len)];
-
-			pos += len;
-			from = to;
+			[styled addAttributes:attributes range:run.range];
 		}
 	}
 

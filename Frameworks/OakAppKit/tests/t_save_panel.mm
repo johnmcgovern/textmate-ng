@@ -34,7 +34,7 @@ static std::string describe (encoding::type const& encoding)
 
 static OakEncodingSaveOptionsViewController* make_controller (encoding::type const& encoding)
 {
-	return [[OakEncodingSaveOptionsViewController alloc] initWithEncodingOptions:encoding fileType:@"text.plain"];
+	return [[OakEncodingSaveOptionsViewController alloc] initWithOptions:[OakEncodingOptions optionsWithCxxEncoding:encoding] fileType:@"text.plain"];
 }
 
 // ==================================================================
@@ -51,9 +51,9 @@ void test_save_panel_selector_surface ()
 	Class cls = OakEncodingSaveOptionsViewController.class;
 	OAK_ASSERT_EQ((bool)[cls isSubclassOfClass:NSViewController.class], true);
 	OAK_ASSERT_EQ((bool)[cls conformsToProtocol:@protocol(NSOpenSavePanelDelegate)], true);
-	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(initWithEncodingOptions:fileType:)], true);
-	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(encodingForURL:)],                   true);
-	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(updateSettings:)],                   true);
+	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(initWithOptions:fileType:)], true);
+	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(resolvedOptionsForURL:)],                   true);
+	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(updateSettingsWithOptions:)],                   true);
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(panel:didChangeToDirectoryURL:)],    true);
 }
 
@@ -97,7 +97,7 @@ void test_save_panel_fills_in_an_unset_encoding_from_settings ()
 	// whose defaults are UTF-8 and LF.
 	OakEncodingSaveOptionsViewController* controller = make_controller(encoding::type());
 
-	encoding::type res = [controller encodingForURL:[NSURL fileURLWithPath:@"/tmp/t_save_panel.txt"]];
+	encoding::type res = [[controller resolvedOptionsForURL:[NSURL fileURLWithPath:@"/tmp/t_save_panel.txt"]] cxxEncoding];
 
 	settings_t const& settings = settings_for_path("/tmp/t_save_panel.txt", "text.plain");
 	OAK_ASSERT_EQ(describe(res), "newlines=" + settings.get(kSettingsLineEndingsKey, "\n") + " charset=" + settings.get(kSettingsEncodingKey, kCharsetUTF8));
@@ -109,7 +109,7 @@ void test_save_panel_keeps_an_encoding_that_is_already_set ()
 	// lookup is a fallback, not an override.
 	OakEncodingSaveOptionsViewController* controller = make_controller(encoding::type("\r\n", "MACROMAN"));
 
-	encoding::type res = [controller encodingForURL:[NSURL fileURLWithPath:@"/tmp/t_save_panel.txt"]];
+	encoding::type res = [[controller resolvedOptionsForURL:[NSURL fileURLWithPath:@"/tmp/t_save_panel.txt"]] cxxEncoding];
 	OAK_ASSERT_EQ(describe(res), std::string("newlines=\r\n charset=MACROMAN"));
 }
 
@@ -119,7 +119,7 @@ void test_save_panel_fills_the_two_halves_independently ()
 	// the ObjC++ tests them with two separate `if`s rather than one.
 	OakEncodingSaveOptionsViewController* controller = make_controller(encoding::type(NULL_STR, "MACROMAN"));
 
-	encoding::type res = [controller encodingForURL:[NSURL fileURLWithPath:@"/tmp/t_save_panel.txt"]];
+	encoding::type res = [[controller resolvedOptionsForURL:[NSURL fileURLWithPath:@"/tmp/t_save_panel.txt"]] cxxEncoding];
 	settings_t const& settings = settings_for_path("/tmp/t_save_panel.txt", "text.plain");
 
 	OAK_ASSERT_EQ(describe(res), "newlines=" + settings.get(kSettingsLineEndingsKey, "\n") + " charset=MACROMAN");
@@ -147,7 +147,7 @@ void test_save_panel_update_settings_maps_onto_the_bound_properties ()
 {
 	OakEncodingSaveOptionsViewController* controller = make_controller(encoding::type());
 
-	[controller updateSettings:encoding::type("\r", "SHIFT_JIS")];
+	[controller updateSettingsWithOptions:[OakEncodingOptions optionsWithCxxEncoding:encoding::type("\r", "SHIFT_JIS")]];
 
 	// These two property names are the binding key paths the accessory view uses,
 	// so they are API even though nothing declares them publicly.
@@ -166,7 +166,7 @@ void test_save_panel_update_settings_passes_null_str_through_as_nil ()
 	// the name hides it: **kCharsetNoEncoding is NULL_STR**, not a sentinel
 	// string. A default-constructed encoding::type therefore carries nothing at
 	// all, which is exactly why -encodingForURL: has to fill both halves in.
-	[controller updateSettings:encoding::type()];
+	[controller updateSettingsWithOptions:[OakEncodingOptions optionsWithCxxEncoding:encoding::type()]];
 	OAK_ASSERT_EQ(describe(controller.lineEndings), std::string("«nil»"));
 	OAK_ASSERT_EQ(describe(controller.encoding),    std::string("«nil»"));
 	OAK_ASSERT_EQ((bool)(kCharsetNoEncoding == NULL_STR), true);

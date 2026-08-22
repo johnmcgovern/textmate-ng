@@ -16,6 +16,7 @@
 #import "../src/OakEncodingPopUpButton.h"
 #import "../src/OakOpenWithMenu.h"
 #import "../src/OakSavePanel.h" // brings <file/encoding.h> with it
+#import "../src/OakSavePanelCxx.h"
 #import <OakFoundation/OakFoundation.h> // OakUserDefaultsObserver
 
 @interface OakFinderTag (Testing)
@@ -74,9 +75,11 @@
 // itself cannot be tested (it wants a window and a modal sheet), so this is
 // where the coverage has to go.
 @interface OakEncodingSaveOptionsViewController : NSViewController
-- (id)initWithEncodingOptions:(encoding::type const&)someEncodingOptions fileType:(NSString*)aFileType;
-- (encoding::type)encodingForURL:(NSURL*)anURL;
-- (void)updateSettings:(encoding::type const&)encoding;
+// Box-based since the OakSavePanelSupport split: these are the spellings the
+// Swift port keeps, so the pins mean the same thing on both sides of it.
+- (instancetype)initWithOptions:(OakEncodingOptions*)someEncodingOptions fileType:(NSString*)aFileType;
+- (OakEncodingOptions*)resolvedOptionsForURL:(NSURL*)anURL;
+- (void)updateSettingsWithOptions:(OakEncodingOptions*)options;
 @property (nonatomic) NSString* fileType;
 @property (nonatomic) NSString* lineEndings;
 @property (nonatomic) NSString* encoding;

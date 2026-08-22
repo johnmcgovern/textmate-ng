@@ -12,6 +12,7 @@
 #import "../src/OakBorderlessPanel.h"
 #import "../src/OakZoomingIcon.h"
 #import "../src/NSImage Additions.h"
+#import "../src/OakRolloverButton.h"
 
 @interface OakFinderTag (Testing)
 // The label is what maps a tag to one of Finder's seven colours; the public
@@ -28,4 +29,14 @@
 // from +finderTagsForURL: in the ObjC++, which is what lets the parsing be
 // tested without putting an xattr on a file.
 + (NSArray<OakFinderTag*>*)finderTagsFromData:(NSData*)data;
+@end
+
+@interface OakRolloverButton (Testing)
+// The two booleans the whole class is a function of. Both live in a class
+// extension today and are set only from AppKit callbacks — window main/key
+// notifications for one, tracking areas for the other — neither of which a test
+// process can drive reliably. Declaring them lets the image table be tested as
+// the table it is.
+@property (nonatomic) BOOL active;
+@property (nonatomic) BOOL mouseInside;
 @end

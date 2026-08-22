@@ -533,3 +533,20 @@ knew.
     bridging headers keep importing the free functions without dragging a Swift
     class's hand declaration back into its own framework's bridging header
     (rule 43).
+
+---
+
+## Rule 53 — OakEncodingPopUpButton
+
+53. **A test that writes `NSUserDefaults` and restores at the end poisons its own
+    next run.** `oak_assertion_error` throws, so a failing assertion skips every
+    line after it — including the restore — and the value it happened to be
+    testing with is now persisted in the test host's domain. The next run reads it
+    as ambient state. This cost an hour: a ten-encoding fixture left behind by a
+    failed assertion made `t_encoding_pop_up.mm`'s *flat menu* test build a
+    hierarchical menu, in a test that never touched the defaults, and the obvious
+    reading was that the production code was wrong. Restore from a destructor
+    instead — `available_encodings_t` in that file is the pattern — and have each
+    test set the state it needs rather than leaning on what it inherits. The same
+    applies to any process-global a test mutates: the bundle index, the
+    pasteboard, the registration domain.

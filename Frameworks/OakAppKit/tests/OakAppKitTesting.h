@@ -13,6 +13,8 @@
 #import "../src/OakZoomingIcon.h"
 #import "../src/NSImage Additions.h"
 #import "../src/OakRolloverButton.h"
+#import "../src/OakEncodingPopUpButton.h"
+#import <OakFoundation/OakFoundation.h> // OakUserDefaultsObserver
 
 @interface OakFinderTag (Testing)
 // The label is what maps a tag to one of Finder's seven colours; the public
@@ -39,4 +41,14 @@
 // the table it is.
 @property (nonatomic) BOOL active;
 @property (nonatomic) BOOL mouseInside;
+@end
+
+@interface OakEncodingPopUpButton (Testing) <OakUserDefaultsObserver>
+// All three live in the .mm's class extension today, and all three are reached
+// by @selector() rather than through a header — the two menu actions are wired
+// with -setTarget:/-addItemWithTitle:action:, and the callback comes from a
+// protocol the class adopts privately. Nothing but a test notices when one is
+// renamed, which is exactly what pinning them is for.
+- (void)selectEncoding:(NSMenuItem*)sender;
+- (void)customizeAvailableEncodings:(id)sender;
 @end

@@ -299,7 +299,8 @@ What remains, and why each is where it is:
 | `OakUIConstructionFunctions`, `OakAppKit.mm`, `OakSound`, `OakToolTip`, `NSColor`/`NSAlert Additions` | ~700 | deferred: free functions / C variadics, want Swift callers first |
 | `OakEncodingPopUpButton` | — | **done** (`0706cf37` pin, `e6113d20` extraction, Swift); `+initialize` moved to `OakEncodingSupport` |
 | `NSMenuItem Additions` | — | **done** (`649b1ca3` pin, Swift); the three `…CxxString:` selectors live in `NSMenuItemCxx.mm` |
-| `OakOpenWithMenu`, `OakSavePanel` | 329 | not surveyed |
+| `OakOpenWithMenu` | — | **done** (`4d458345` pin, Swift); no boundary needed — it had no C++ types at all |
+| `OakSavePanel` | 135 | **surveyed, not started.** The hard one left: `encoding::type` as an ivar (rule 20), as a parameter, and inside a **block** (rule 15), plus a `+initialize`. Needs an `encoding::type` box — the `TMScopeContext` treatment — and both ObjC++ callers (`DocumentWindowSupport.mm`, `OakDocument.mm`) change with it |
 | `OakRolloverButton` | — | **done** (`53fd67da`, Swift); rule 21 cleared first by `004c3f37` |
 | `OakSyntaxFormatter` | — | **done** (`0a72f5ce` pin, `551dba28` extraction, Swift); the ivar went into `OakSyntaxFormatterSupport` |
 | `NSSavePanel Additions` | 41 | `+initialize` needs a new home first |

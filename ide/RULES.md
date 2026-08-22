@@ -550,3 +550,33 @@ knew.
     test set the state it needs rather than leaning on what it inherits. The same
     applies to any process-global a test mutates: the bundle index, the
     pasteboard, the registration domain.
+
+---
+
+## Rule 54 — OakOpenWithMenu
+
+54. **A search-and-replace that rewrites every call site rewrites the callee too.**
+    Extracting a repeated expression into a helper and then replacing that
+    expression everywhere turns the helper's own body into `return helperName(x)`.
+    It compiles, it type-checks, and it is unbounded recursion. Porting
+    `OakOpenWithMenu` this way produced
+
+        private func filePath(of url: URL) -> String { filePath(of: url) }
+
+    which crashed six test processes with `EXC_BAD_ACCESS` in the stack guard
+    region. Write the helper *after* the replacement, or exclude its own body, and
+    read back what the edit produced rather than the diff summary.
+
+    **The half that matters more: a crashed test process reports zero failures.**
+    xctest relaunches, prints `Restarting after unexpected exit, crash, or test
+    timeout`, and the bundle's `Executed N tests, with 0 failures` line counts only
+    the tests that *ran*. A tail-of-the-log summary therefore looks green. The
+    local check is the same one `.github/workflows/build.yml` now gates on, and it
+    is two greps:
+
+        grep -c "Restarting after unexpected exit" "$log"
+        grep -c "Test Case .* started" "$log"; grep -c "Test Case .* passed" "$log"
+
+    Started ≠ passed means a process died. This is the second time in one session
+    that a green-looking summary hid a crash; treat "0 failures" as meaningless
+    until the crash counter is also zero.

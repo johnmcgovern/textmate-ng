@@ -314,19 +314,24 @@ saying. "`OakTextView` — 6917 lines — stays ObjC++, Phase 6 skipped" is true
 | `OakDocumentView.mm` | 781 | 29 | portable with a boundary; heaviest of the rest |
 | `GutterView.mm` | 556 | 24 | C++ **ivars** (`std::vector<data_source_t>`, `std::string`) and a `std::string const&` selector — real boundary work, plus rule-19 `extern` constants in its header |
 | `OTVStatusBar.mm` | 339 | 5 | one `std::multimap<std::string, bundles::item_ptr, text::less_t>` + `bundles::query` — the `SymbolChooserSupport` shape |
-| `OakChoiceMenu.mm` | 252 | 5 | only `std::max/min/clamp` and a `static std::map<SEL, NSUInteger>` table — **no boundary needed** |
+| `OakChoiceMenu.mm` | — | — | **done** — Swift, no boundary file, as predicted. The five `extern NSUInteger const` moved to `OakChoiceMenuConstants.mm` (rule 19, permanently — its only consumer is `OakTextView.mm`) |
 | `OakCommandRefresh.mm` | 193 | 8 | not examined closely |
-| `OTVHUD.mm` | 118 | 0 | C++-free, one class method. **Portable today** |
-| `LiveSearchView.mm` | 48 | 0 | C++-free; one `+initialize` to rehome (rule 20), and `OakEncodingSupport` / `OakSavePanelSupport` are two worked examples of doing that |
+| `OTVHUD.mm` | 118 | 0 | C++-free, one class method. **Portable today**, and now pinned |
+| `LiveSearchView.mm` | 48 | 0 | C++-free; one `+initialize` to rehome (rule 20), and `OakEncodingSupport` / `OakSavePanelSupport` are two worked examples of doing that. Now pinned |
 
 **2287 of the 6920 lines are the same shape as OakAppKit's leaves were.** That is the
 next phase if one is wanted.
 
-**Two preconditions, and the second is the real cost.** `OakTextView/default.rave` has
-`sources src/*.{cc,mm}` — **no `swift`** — which is the one-line fix OakAppKit needed.
-And it has **no `tests` line and no `tests/` directory at all**: the framework has zero
-tests. Rule 18 says pin before porting, so the first commit of that phase is creating a
-test bundle, not porting a file.
+**Both preconditions are now cleared (2026-08-24).** `default.rave` has `swift` in its
+sources glob and `tests tests/t_*.mm`; `Frameworks/OakTextView/tests/` exists with
+`OakTextViewTesting.h` and three test files, and `src/OakTextView-Bridging-Header.h`
+is in place — the seed looks for it at `<dir>/src/<Target>-Bridging-Header.h`, which
+was a third precondition this note had missed.
+
+The framework is at **29 tests** covering `LiveSearchView`, `OTVHUD` and
+`OakChoiceMenu`, from zero. `OakChoiceMenu` is ported; the next two in size order are
+`OakCommandRefresh` (193, not examined closely) and `OTVStatusBar` (339, needs the
+`SymbolChooserSupport` treatment for one `std::multimap`).
 
 ## Done: OakAppKit's portable leaves (2026-08-13)
 

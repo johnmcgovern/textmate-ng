@@ -272,6 +272,62 @@ public header, every delegate protocol method (`@optional` ones especially), and
 every C++-typed category selector, asserted with `-instancesRespondToSelector:`.
 It caught the second defect on its first run and would have caught the first.
 
+## Survey (2026-08-21): the free functions will not be unblocked by their callers
+
+Run because "defer `OakUIConstructionFunctions` until its consumers are Swift" had
+been the plan for three sessions and nobody had counted the consumers. Counted now:
+**55 call sites in 14 ObjC++ files across 8 frameworks.**
+
+| framework | calls | files |
+| --- | ---: | ---: |
+| `OakTextView` | **26** | 5 |
+| `document` | 13 | 2 |
+| `HTMLOutput` | 5 | 2 |
+| `Applications/TextMate` | 5 | 1 |
+| `OakAppKit` | 2 | 1 |
+| `Find` | 2 | 1 |
+| `SoftwareUpdate` | 1 | 1 |
+| `Preferences` | 1 | 1 |
+
+**The deferral cannot end.** Rule 19 lifts only when *every* caller is Swift, and this
+tail runs through two frameworks that are deliberately not being ported —
+`HTMLOutput` (needs a `std::map` API redesign first) and `SoftwareUpdate` (update is
+switched off on purpose) — plus `OakTextView`, which holds nearly half the call sites.
+Waiting on that is waiting on something that is not scheduled to happen.
+
+So the choice is between leaving `OakUIConstructionFunctions.mm` (282) in ObjC++
+permanently, which is defensible — it is small, stable and shared — or porting it
+**behind forwarders**, which is what `NSMenuItemCxx.mm` already does for a category
+with live ObjC++ callers. That would take the file from 282 lines to roughly 60 of
+one-line forwarders. Nobody has decided; the point of this note is that "wait" is no
+longer one of the options.
+
+## Survey (2026-08-21): `OakTextView` is one blocked file, not a blocked framework
+
+The bigger find, and it corrects something this file and the dashboard have both been
+saying. "`OakTextView` — 6917 lines — stays ObjC++, Phase 6 skipped" is true of the
+**class** and wrong about the **framework**:
+
+| file | lines | C++ hits | verdict |
+| --- | ---: | ---: | --- |
+| `OakTextView.mm` | 4633 | 555 | the real blocker — subclasses three C++ virtual classes. Stays. |
+| `OakDocumentView.mm` | 781 | 29 | portable with a boundary; heaviest of the rest |
+| `GutterView.mm` | 556 | 24 | C++ **ivars** (`std::vector<data_source_t>`, `std::string`) and a `std::string const&` selector — real boundary work, plus rule-19 `extern` constants in its header |
+| `OTVStatusBar.mm` | 339 | 5 | one `std::multimap<std::string, bundles::item_ptr, text::less_t>` + `bundles::query` — the `SymbolChooserSupport` shape |
+| `OakChoiceMenu.mm` | 252 | 5 | only `std::max/min/clamp` and a `static std::map<SEL, NSUInteger>` table — **no boundary needed** |
+| `OakCommandRefresh.mm` | 193 | 8 | not examined closely |
+| `OTVHUD.mm` | 118 | 0 | C++-free, one class method. **Portable today** |
+| `LiveSearchView.mm` | 48 | 0 | C++-free; one `+initialize` to rehome (rule 20), and `OakEncodingSupport` / `OakSavePanelSupport` are two worked examples of doing that |
+
+**2287 of the 6920 lines are the same shape as OakAppKit's leaves were.** That is the
+next phase if one is wanted.
+
+**Two preconditions, and the second is the real cost.** `OakTextView/default.rave` has
+`sources src/*.{cc,mm}` — **no `swift`** — which is the one-line fix OakAppKit needed.
+And it has **no `tests` line and no `tests/` directory at all**: the framework has zero
+tests. Rule 18 says pin before porting, so the first commit of that phase is creating a
+test bundle, not porting a file.
+
 ## Done: OakAppKit's portable leaves (2026-08-13)
 
 Eight files Swift, `src/`'s `.mm` **4825 → 3922, measured**, this framework's

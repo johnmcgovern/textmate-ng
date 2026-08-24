@@ -11,6 +11,7 @@
 // at all — it subclasses three C++ classes with virtual methods.
 #import "../src/LiveSearchView.h"
 #import "../src/OTVHUD.h"
+#import "../src/OakChoiceMenu.h"
 
 @interface LiveSearchView (Testing)
 // Declared in the .mm's class extension. The separator is the only subview the
@@ -30,4 +31,12 @@
 // Declaring it here pins the spelling a port has to keep — and makes the setter
 // callable from outside, which it currently is not.
 - (void)setStringValue:(NSString*)someText;
+@end
+
+@interface OakChoiceMenu (Testing)
+// -doCommandBySelector: is NSResponder's, and the class overrides it to turn a
+// selector into one of its private action codes. Declaring it lets the mapping be
+// driven directly for the selectors that cannot be reached by synthesising a key
+// event — the AndModifySelection and scroll* variants have no plain keystroke.
+- (void)doCommandBySelector:(SEL)aSelector;
 @end

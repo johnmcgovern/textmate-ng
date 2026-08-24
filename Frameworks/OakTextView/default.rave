@@ -4,6 +4,10 @@ target "${dirname}" {
 
 	files resources/* "Resources"
 
-	sources src/*.{cc,mm}
+	# `swift` is in the glob before any Swift exists, so the first ported file is a
+	# port and nothing else. Harmless meanwhile: the brace list still matches the
+	# .cc/.mm that are there.
+	sources src/*.{cc,mm,swift}
+	tests tests/t_*.mm
 	frameworks Cocoa
 }

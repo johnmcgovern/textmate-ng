@@ -315,12 +315,45 @@ saying. "`OakTextView` — 6917 lines — stays ObjC++, Phase 6 skipped" is true
 | `GutterView.mm` | 556 | 24 | C++ **ivars** (`std::vector<data_source_t>`, `std::string`) and a `std::string const&` selector — real boundary work, plus rule-19 `extern` constants in its header |
 | `OTVStatusBar.mm` | 339 | 5 | one `std::multimap<std::string, bundles::item_ptr, text::less_t>` + `bundles::query` — the `SymbolChooserSupport` shape |
 | `OakChoiceMenu.mm` | — | — | **done** — Swift, no boundary file, as predicted. The five `extern NSUInteger const` moved to `OakChoiceMenuConstants.mm` (rule 19, permanently — its only consumer is `OakTextView.mm`) |
-| `OakCommandRefresh.mm` | 193 | 8 | not examined closely |
+| `OakCommandRefresh.mm` | 193 | 8 | **examined 2026-08-24: do not port.** See below — the C++ map is the object's state, not decoration |
 | `OTVHUD.mm` | 118 | 0 | C++-free, one class method. **Portable today**, and now pinned |
 | `LiveSearchView.mm` | 48 | 0 | C++-free; one `+initialize` to rehome (rule 20), and `OakEncodingSupport` / `OakSavePanelSupport` are two worked examples of doing that. Now pinned |
 
 **2287 of the 6920 lines are the same shape as OakAppKit's leaves were.** That is the
 next phase if one is wanted.
+
+### `OakCommandRefresh` — examined and declined (2026-08-24)
+
+The "8 C++ hits, not examined closely" line above undersold this badly, and the
+metric is what misled me: hit *count* says nothing about whether the C++ is at the
+edges or in the middle. Here it is the middle.
+
+`std::map<std::string, std::string>` is this class's **state**, not a parameter it
+passes through:
+
+- `_variables` is the ivar the whole object exists to hold and mutate (rule 20);
+- it is a parameter of the public `+scheduleRefreshForCommand:…variables:`, whose
+  only caller is `OakTextView.mm` and builds it from a `bundle_command_t`;
+- it is the parameter of `-updateEnvironment:(std::map…&)forCommand:`, and that
+  one is **load-bearing in a way that is easy to miss**: `OakCommand.mm` finds it
+  with `[self targetForAction:@selector(updateEnvironment:forCommand:)]` on the
+  *responder chain*, and `OakCommandRefresher` puts itself on that chain
+  (`_command.firstResponder = self`) when the document closes. Rule 17 says Swift
+  cannot declare a method taking a non-const C++ reference — so a Swift version
+  **cannot answer that selector at all**;
+- and `-executeWithInput:variables:outputHandler:` takes the map *and* a block
+  with four C++ types in it (rule 15).
+
+An ObjC++ category on a Swift class can hold C++-typed methods — `NSMenuItemCxx.mm`
+proves that — but a category cannot add **storage**, and the storage here is the
+map. Every C++ method would have to marshal through a boxed side-object for a class
+whose entire job is holding that map. What would actually move to Swift is the
+notification wiring and one timer, perhaps 50 lines, at the cost of a box, a
+boundary file, and a split identity on the responder chain.
+
+Not a close call: this file is nearer to `OakTextView.mm` than to `OakChoiceMenu`.
+It is a C++-state object wearing an NSResponder, not an AppKit object with C++ at
+its edges. Re-litigating it needs a reason beyond the line count.
 
 **Both preconditions are now cleared (2026-08-24).** `default.rave` has `swift` in its
 sources glob and `tests tests/t_*.mm`; `Frameworks/OakTextView/tests/` exists with

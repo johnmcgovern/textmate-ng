@@ -18,6 +18,12 @@
 - (void)setInactiveKeyEquivalent:(NSString*)aKeyEquivalent;
 - (void)setTabTrigger:(NSString*)aTabTrigger;
 
+// Binds a key equivalent written with a modifier prefix ("@s" is ⌘S). Not
+// -setKeyEquivalent:, which AppKit owns and which takes the key on its own.
+// -setKeyEquivalentCxxString: forwards here; nil or an empty string clears both
+// the key equivalent and its modifier mask.
+- (void)setKeyEquivalentString:(NSString*)aKeyEquivalent;
+
 - (void)setModifiedState:(BOOL)flag;
 - (void)setDynamicTitle:(NSString*)title;
 @end

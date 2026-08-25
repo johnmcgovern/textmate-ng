@@ -53,6 +53,7 @@ void test_menu_item_additions_selector_surface ()
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(setActivationString:withFont:)],      true);
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(setInactiveKeyEquivalent:)],          true);
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(setTabTrigger:)],                     true);
+	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(setKeyEquivalentString:)],            true);
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(setModifiedState:)],                  true);
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(setDynamicTitle:)],                   true);
 
@@ -125,6 +126,45 @@ void test_menu_item_key_equivalent_stops_at_a_non_modifier ()
 	// there is the key equivalent — including further modifier characters.
 	[item setKeyEquivalentCxxString:"@x@"];
 	OAK_ASSERT_EQ(describe(item.keyEquivalent), std::string("x@"));
+	OAK_ASSERT_EQ((size_t)item.keyEquivalentModifierMask, (size_t)NSEventModifierFlagCommand);
+}
+
+// The parser lives on -setKeyEquivalentString: and the std::string selector
+// forwards to it, so the two spellings have to agree everywhere — including on
+// the two ways of saying "no key equivalent".
+void test_menu_item_key_equivalent_string_spelling_matches_the_cxx_one ()
+{
+	NSMenuItem* item = make_item(@"Save");
+
+	[item setKeyEquivalentString:@"$^~@#x"];
+	OAK_ASSERT_EQ(describe(item.keyEquivalent), std::string("x"));
+	OAK_ASSERT_EQ((size_t)item.keyEquivalentModifierMask, (size_t)(NSEventModifierFlagShift|NSEventModifierFlagControl|NSEventModifierFlagOption|NSEventModifierFlagCommand|NSEventModifierFlagNumericPad));
+
+	// Same one-character rule as the C++ spelling.
+	[item setKeyEquivalentString:@"@"];
+	OAK_ASSERT_EQ(describe(item.keyEquivalent), std::string("@"));
+	OAK_ASSERT_EQ((size_t)item.keyEquivalentModifierMask, (size_t)0);
+
+	// nil is what NULL_STR converts to, and an empty string clears as well.
+	[item setKeyEquivalentString:@"@s"];
+	[item setKeyEquivalentString:nil];
+	OAK_ASSERT_EQ(describe(item.keyEquivalent), std::string(""));
+	OAK_ASSERT_EQ((size_t)item.keyEquivalentModifierMask, (size_t)0);
+
+	[item setKeyEquivalentString:@"@s"];
+	[item setKeyEquivalentString:@""];
+	OAK_ASSERT_EQ(describe(item.keyEquivalent), std::string(""));
+	OAK_ASSERT_EQ((size_t)item.keyEquivalentModifierMask, (size_t)0);
+}
+
+// The scan runs over UTF-8 bytes, as the ObjC++ did over the std::string. A
+// multi-byte key is never mistaken for a modifier and the tail still decodes.
+void test_menu_item_key_equivalent_handles_a_multibyte_key ()
+{
+	NSMenuItem* item = make_item(@"Save");
+
+	[item setKeyEquivalentCxxString:"@\u00e9"];
+	OAK_ASSERT_EQ(describe(item.keyEquivalent), std::string("\u00e9"));
 	OAK_ASSERT_EQ((size_t)item.keyEquivalentModifierMask, (size_t)NSEventModifierFlagCommand);
 }
 

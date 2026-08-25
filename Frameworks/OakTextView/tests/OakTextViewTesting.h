@@ -12,6 +12,7 @@
 #import "../src/LiveSearchView.h"
 #import "../src/OTVHUD.h"
 #import "../src/OakChoiceMenu.h"
+#import "../src/OTVStatusBar.h"
 
 @interface LiveSearchView (Testing)
 // Declared in the .mm's class extension. The separator is the only subview the
@@ -39,4 +40,22 @@
 // driven directly for the selectors that cannot be reached by synthesising a key
 // event — the AndModifySelection and scroll* variants have no plain keystroke.
 - (void)doCommandBySelector:(SEL)aSelector;
+@end
+
+@interface OTVStatusBar (Testing)
+// Every control is a private property in the .mm. The status bar has no other
+// observable surface — its public API is eight setters whose only effect is on
+// these — so a test cannot say anything at all without them.
+@property (nonatomic) NSTextField*   selectionField;
+@property (nonatomic) NSPopUpButton* grammarPopUp;
+@property (nonatomic) NSPopUpButton* tabSizePopUp;
+@property (nonatomic) NSPopUpButton* bundleItemsPopUp;
+@property (nonatomic) NSPopUpButton* symbolPopUp;
+@property (nonatomic) NSButton*      macroRecordingButton;
+@property (nonatomic) CGFloat        recordingTime;
+@property (nonatomic) NSTimer*       recordingTimer;
+
+// The two menu builders, so the menus can be driven without a real pop-up event.
+- (void)setupTabSizeMenu:(id)sender;
+- (void)grammarPopUpButtonWillPopUp:(NSNotification*)aNotification;
 @end

@@ -280,6 +280,20 @@ void test_status_bar_tab_size_menu_shape ()
 	OAK_ASSERT_EQ((long)[menu itemWithTitle:@"4"].indentationLevel,      (long)1);
 	OAK_ASSERT_EQ((long)[menu itemWithTitle:@"Spaces"].indentationLevel, (long)1);
 	OAK_ASSERT_EQ((long)[menu itemWithTitle:@"Current Indent"].indentationLevel, (long)0);
+
+	// The first row is the pull-down's *title* row, and it is built with no action
+	// at all — not even -nop:. What it ends up carrying is AppKit's own
+	// `_popUpItemAction:`, installed by NSPopUpButtonCell when the menu is
+	// assigned, which is why this asserts "none of ours" rather than a specific
+	// selector: the private name is Apple's to change.
+	//
+	// It matters for the port because MenuBuilder's API is a C++ DSL that Swift
+	// cannot call, so this menu has to be rebuilt by hand — and giving the caption
+	// a -nop: for symmetry with the other two would take it away from AppKit.
+	SEL currentIndentAction = [menu itemWithTitle:@"Current Indent"].action;
+	OAK_ASSERT_EQ((bool)(currentIndentAction == @selector(nop:)), false);
+	OAK_ASSERT_EQ((bool)(currentIndentAction == @selector(takeTabSizeFrom:)), false);
+	OAK_ASSERT_EQ((bool)menu.autoenablesItems, true);
 }
 
 void test_status_bar_menu_items_follow_the_target ()

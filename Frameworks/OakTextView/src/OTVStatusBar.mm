@@ -1,4 +1,6 @@
 #import "OTVStatusBar.h"
+#import "OTVStatusBarSupport.h"
+#import <TMBundleModel/TMBundleItem.h>
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/NSImage Additions.h>
 #import <OakAppKit/NSMenuItem Additions.h>
@@ -198,25 +200,27 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 	NSMenu* grammarMenu = self.grammarPopUp.menu;
 	[grammarMenu removeAllItems];
 
-	std::multimap<std::string, bundles::item_ptr, text::less_t> grammars;
-	for(auto item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeGrammar))
-	{
-		if(item->value_for_field(bundles::kFieldGrammarScope) != NULL_STR)
-			grammars.emplace(item->name(), item);
-	}
+	NSArray<TMBundleItem*>* grammars = [OTVStatusBarSupport grammarsForMenu];
 
-	for(auto pair : grammars)
+	for(TMBundleItem* grammar in grammars)
 	{
-		if(!pair.second->hidden_from_user())
+		if(!grammar.isHiddenFromUser)
 		{
-			NSMenuItem* item = [grammarMenu addItemWithTitle:[NSString stringWithCxxString:pair.first] action:@selector(takeGrammarUUIDFrom:) keyEquivalent:@""];
-			[item setKeyEquivalentCxxString:key_equivalent(pair.second)];
-			[item setRepresentedObject:[NSString stringWithCxxString:pair.second->uuid()]];
+			NSMenuItem* item = [grammarMenu addItemWithTitle:grammar.name action:@selector(takeGrammarUUIDFrom:) keyEquivalent:@""];
+			// -setKeyEquivalentCxxString:, not -setInactiveKeyEquivalent:. The first
+			// *binds* the shortcut; the second only draws the glyphs. These items
+			// are meant to fire on their key equivalent. to_s maps nil back to
+			// NULL_STR, which is what key_equivalent() returned for "none".
+			[item setKeyEquivalentCxxString:to_s(grammar.keyEquivalent)];
+			[item setRepresentedObject:grammar.uuidString];
 			[item setTarget:self.target];
 		}
 	}
 
-	if(grammars.empty())
+	// The emptiness test is on the *unfiltered* list, as it was on the multimap:
+	// a bundle set whose grammars are all hidden yields an empty menu rather than
+	// "No Grammars Loaded".
+	if(grammars.count == 0)
 		[grammarMenu addItemWithTitle:@"No Grammars Loaded" action:@selector(nop:) keyEquivalent:@""];
 
 	[grammarMenu update];
@@ -286,8 +290,8 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 		return;
 
 	_fileType = newFileType;
-	for(auto const& item : bundles::query(bundles::kFieldGrammarScope, to_s(newFileType)))
-		self.grammarName = [NSString stringWithCxxString:item->name()];
+	if(NSString* name = [OTVStatusBarSupport grammarNameForFileType:newFileType])
+		self.grammarName = name;
 }
 
 - (void)setRecordingTimer:(NSTimer*)aTimer

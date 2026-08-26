@@ -1,7 +1,12 @@
-@protocol OTVStatusBarDelegate <NSObject>
-- (void)showBundleItemSelector:(NSPopUpButton*)popUpButton;
-- (void)showSymbolSelector:(NSPopUpButton*)popUpButton;
-@end
+// Hand-declared (rule 23): this class is defined in OTVStatusBar.swift.
+//
+// OakDocumentView.mm is the sole consumer; it constructs the bar, adopts
+// OTVStatusBarDelegate and drives the eight properties below.
+//
+// This file must not appear in OakTextView-Bridging-Header.h, where it would
+// collide with the generated OakTextView-Swift.h (rule 43). The delegate protocol
+// lives in its own header for that reason — Swift needs it, this does not.
+#import "OTVStatusBarDelegate.h"
 
 @interface OTVStatusBar : NSVisualEffectView
 - (void)showBundlesMenu:(id)sender;

@@ -15,6 +15,8 @@
 
 @class TMBundleItem;
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface OTVStatusBarSupport : NSObject
 // Every grammar that declares a scope, sorted by name with the same comparator
 // and the same stability the ObjC++ multimap had. Hidden items are **not**
@@ -25,5 +27,7 @@
 // The name of the grammar claiming `fileType`, or nil when none does. When more
 // than one claims it the *last* wins, which is what the ObjC++ loop did by
 // assigning on every iteration.
-+ (NSString*)grammarNameForFileType:(NSString*)fileType;
++ (nullable NSString*)grammarNameForFileType:(nullable NSString*)fileType;
 @end
+
+NS_ASSUME_NONNULL_END

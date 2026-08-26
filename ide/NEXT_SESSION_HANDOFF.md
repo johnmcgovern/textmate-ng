@@ -313,7 +313,7 @@ saying. "`OakTextView` — 6917 lines — stays ObjC++, Phase 6 skipped" is true
 | `OakTextView.mm` | 4633 | 555 | the real blocker — subclasses three C++ virtual classes. Stays. |
 | `OakDocumentView.mm` | 781 | 29 | portable with a boundary; heaviest of the rest |
 | `GutterView.mm` | 556 | 24 | C++ **ivars** (`std::vector<data_source_t>`, `std::string`) and a `std::string const&` selector — real boundary work, plus rule-19 `extern` constants in its header |
-| `OTVStatusBar.mm` | 339 | 5 | one `std::multimap<std::string, bundles::item_ptr, text::less_t>` + `bundles::query` — the `SymbolChooserSupport` shape |
+| `OTVStatusBar.mm` | — | — | **done (2026-08-25)** — Swift, with `OTVStatusBarSupport` for the two `bundles::query` calls. Needed two prerequisites: an ObjC-clean `-setKeyEquivalentString:` in OakAppKit, and the tab-size menu rebuilt by hand because MenuBuilder's API is a C++ DSL |
 | `OakChoiceMenu.mm` | — | — | **done** — Swift, no boundary file, as predicted. The five `extern NSUInteger const` moved to `OakChoiceMenuConstants.mm` (rule 19, permanently — its only consumer is `OakTextView.mm`) |
 | `OakCommandRefresh.mm` | 193 | 8 | **examined 2026-08-24: do not port.** See below — the C++ map is the object's state, not decoration |
 | `OTVHUD.mm` | 118 | 0 | C++-free, one class method. **Portable today**, and now pinned |
@@ -321,6 +321,13 @@ saying. "`OakTextView` — 6917 lines — stays ObjC++, Phase 6 skipped" is true
 
 **2287 of the 6920 lines are the same shape as OakAppKit's leaves were.** That is the
 next phase if one is wanted.
+
+Three of those are now done (`OakChoiceMenu`, `OTVStatusBar`, and the pins for
+`OTVHUD`/`LiveSearchView`), and one is declined (`OakCommandRefresh`). What is left
+of the portable set is **`OakDocumentView.mm` (781) and `GutterView.mm` (556)** —
+both a step up from anything ported here so far: `OakDocumentView` is the file that
+owns the status bar and the gutter, and `GutterView` has C++ *ivars* rather than C++
+at its edges.
 
 ### `OakCommandRefresh` — examined and declined (2026-08-24)
 
@@ -361,10 +368,10 @@ sources glob and `tests tests/t_*.mm`; `Frameworks/OakTextView/tests/` exists wi
 is in place — the seed looks for it at `<dir>/src/<Target>-Bridging-Header.h`, which
 was a third precondition this note had missed.
 
-The framework is at **29 tests** covering `LiveSearchView`, `OTVHUD` and
-`OakChoiceMenu`, from zero. `OakChoiceMenu` is ported; the next two in size order are
-`OakCommandRefresh` (193, not examined closely) and `OTVStatusBar` (339, needs the
-`SymbolChooserSupport` treatment for one `std::multimap`).
+The framework is at **43 tests** covering `LiveSearchView`, `OTVHUD`,
+`OakChoiceMenu` and `OTVStatusBar`, from zero. `OakChoiceMenu` and `OTVStatusBar` are
+ported; `OakCommandRefresh` is declined above. Next in size order is
+`OakDocumentView` (781), then `GutterView` (556).
 
 ## Done: OakAppKit's portable leaves (2026-08-13)
 

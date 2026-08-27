@@ -13,6 +13,8 @@
 #import "../src/OTVHUD.h"
 #import "../src/OakChoiceMenu.h"
 #import "../src/OTVStatusBar.h"
+#import "../src/OakDocumentView.h"
+#import "../src/GutterView.h"
 
 @interface LiveSearchView (Testing)
 // Declared in the .mm's class extension. The separator is the only subview the
@@ -58,4 +60,27 @@
 // The two menu builders, so the menus can be driven without a real pop-up event.
 - (void)setupTabSizeMenu:(id)sender;
 - (void)grammarPopUpButtonWillPopUp:(NSNotification*)aNotification;
+@end
+
+@interface OakDocumentView (Testing)
+// The status bar is a readonly property of the class extension, and the gutter is
+// a bare ivar; between them they are most of what this view's behaviour is
+// observable *through*.
+@property (nonatomic, readonly) OTVStatusBar* statusBar;
+
+// Geometry. Everything the gutter lays out is derived from these two.
+- (CGFloat)lineHeight;
+- (CGFloat)widthForColumnWithIdentifier:(id)columnIdentifier;
+
+// The three menu builders, so they can be driven without a real pop-up event.
+- (void)showSymbolSelector:(NSPopUpButton*)symbolPopUp;
+- (void)showBundleItemSelector:(NSPopUpButton*)bundleItemsPopUp;
+- (void)updateBookmarksMenu:(NSMenu*)aMenu;
+
+// The gutter data source, whose bookmark branch picks one image out of several
+// by a priority its ObjC++ expressed as std::map key ordering.
+- (NSImage*)imageForLine:(NSUInteger)lineNumber inColumnWithIdentifier:(id)columnIdentifier state:(GutterViewRowState)rowState;
+
+- (void)takeTabSizeFrom:(id)sender;
+- (void)documentMarksDidChange:(NSNotification*)aNotification;
 @end

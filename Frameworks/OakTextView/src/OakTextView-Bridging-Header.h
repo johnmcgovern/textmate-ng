@@ -36,3 +36,11 @@
 #import "OakDocumentViewSupport.h"
 #import "GutterView.h"
 #import <document/OakDocument.h>
+
+// What OakDocumentView drives besides the gutter and the text view.
+#import <OakAppKit/OakAppKit.h>            // OakIsAlternateKeyOrMouseEvent
+#import <OakAppKit/NSImage Additions.h>    // +imageNamed:inSameBundleAsClass:
+#import <OakAppKit/OakPasteboard.h>
+#import <OakAppKit/OakPasteboardChooser.h>
+#import <OakFilterList/SymbolChooser.h>    // itself a Swift class, behind a hand declaration
+#import <BundleMenu/BundleMenu.h>

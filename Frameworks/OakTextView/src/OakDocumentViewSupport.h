@@ -126,15 +126,15 @@ NS_ASSUME_NONNULL_BEGIN
 // method uncallable from Swift — worse than a plain C++ parameter, which could at
 // least be forwarded. These four run the enumerations and hand back arrays.
 
-+ (NSArray<OakDocumentSymbolEntry*>*)symbolsInDocument:(OakDocument*)document relativeToSelection:(nullable NSString*)selectionString;
-+ (NSArray<OakDocumentMarkEntry*>*)marksInDocument:(OakDocument*)document atLine:(NSUInteger)line;
-+ (NSArray<OakDocumentBookmarkEntry*>*)bookmarksInDocument:(OakDocument*)document;
++ (NSArray<OakDocumentSymbolEntry*>*)symbolsInDocument:(nullable OakDocument*)document relativeToSelection:(nullable NSString*)selectionString;
++ (NSArray<OakDocumentMarkEntry*>*)marksInDocument:(nullable OakDocument*)document atLine:(NSUInteger)line;
++ (NSArray<OakDocumentBookmarkEntry*>*)bookmarksInDocument:(nullable OakDocument*)document;
 
 // The two mark mutations, which take a text::pos_t const&. The line form is what
 // clicking an empty gutter row does; the position form undoes it, and takes the
 // string a mark entry carried back.
-+ (void)setBookmarkOfType:(NSString*)type inDocument:(OakDocument*)document atLine:(NSUInteger)line;
-+ (void)removeMarkOfType:(NSString*)type inDocument:(OakDocument*)document atPositionString:(NSString*)positionString;
++ (void)setBookmarkOfType:(NSString*)type inDocument:(nullable OakDocument*)document atLine:(NSUInteger)line;
++ (void)removeMarkOfType:(NSString*)type inDocument:(nullable OakDocument*)document atPositionString:(NSString*)positionString;
 
 @end
 

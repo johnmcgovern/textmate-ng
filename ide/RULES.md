@@ -580,3 +580,22 @@ knew.
     Started ≠ passed means a process died. This is the second time in one session
     that a green-looking summary hid a crash; treat "0 failures" as meaningless
     until the crash counter is also zero.
+
+55. **A trivially-copyable C++ struct *does* import into Swift; rule 17 is
+    narrower than it looks.** `GVLineRecord` is a C++ struct with a constructor,
+    returned **by value** from `GutterViewDelegate`. The OakDocumentView port was
+    planned around an ObjC++ category to hold the two methods that return it —
+    and the category turned out to be unnecessary. Swift declares those methods,
+    implements them, calls them, and reads the struct's fields.
+
+    Rule 17 is about C++ types Swift cannot *represent* — `std::string`,
+    `std::shared_ptr`, a non-const `std::map&`. A plain aggregate of scalars is
+    not one of those, even with a constructor and even returned by value.
+
+    **Do not infer a blocker from the presence of C++ in a signature.** Build a
+    one-file probe and let the importer answer — the same discipline rule 28
+    already demands for names. The cost of guessing wrong in this direction is a
+    boundary file nobody needed, and a file wrongly written off as unportable.
+
+    What *does* still block a port is storage: rule 20. `GutterView` stays
+    ObjC++ because its state is C++ ivars, not because of `GVLineRecord`.

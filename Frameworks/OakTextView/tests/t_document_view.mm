@@ -100,9 +100,11 @@ void test_document_view_selector_surface ()
 	// textView is readonly — the port must not quietly widen it.
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:NSSelectorFromString(@"setTextView:")], false);
 
-	// The four protocols it answers. The first two are the ones that matter for a
-	// port: their methods return GVLineRecord, a C++ struct *by value*, which Swift
-	// cannot declare — so these two have to keep an ObjC++ home whatever else moves.
+	// The four protocols it answers. The first two return GVLineRecord, a C++ struct
+	// *by value*, which this test was written expecting to block a Swift port.
+	// **It does not** — the importer brings trivially-copyable C++ structs across,
+	// so they were ported like everything else. Left asserting the surface, which is
+	// what a pin is for, rather than rewritten to match the outcome.
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(lineRecordForPosition:)],          true);
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(lineFragmentForLine:column:)],     true);
 	OAK_ASSERT_EQ((bool)[cls instancesRespondToSelector:@selector(imageForLine:inColumnWithIdentifier:state:)], true);

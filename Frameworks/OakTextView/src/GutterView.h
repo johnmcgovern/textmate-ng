@@ -50,9 +50,10 @@ typedef NS_ENUM(NSUInteger, GutterViewRowState) {
 - (void)setHighlightedRange:(std::string const&)str;
 
 // The ObjC-clean spelling of the above, for callers that cannot name a
-// std::string (rule 17). GutterView itself stays ObjC++ — GVLineRecord is a C++
-// struct returned by value from its delegate protocol — so the conversion lives
-// here rather than at the call site.
+// std::string (rule 17). GutterView itself stays ObjC++ under rule 20: its state
+// is C++ ivars — a std::vector<data_source_t>, a std::string and two
+// std::vector<CGRect> — and no category can add storage to a Swift class. (Not
+// because of GVLineRecord: that struct does import into Swift.)
 - (void)setHighlightedRangeString:(NSString*)str;
 - (void)reloadData:(id)sender;
 - (void)insertColumnWithIdentifier:(NSString*)columnIdentifier atPosition:(NSUInteger)index dataSource:(id <GutterViewColumnDataSource>)columnDataSource delegate:(id <GutterViewColumnDelegate>)columnDelegate;

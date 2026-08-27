@@ -1,12 +1,14 @@
-// The ObjC surface OakTextView's Swift code sees. Two files so far: OakChoiceMenu,
-// the completion pop-up, and OTVStatusBar — leaves, not the editor.
+// The ObjC surface OakTextView's Swift code sees. Everything portable in this
+// framework is now Swift: OakChoiceMenu, OTVStatusBar, OakDocumentView, OTVHUD
+// and LiveSearchView.
 //
 // Prelude first, its C and C++ layers plus Cocoa only, never prelude.m/.mm — the
 // reasoning is CommitWindow-Bridging-Header.h's and has not changed.
 //
 // Keep this short, and keep hand-declared headers for this framework's own Swift
-// classes out of it (rule 43): OakChoiceMenu.h and OTVStatusBar.h are absent for
-// exactly that reason, while the constants and the delegate protocol beside them
+// classes out of it (rule 43). All five are absent for exactly that reason —
+// OakChoiceMenu.h, OTVStatusBar.h, OakDocumentView.h, OTVHUD.h and
+// LiveSearchView.h — while the constants and the delegate protocol beside them
 // are here because Swift needs to read them.
 #include "../../../Shared/PCH/prelude.cc"
 #import <Cocoa/Cocoa.h>

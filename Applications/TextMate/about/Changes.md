@@ -2,6 +2,60 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-27 (v2026.8-alpha.18)
+
+**Almost all of this is the ongoing Objective-C++ to Swift rewrite, with one real
+fix.** As with the last few rounds, nothing here is meant to look different — but
+this time the rewrite reached the parts of the editor window you actually look at
+all day, so it is worth a closer eye than alpha.17 was.
+
+What was rewritten:
+
+* the **status bar** along the bottom of the editor, in full — the caret position,
+  the grammar pop-up, the tab-size menu, the ⚙ bundle-items button, the symbol
+  pop-up, and the red macro-recording dot with its pulse;
+* the **editor pane that holds everything together** — the gutter and its scrolling,
+  the divider, the find bar and other strips that slide in above and below the text,
+  and the wiring that keeps the status bar in step with the document;
+* the **gutter's bookmark and folding columns**: setting and clearing a bookmark by
+  clicking the gutter, the popover that shows a diagnostic attached to a line, and
+  the folding arrows;
+* the **Bookmarks menu**, including *Clear Bookmarks*;
+* the **completion pop-up** (⎋), the **line-number overlay** that appears while you
+  drag the scroller, and the **incremental search bar** (⌃S).
+
+**The fix.** The ⚙ bundle-items pop-up in the status bar could open completely
+empty — no items and no explanation — whenever every bundle in the index was hidden
+or carried no menu of its own. It now says *No Bundles Loaded*, which is what it
+always meant to say. The test that covers it originally recorded the blank menu as
+correct, because that is what the old code did; the behaviour was changed
+deliberately, in its own commit, after the rewrite was finished and verified.
+
+**Where to look if something is off.** Anything in the list above is the change to
+blame, and the status bar is the densest part of it. Two specific things are worth
+knowing:
+
+* the **grammar shortcuts** in the status bar's language pop-up bind keys as well as
+  draw them. During this work they were briefly wired to the wrong call — which
+  would have left the shortcuts drawn but dead — so if a grammar's key equivalent
+  does not switch the language, that is the first thing to report.
+* the **tab-size menu** had to be rebuilt by hand rather than translated, because the
+  old one was assembled by a C++ helper that has no Swift equivalent. Its contents
+  are checked item by item, but it is the one menu here that was reconstructed rather
+  than moved.
+
+**What has no automated coverage:** anything that needs a real window. The clipboard
+and find history pickers, the symbol chooser, and the gutter's diagnostic popover all
+position themselves against the window they appear over, so the tests cannot open
+them. They were exercised by hand in this build before it was cut.
+
+**For the curious:** the test suite is 874 tests, up from 810. Every file above was
+pinned by tests written against the old code *before* it was rewritten. That is not
+ceremony — in this round it caught a readonly property that had quietly become
+writable, and it recorded two behaviours that read like typos and are not: the
+gutter pads line numbers with a figure space rather than spaces, and the status bar
+separates its tab-size label with an em space.
+
 ## 2026-08-21 (v2026.8-alpha.17)
 
 **This release is entirely the ongoing Objective-C++ to Swift rewrite, and nothing in

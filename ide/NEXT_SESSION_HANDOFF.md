@@ -960,6 +960,69 @@ so backfilling would mean rebuilding and re-notarizing alphas nobody ever had.
 Still not software update. Sparkle-style updating stays off while the fork has no
 server, and a GitHub Release is not a substitute for one.
 
+## Survey (2026-08-27): where the portable work actually is
+
+`DocumentWindow` was the recommendation coming out of alpha.18, and **that
+recommendation was wrong** — made from "it is OakDocumentView's caller" without
+opening it. It is already done: 3093 Swift against 927 ObjC++, and all three
+`.mm` files carry headers explaining why they stay.
+
+| file | why it stays |
+| --- | --- |
+| `DWScopeContext.mm` (312) | the ObjC-shaped model over `scm::info_ptr` — C++ state with a live callback, which a Swift `@objc` class cannot hold |
+| `DocumentWindowSupport.mm` (415) | C++-typed selectors and, the harder half, C++ in *block* signatures |
+| `OakDocumentControllerWindows.mm` (200) | a category on another framework's class, taking a `text::range_t`, reached from ObjC++ callers that are not moving |
+
+**Three frameworks are now finished in the same sense** — OakAppKit, OakTextView
+and DocumentWindow all have empty portable lists. So the next target is not a
+framework that is partly done; it is one that has never been started.
+
+### The two real candidates
+
+**`HTMLOutput` — 1843 lines, 0 Swift, 0 tests.** Three of its seven files are
+C++-free and portable-shaped:
+
+| file | lines | C++ hits |
+| --- | ---: | ---: |
+| `browser/HOStatusBar.mm` | 179 | 0 |
+| `browser/HOWebViewDelegateHelper.mm` | 85 | 0 |
+| `browser/HOBrowserView.mm` | 316 | 1 |
+| `src/OakHTMLOutputView.mm` | 331 | 2 |
+| `helpers/WKWebView Additions.mm` | 140 | 5 |
+| `src/HOFileHandleScheme.mm` | 384 | 9 |
+| `helpers/HOJSBridge.mm` | 408 | 19 |
+
+Starting position is exactly OakTextView's: no test bundle, no bridging header,
+no `swift` in the sources glob. That worked.
+
+**`SoftwareUpdate` — 1273 lines, 0 Swift, 2 test files.** *More* portable on
+paper: `SoftwareUpdate.mm` (731) and `OakDownloadManager.mm` (446) are both
+genuinely C++-free — checked, not inferred from a grep: their only non-ObjC
+import is `<oak/misc.h>`. The third file, `OakCompareVersionStrings.mm` (96),
+stays permanently under rule 19 — it is a free function, and it is **already
+called from Swift** (`TerminalPreferences.swift:234`) as well as from
+BundlesManager's ObjC++.
+
+### Which one, and why it is not the bigger number
+
+**Take `HTMLOutput` first.** `SoftwareUpdate` has more portable lines and a test
+bundle already, but the feature is **switched off in this fork** — there is no
+update channel, and Settings ▸ Software Update reports `No channel named
+'release'`. It cannot be exercised by hand at all, so the five-minute smoke pass
+below has nothing to say about it and a defect would surface only once a server
+exists.
+
+That is the exact shape of the alpha.12 failure: a surface nothing constructs.
+HTMLOutput is the opposite — it is user-visible, and it was driven by hand in the
+alpha.18 smoke pass (Bundles ▸ Swift ▸ Run renders compiler errors into it).
+
+### Not candidates, and why
+
+`document` (3250) wraps the C++ engine. `BundlesManager` (995) is dense C++ —
+44 and 39 hits in its two real files. `ns`, `io`, `theme`, `encoding`, `command`,
+`OakCommand` and `MenuBuilder` are C++ utility layers, not UI. The `TextMate`
+application shell (3442 across 12 files) is Phase 5, and is its own project.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

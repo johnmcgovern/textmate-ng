@@ -18,6 +18,7 @@
 #import <Cocoa/Cocoa.h>
 
 @class OakTextView;
+@class OakDocument;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -50,6 +51,32 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) NSColor* selectionIconsHover;
 @property (nonatomic, readonly) NSColor* selectionIconsPressed;
 @property (nonatomic, readonly) NSColor* selectionBorder;
+@end
+
+// A document symbol, as -showSymbolSelector: needs it. `symbol` keeps its leading
+// EM SPACEs — the menu counts them to derive an indentation level.
+@interface OakDocumentSymbolEntry : NSObject
+@property (nonatomic, readonly) NSString* symbol;
+@property (nonatomic, readonly) NSString* positionString;
+// pos <= caret, computed here because the caret comes from a text::selection_t.
+@property (nonatomic, readonly) BOOL atOrBeforeCaret;
+@end
+
+// One mark on one line. `payload` is what distinguishes a diagnostic (which has
+// one) from a plain bookmark (which does not).
+@interface OakDocumentMarkEntry : NSObject
+@property (nonatomic, readonly) NSString* type;
+@property (nonatomic, readonly, nullable) NSString* payload;
+@property (nonatomic, readonly) NSString* positionString;
+@end
+
+// One bookmark anywhere in the document, for the Bookmarks menu.
+@interface OakDocumentBookmarkEntry : NSObject
+@property (nonatomic, readonly) NSString* excerpt;
+@property (nonatomic, readonly) NSString* positionString;
+// text::pad(line+1, 4) + ": ". The padding is U+2007 FIGURE SPACE, so the
+// numbers align in a proportional menu font.
+@property (nonatomic, readonly) NSString* paddedLinePrefix;
 @end
 
 @interface OakDocumentViewSupport : NSObject
@@ -89,6 +116,25 @@ NS_ASSUME_NONNULL_BEGIN
 // nil when the text view has no theme, which is the `if(theme_ptr theme = ...)`
 // the ObjC++ opened -updateStyle with.
 + (nullable OakGutterStyles*)gutterStylesForTextView:(OakTextView*)textView fileType:(nullable NSString*)fileType;
+
+// ====================
+// = Symbols and marks =
+// ====================
+//
+// OakDocument's three enumerators all take a block whose first parameter is a
+// `text::pos_t const&`. Rule 15: a C++ type in a *block parameter* makes the
+// method uncallable from Swift — worse than a plain C++ parameter, which could at
+// least be forwarded. These four run the enumerations and hand back arrays.
+
++ (NSArray<OakDocumentSymbolEntry*>*)symbolsInDocument:(OakDocument*)document relativeToSelection:(nullable NSString*)selectionString;
++ (NSArray<OakDocumentMarkEntry*>*)marksInDocument:(OakDocument*)document atLine:(NSUInteger)line;
++ (NSArray<OakDocumentBookmarkEntry*>*)bookmarksInDocument:(OakDocument*)document;
+
+// The two mark mutations, which take a text::pos_t const&. The line form is what
+// clicking an empty gutter row does; the position form undoes it, and takes the
+// string a mark entry carried back.
++ (void)setBookmarkOfType:(NSString*)type inDocument:(OakDocument*)document atLine:(NSUInteger)line;
++ (void)removeMarkOfType:(NSString*)type inDocument:(OakDocument*)document atPositionString:(NSString*)positionString;
 
 @end
 

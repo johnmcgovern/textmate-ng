@@ -34,3 +34,5 @@
 // OakDocumentViewSupport instead; the importer simply drops them.
 #import "OakTextView.h"
 #import "OakDocumentViewSupport.h"
+#import "GutterView.h"
+#import <document/OakDocument.h>

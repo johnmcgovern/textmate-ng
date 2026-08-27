@@ -5,7 +5,6 @@
 #import <document/OakDocument.h>
 #import <file/type.h>
 #import <text/parse.h>
-#import <ns/ns.h>
 #import <oak/debug.h>
 #import <OakFilterList/SymbolChooser.h>
 #import <OakFoundation/NSString Additions.h>
@@ -250,7 +249,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	if([aKeyPath isEqualToString:@"selectionString"])
 	{
 		NSString* str = [_textView valueForKey:@"selectionString"];
-		[gutterView setHighlightedRange:to_s(str ?: @"1")];
+		[gutterView setHighlightedRangeString:str ?: @"1"];
 		[_statusBar setSelectionString:str];
 		_symbolChooser.selectionString = str;
 	}
@@ -520,11 +519,10 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	NSMenu* symbolMenu = symbolPopUp.menu;
 	[symbolMenu removeAllItems];
 
-	text::selection_t sel(to_s(_textView.selectionString));
-	text::pos_t caret = sel.last().max();
-
-	__block NSInteger index = 0;
-	[self.document enumerateSymbolsUsingBlock:^(text::pos_t const& pos, NSString* symbol){
+	NSInteger index = 0;
+	for(OakDocumentSymbolEntry* entry in [OakDocumentViewSupport symbolsInDocument:self.document relativeToSelection:_textView.selectionString])
+	{
+		NSString* symbol = entry.symbol;
 		if([symbol isEqualToString:@"-"])
 		{
 			[symbolMenu addItem:[NSMenuItem separatorItem]];
@@ -538,12 +536,14 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 			NSMenuItem* item = [symbolMenu addItemWithTitle:[symbol substringFromIndex:indent] action:@selector(goToSymbol:) keyEquivalent:@""];
 			[item setIndentationLevel:indent];
 			[item setTarget:self];
-			[item setRepresentedObject:to_ns(pos)];
+			[item setRepresentedObject:entry.positionString];
 		}
 
-		if(pos <= caret)
+		// Counted for *every* symbol including separators, which is why the
+		// selection below is index-1 rather than index.
+		if(entry.atOrBeforeCaret)
 			++index;
-	}];
+	}
 
 	if(symbolMenu.numberOfItems == 0)
 		[symbolMenu addItemWithTitle:@"No symbols to show for current document." action:@selector(nop:) keyEquivalent:@""];
@@ -653,22 +653,33 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 {
 	if([columnIdentifier isEqualToString:kBookmarksColumnIdentifier])
 	{
-		__block std::map<size_t, NSString*> gutterImageName;
+		// A std::map<size_t, NSString*> in the ObjC++, used for two properties that an
+		// NSMutableDictionary does not have: emplace keeps the *first* value for a
+		// key, and begin() is the *lowest* key. Both are reproduced explicitly here.
+		NSMutableDictionary<NSNumber*, NSString*>* gutterImageName = [NSMutableDictionary dictionary];
+		void (^emplace)(NSUInteger, NSString*) = ^(NSUInteger priority, NSString* name){
+			if(!gutterImageName[@(priority)])
+				gutterImageName[@(priority)] = name;
+		};
 
-		[self.document enumerateBookmarksAtLine:lineNumber block:^(text::pos_t const& pos, NSString* type, NSString* payload){
-			if(payload.length != 0)
-				gutterImageName.emplace(0, type);
-			else if([type isEqualToString:OakDocumentBookmarkIdentifier])
-				gutterImageName.emplace(1, rowState != GutterViewRowStateRegular ? @"Bookmark Hover Remove Template" : @"Bookmark Template");
+		for(OakDocumentMarkEntry* mark in [OakDocumentViewSupport marksInDocument:self.document atLine:lineNumber])
+		{
+			if(mark.payload.length != 0)
+				emplace(0, mark.type);
+			else if([mark.type isEqualToString:OakDocumentBookmarkIdentifier])
+				emplace(1, rowState != GutterViewRowStateRegular ? @"Bookmark Hover Remove Template" : @"Bookmark Template");
 			else if(rowState == GutterViewRowStateRegular)
-				gutterImageName.emplace(2, type);
-		}];
+				emplace(2, mark.type);
+		}
 
 		if(rowState != GutterViewRowStateRegular)
-			gutterImageName.emplace(3, @"Bookmark Hover Add Template");
+			emplace(3, @"Bookmark Hover Add Template");
 
-		if(!gutterImageName.empty())
-			return [self gutterImage:gutterImageName.begin()->second];
+		if(gutterImageName.count != 0)
+		{
+			NSNumber* lowest = [[gutterImageName.allKeys sortedArrayUsingSelector:@selector(compare:)] firstObject];
+			return [self gutterImage:gutterImageName[lowest]];
+		}
 	}
 	else if([columnIdentifier isEqualToString:kFoldingsColumnIdentifier])
 	{
@@ -694,11 +705,11 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 
 - (void)updateBookmarksMenu:(NSMenu*)aMenu
 {
-	[self.document enumerateBookmarksUsingBlock:^(text::pos_t const& pos, NSString* excerpt){
-		NSString* prefix = to_ns(text::pad(pos.line+1, 4) + ": ");
-		NSMenuItem* item = [aMenu addItemWithTitle:[prefix stringByAppendingString:excerpt] action:@selector(takeBookmarkFrom:) keyEquivalent:@""];
-		[item setRepresentedObject:to_ns(pos)];
-	}];
+	for(OakDocumentBookmarkEntry* bookmark in [OakDocumentViewSupport bookmarksInDocument:self.document])
+	{
+		NSMenuItem* item = [aMenu addItemWithTitle:[bookmark.paddedLinePrefix stringByAppendingString:bookmark.excerpt] action:@selector(takeBookmarkFrom:) keyEquivalent:@""];
+		[item setRepresentedObject:bookmark.positionString];
+	}
 
 	BOOL hasBookmarks = aMenu.numberOfItems;
 	if(hasBookmarks)
@@ -714,21 +725,22 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 {
 	if([columnIdentifier isEqualToString:kBookmarksColumnIdentifier])
 	{
-		__block std::vector<text::pos_t> bookmarks;
-		__block NSMutableArray* content = [NSMutableArray array];
+		NSMutableArray<NSString*>* bookmarks = [NSMutableArray array];
+		NSMutableArray* content = [NSMutableArray array];
 
-		[self.document enumerateBookmarksAtLine:lineNumber block:^(text::pos_t const& pos, NSString* type, NSString* payload){
-			if(payload.length != 0)
-				[content addObject:payload];
-			else if([type isEqualToString:OakDocumentBookmarkIdentifier])
-				bookmarks.push_back(pos);
-		}];
+		for(OakDocumentMarkEntry* mark in [OakDocumentViewSupport marksInDocument:self.document atLine:lineNumber])
+		{
+			if(mark.payload.length != 0)
+				[content addObject:mark.payload];
+			else if([mark.type isEqualToString:OakDocumentBookmarkIdentifier])
+				[bookmarks addObject:mark.positionString];
+		}
 
 		if(content.count == 0)
 		{
-			if(bookmarks.empty())
-					[self.document setMarkOfType:OakDocumentBookmarkIdentifier atPosition:text::pos_t(lineNumber, 0) content:nil];
-			else	[self.document removeMarkOfType:OakDocumentBookmarkIdentifier atPosition:bookmarks.front()];
+			if(bookmarks.count == 0)
+					[OakDocumentViewSupport setBookmarkOfType:OakDocumentBookmarkIdentifier inDocument:self.document atLine:lineNumber];
+			else	[OakDocumentViewSupport removeMarkOfType:OakDocumentBookmarkIdentifier inDocument:self.document atPositionString:bookmarks.firstObject];
 		}
 		else
 		{

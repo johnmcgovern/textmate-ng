@@ -5,6 +5,7 @@
 #import <OakFoundation/NSString Additions.h>
 #import <Preferences/Keys.h>
 #import <text/types.h>
+#import <ns/ns.h> // to_s(NSString*)
 #import <cf/cf.h>
 #import <cf/cgrect.h>
 #import <crash/info.h>
@@ -130,6 +131,11 @@ struct data_source_t
 // =============
 // = Accessors =
 // =============
+
+- (void)setHighlightedRangeString:(NSString*)str
+{
+	[self setHighlightedRange:to_s(str)];
+}
 
 - (void)setHighlightedRange:(std::string const&)str
 {

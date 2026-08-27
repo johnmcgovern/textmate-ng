@@ -48,6 +48,12 @@ typedef NS_ENUM(NSUInteger, GutterViewRowState) {
 @property (nonatomic) NSColor* selectionIconPressedColor;
 @property (nonatomic) NSColor* selectionBorderColor;
 - (void)setHighlightedRange:(std::string const&)str;
+
+// The ObjC-clean spelling of the above, for callers that cannot name a
+// std::string (rule 17). GutterView itself stays ObjC++ — GVLineRecord is a C++
+// struct returned by value from its delegate protocol — so the conversion lives
+// here rather than at the call site.
+- (void)setHighlightedRangeString:(NSString*)str;
 - (void)reloadData:(id)sender;
 - (void)insertColumnWithIdentifier:(NSString*)columnIdentifier atPosition:(NSUInteger)index dataSource:(id <GutterViewColumnDataSource>)columnDataSource delegate:(id <GutterViewColumnDelegate>)columnDelegate;
 - (void)setVisibility:(BOOL)visible forColumnWithIdentifier:(NSString*)columnIdentifier;

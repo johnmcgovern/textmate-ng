@@ -1,5 +1,8 @@
 #import "OakDocumentViewSupport.h"
 #import "OakTextView.h"
+#import <document/OakDocument.h>
+#import <text/format.h>
+#import <text/types.h>
 #import <OakFoundation/NSString Additions.h>
 #import <bundles/bundles.h>
 #import <settings/settings.h>
@@ -44,6 +47,45 @@
 		_selectionIconsHover   = [NSColor colorWithCGColor:styles.selectionIconsHover];
 		_selectionIconsPressed = [NSColor colorWithCGColor:styles.selectionIconsPressed];
 		_selectionBorder       = [NSColor colorWithCGColor:styles.selectionBorder];
+	}
+	return self;
+}
+@end
+
+@implementation OakDocumentSymbolEntry
+- (instancetype)initWithSymbol:(NSString*)symbol positionString:(NSString*)positionString atOrBeforeCaret:(BOOL)atOrBeforeCaret
+{
+	if(self = [super init])
+	{
+		_symbol          = symbol;
+		_positionString  = positionString;
+		_atOrBeforeCaret = atOrBeforeCaret;
+	}
+	return self;
+}
+@end
+
+@implementation OakDocumentMarkEntry
+- (instancetype)initWithType:(NSString*)type payload:(NSString*)payload positionString:(NSString*)positionString
+{
+	if(self = [super init])
+	{
+		_type           = type;
+		_payload        = payload;
+		_positionString = positionString;
+	}
+	return self;
+}
+@end
+
+@implementation OakDocumentBookmarkEntry
+- (instancetype)initWithExcerpt:(NSString*)excerpt positionString:(NSString*)positionString paddedLinePrefix:(NSString*)paddedLinePrefix
+{
+	if(self = [super init])
+	{
+		_excerpt          = excerpt;
+		_positionString   = positionString;
+		_paddedLinePrefix = paddedLinePrefix;
 	}
 	return self;
 }
@@ -127,6 +169,50 @@
 	if(theme_ptr theme = textView.theme)
 		return [[OakGutterStyles alloc] initWithTheme:theme fileType:to_s(fileType)];
 	return nil;
+}
+
+// =====================
+// = Symbols and marks =
+// =====================
+
++ (NSArray<OakDocumentSymbolEntry*>*)symbolsInDocument:(OakDocument*)document relativeToSelection:(NSString*)selectionString
+{
+	text::selection_t sel(to_s(selectionString));
+	text::pos_t caret = sel.last().max();
+
+	NSMutableArray<OakDocumentSymbolEntry*>* res = [NSMutableArray array];
+	[document enumerateSymbolsUsingBlock:^(text::pos_t const& pos, NSString* symbol){
+		[res addObject:[[OakDocumentSymbolEntry alloc] initWithSymbol:symbol positionString:to_ns(pos) atOrBeforeCaret:pos <= caret]];
+	}];
+	return res;
+}
+
++ (NSArray<OakDocumentMarkEntry*>*)marksInDocument:(OakDocument*)document atLine:(NSUInteger)line
+{
+	NSMutableArray<OakDocumentMarkEntry*>* res = [NSMutableArray array];
+	[document enumerateBookmarksAtLine:line block:^(text::pos_t const& pos, NSString* type, NSString* payload){
+		[res addObject:[[OakDocumentMarkEntry alloc] initWithType:type payload:payload positionString:to_ns(pos)]];
+	}];
+	return res;
+}
+
++ (NSArray<OakDocumentBookmarkEntry*>*)bookmarksInDocument:(OakDocument*)document
+{
+	NSMutableArray<OakDocumentBookmarkEntry*>* res = [NSMutableArray array];
+	[document enumerateBookmarksUsingBlock:^(text::pos_t const& pos, NSString* excerpt){
+		[res addObject:[[OakDocumentBookmarkEntry alloc] initWithExcerpt:excerpt positionString:to_ns(pos) paddedLinePrefix:to_ns(text::pad(pos.line+1, 4) + ": ")]];
+	}];
+	return res;
+}
+
++ (void)setBookmarkOfType:(NSString*)type inDocument:(OakDocument*)document atLine:(NSUInteger)line
+{
+	[document setMarkOfType:type atPosition:text::pos_t(line, 0) content:nil];
+}
+
++ (void)removeMarkOfType:(NSString*)type inDocument:(OakDocument*)document atPositionString:(NSString*)positionString
+{
+	[document removeMarkOfType:type atPosition:text::pos_t(to_s(positionString))];
 }
 
 @end

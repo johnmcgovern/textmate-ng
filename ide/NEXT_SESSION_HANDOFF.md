@@ -311,23 +311,31 @@ saying. "`OakTextView` — 6917 lines — stays ObjC++, Phase 6 skipped" is true
 | file | lines | C++ hits | verdict |
 | --- | ---: | ---: | --- |
 | `OakTextView.mm` | 4633 | 555 | the real blocker — subclasses three C++ virtual classes. Stays. |
-| `OakDocumentView.mm` | 781 | 29 | portable with a boundary; heaviest of the rest |
-| `GutterView.mm` | 556 | 24 | C++ **ivars** (`std::vector<data_source_t>`, `std::string`) and a `std::string const&` selector — real boundary work, plus rule-19 `extern` constants in its header |
+| `OakDocumentView.mm` | — | — | **done (2026-08-26)** — Swift, with `OakDocumentViewSupport` for settings, bundles, theme and the mark/symbol enumerations. See rule 55: the `GVLineRecord` category it was planned around proved unnecessary |
+| `GutterView.mm` | 556 | 24 | **blocked, rule 20.** C++ **ivars** (`std::vector<data_source_t>`, `std::string`, two `std::vector<CGRect>`) are its state, and a category can add methods to a Swift class but never storage. *Not* blocked by `GVLineRecord`, which imports fine — see rule 55 |
 | `OTVStatusBar.mm` | — | — | **done (2026-08-25)** — Swift, with `OTVStatusBarSupport` for the two `bundles::query` calls. Needed two prerequisites: an ObjC-clean `-setKeyEquivalentString:` in OakAppKit, and the tab-size menu rebuilt by hand because MenuBuilder's API is a C++ DSL |
 | `OakChoiceMenu.mm` | — | — | **done** — Swift, no boundary file, as predicted. The five `extern NSUInteger const` moved to `OakChoiceMenuConstants.mm` (rule 19, permanently — its only consumer is `OakTextView.mm`) |
 | `OakCommandRefresh.mm` | 193 | 8 | **examined 2026-08-24: do not port.** See below — the C++ map is the object's state, not decoration |
-| `OTVHUD.mm` | 118 | 0 | C++-free, one class method. **Portable today**, and now pinned |
-| `LiveSearchView.mm` | 48 | 0 | C++-free; one `+initialize` to rehome (rule 20), and `OakEncodingSupport` / `OakSavePanelSupport` are two worked examples of doing that. Now pinned |
+| `OTVHUD.mm` | — | — | **done (2026-08-26)** — Swift. The per-view cache and the "88888" sizing dummy are the two things that had to survive |
+| `LiveSearchView.mm` | — | — | **done (2026-08-26)** — Swift. `+initialize` became a first-construction `static let`, after checking that nothing reads the two keys before a search bar exists |
 
 **2287 of the 6920 lines are the same shape as OakAppKit's leaves were.** That is the
 next phase if one is wanted.
 
-Three of those are now done (`OakChoiceMenu`, `OTVStatusBar`, and the pins for
-`OTVHUD`/`LiveSearchView`), and one is declined (`OakCommandRefresh`). What is left
-of the portable set is **`OakDocumentView.mm` (781) and `GutterView.mm` (556)** —
-both a step up from anything ported here so far: `OakDocumentView` is the file that
-owns the status bar and the gutter, and `GutterView` has C++ *ivars* rather than C++
-at its edges.
+**That phase is finished (2026-08-26).** Every portable file in the framework is
+Swift: `OakChoiceMenu`, `OTVStatusBar`, `OakDocumentView`, `OTVHUD` and
+`LiveSearchView`. `src/*.mm` went **6920 → 5649**, and what remains is six files, of
+which only two are code that could ever move:
+
+| file | why it stays |
+| --- | --- |
+| `OakTextView.mm` (4633) | subclasses three C++ virtual classes — the permanent blocker |
+| `GutterView.mm` (556) | rule 20: C++ ivars are its state |
+| `OakCommandRefresh.mm` (193) | declined — the C++ map is the object, see above |
+| `OakDocumentViewSupport.mm`, `OTVStatusBarSupport.mm` | boundary files, deliberately ObjC++ |
+| `OakChoiceMenuConstants.mm` | rule 19 `extern` constants |
+
+There is no next file here. The framework is done to the extent it can be.
 
 ### `OakCommandRefresh` — examined and declined (2026-08-24)
 
@@ -368,10 +376,8 @@ sources glob and `tests tests/t_*.mm`; `Frameworks/OakTextView/tests/` exists wi
 is in place — the seed looks for it at `<dir>/src/<Target>-Bridging-Header.h`, which
 was a third precondition this note had missed.
 
-The framework is at **43 tests** covering `LiveSearchView`, `OTVHUD`,
-`OakChoiceMenu` and `OTVStatusBar`, from zero. `OakChoiceMenu` and `OTVStatusBar` are
-ported; `OakCommandRefresh` is declined above. Next in size order is
-`OakDocumentView` (781), then `GutterView` (556).
+The framework is at **62 tests** covering `LiveSearchView`, `OTVHUD`,
+`OakChoiceMenu`, `OTVStatusBar` and `OakDocumentView`, from zero.
 
 ## Done: OakAppKit's portable leaves (2026-08-13)
 

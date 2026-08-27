@@ -620,10 +620,16 @@ class OakDocumentView: NSView, NSAccessibilityGroup, @preconcurrency NSMenuItemV
 			}
 		}
 
-		// On the *unfiltered* list, as it was on the multimap — which is why a bundle
-		// with no menu yields a blank menu rather than this row. Pinned in
-		// t_document_view.mm; fixing it is a separate, deliberate change.
-		if bundles.count == 0 {
+		// On the *built menu*, not on the list the rows came from.
+		//
+		// The ObjC++ tested `ordered.empty()` — every bundle in the index — while the
+		// rows are only the ones surviving the filter above. A bundle that is hidden
+		// or carries no menu therefore produced a silently blank pop-up: the map was
+		// non-empty, so the explanatory row was skipped, and nothing was drawn.
+		// Changed deliberately, after the port rather than inside it, so the
+		// translation stayed behaviour-preserving and this is the only commit that
+		// moves behaviour.
+		if bundleItemsMenu.numberOfItems == 0 {
 			bundleItemsMenu.addItem(withTitle: "No Bundles Loaded", action: Self.nop, keyEquivalent: "")
 		}
 

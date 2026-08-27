@@ -355,18 +355,15 @@ void test_document_view_bundle_item_menu_lists_bundles ()
 	NSPopUpButton* popUp = [[NSPopUpButton alloc] initWithFrame:NSZeroRect];
 	[view showBundleItemSelector:popUp];
 
-	// **An empty menu, not "No Bundles Loaded".** Measured, and it is the divergence
-	// worth pinning: the fallback is guarded on `ordered.empty()`, but `ordered` is
-	// every bundle in the index while the *menu* only gets the ones that survive
-	// `hidden_from_user() || menu().empty()`. The fixture index has a bundle with no
-	// menu, so the map is non-empty, every row is skipped, and the user is shown a
-	// blank menu with no explanation.
+	// The fixture index holds a bundle with no menu, so every row is filtered out.
 	//
-	// Pinned as it behaves rather than as it reads. A port that "tidies" this into a
-	// test on the menu would be fixing a real bug, and that is a change to make
-	// deliberately and separately — not silently, inside a translation.
-	OAK_ASSERT_EQ(menu_titles(popUp.menu), std::string(""));
-	OAK_ASSERT_EQ((size_t)popUp.menu.numberOfItems, (size_t)0);
+	// This assertion was inverted deliberately. It first pinned the ObjC++ as
+	// measured — a silently **blank** menu, because the fallback was guarded on the
+	// unfiltered bundle list while the rows came from the filtered one. The port
+	// preserved that; the following commit fixed it by testing the built menu
+	// instead. So the empty case now explains itself, which is what the row is for.
+	OAK_ASSERT_EQ(menu_titles(popUp.menu), std::string("No Bundles Loaded"));
+	OAK_ASSERT_EQ((bool)(popUp.menu.itemArray.firstObject.action == @selector(nop:)), true);
 }
 
 void test_document_view_bookmarks_menu_is_inert_when_empty ()

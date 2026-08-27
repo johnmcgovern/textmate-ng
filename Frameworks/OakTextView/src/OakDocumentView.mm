@@ -1,14 +1,12 @@
 #import "OakDocumentView.h"
 #import "GutterView.h"
 #import "OTVStatusBar.h"
+#import "OakDocumentViewSupport.h"
 #import <document/OakDocument.h>
 #import <file/type.h>
-#import <text/ctype.h>
 #import <text/parse.h>
 #import <ns/ns.h>
 #import <oak/debug.h>
-#import <bundles/bundles.h>
-#import <settings/settings.h>
 #import <OakFilterList/SymbolChooser.h>
 #import <OakFoundation/NSString Additions.h>
 #import <OakAppKit/OakAppKit.h>
@@ -237,9 +235,11 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	NSFont* defaultFont = [NSFont userFixedPitchFontOfSize:0];
 	if(NSFont* newFont = [sender convertFont:_textView.font ?: defaultFont])
 	{
-		std::string fontName = [newFont.fontName isEqualToString:defaultFont.fontName] ? NULL_STR : to_s(newFont.fontName);
-		settings_t::set(kSettingsFontNameKey, fontName);
-		settings_t::set(kSettingsFontSizeKey, [newFont pointSize]);
+		// nil is NULL_STR: matching the default font removes the key rather than
+		// recording the default's name.
+		NSString* fontName = [newFont.fontName isEqualToString:defaultFont.fontName] ? nil : newFont.fontName;
+		[OakDocumentViewSupport setFontName:fontName];
+		[OakDocumentViewSupport setFontSize:[newFont pointSize]];
 		_textView.font = newFont;
 		[self updateGutterViewFont:self];
 	}
@@ -328,29 +328,28 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 
 - (void)updateStyle
 {
-	if(theme_ptr theme = _textView.theme)
+	if(OakGutterStyles* styles = [OakDocumentViewSupport gutterStylesForTextView:_textView fileType:self.document.fileType])
 	{
-		[textScrollView setBackgroundColor:[NSColor colorWithCGColor:theme->background(to_s(self.document.fileType))]];
-		[textScrollView setScrollerKnobStyle:theme->is_dark() ? NSScrollerKnobStyleLight : NSScrollerKnobStyleDark];
+		[textScrollView setBackgroundColor:styles.documentBackground];
+		[textScrollView setScrollerKnobStyle:styles.isDark ? NSScrollerKnobStyleLight : NSScrollerKnobStyleDark];
 
 		[_textView setIbeamCursor:NSCursor.IBeamCursor];
 
 		[self updateGutterViewFont:self]; // trigger update of gutter view’s line number font
-		auto const& styles = theme->gutter_styles();
 
-		gutterView.foregroundColor           = [NSColor colorWithCGColor:styles.foreground];
-		gutterView.backgroundColor           = [NSColor colorWithCGColor:styles.background];
-		gutterView.iconColor                 = [NSColor colorWithCGColor:styles.icons];
-		gutterView.iconHoverColor            = [NSColor colorWithCGColor:styles.iconsHover];
-		gutterView.iconPressedColor          = [NSColor colorWithCGColor:styles.iconsPressed];
-		gutterView.selectionForegroundColor  = [NSColor colorWithCGColor:styles.selectionForeground];
-		gutterView.selectionBackgroundColor  = [NSColor colorWithCGColor:styles.selectionBackground];
-		gutterView.selectionIconColor        = [NSColor colorWithCGColor:styles.selectionIcons];
-		gutterView.selectionIconHoverColor   = [NSColor colorWithCGColor:styles.selectionIconsHover];
-		gutterView.selectionIconPressedColor = [NSColor colorWithCGColor:styles.selectionIconsPressed];
-		gutterView.selectionBorderColor      = [NSColor colorWithCGColor:styles.selectionBorder];
+		gutterView.foregroundColor           = styles.foreground;
+		gutterView.backgroundColor           = styles.background;
+		gutterView.iconColor                 = styles.icons;
+		gutterView.iconHoverColor            = styles.iconsHover;
+		gutterView.iconPressedColor          = styles.iconsPressed;
+		gutterView.selectionForegroundColor  = styles.selectionForeground;
+		gutterView.selectionBackgroundColor  = styles.selectionBackground;
+		gutterView.selectionIconColor        = styles.selectionIcons;
+		gutterView.selectionIconHoverColor   = styles.selectionIconsHover;
+		gutterView.selectionIconPressedColor = styles.selectionIconsPressed;
+		gutterView.selectionBorderColor      = styles.selectionBorder;
 		gutterScrollView.backgroundColor     = gutterView.backgroundColor;
-		gutterDividerView.activeBackgroundColor = [NSColor colorWithCGColor:styles.divider];
+		gutterDividerView.activeBackgroundColor = styles.divider;
 
 		[gutterView setNeedsDisplay:YES];
 	}
@@ -392,9 +391,12 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	else if([aMenuItem action] == @selector(takeGrammarUUIDFrom:))
 	{
 		NSString* uuidString = [aMenuItem representedObject];
-		if(bundles::item_ptr bundleItem = bundles::lookup(to_s(uuidString)))
+		// nil covers both "no such item" and "declares no grammar scope"; the ObjC++
+		// left the state untouched in the first case and compared against NULL_STR in
+		// the second, which no file type equals.
+		if(NSString* scope = [OakDocumentViewSupport grammarScopeForBundleItemWithUUIDString:uuidString])
 		{
-			bool selectedGrammar = to_s(self.document.fileType) == bundleItem->value_for_field(bundles::kFieldGrammarScope);
+			BOOL selectedGrammar = [self.document.fileType isEqualToString:scope];
 			[aMenuItem setState:selectedGrammar ? NSControlStateValueOn : NSControlStateValueOff];
 		}
 	}
@@ -505,8 +507,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 
 - (void)takeGrammarUUIDFrom:(id)sender
 {
-	if(bundles::item_ptr item = bundles::lookup(to_s([sender representedObject])))
-		[_textView performBundleItem:item];
+	[OakDocumentViewSupport performBundleItemWithUUIDString:[sender representedObject] inTextView:_textView];
 }
 
 - (void)goToSymbol:(id)sender
@@ -563,31 +564,30 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	NSMenu* bundleItemsMenu = bundleItemsPopUp.menu;
 	[bundleItemsMenu removeAllItems];
 
-	std::multimap<std::string, bundles::item_ptr, text::less_t> ordered;
-	for(auto item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeBundle))
-		ordered.emplace(item->name(), item);
+	NSArray<OakBundleMenuEntry*>* bundles = [OakDocumentViewSupport bundlesForMenuWithFileType:self.document.fileType];
 
 	NSMenuItem* selectedItem = nil;
-	for(auto pair : ordered)
+	for(OakBundleMenuEntry* bundle in bundles)
 	{
-		bool selectedGrammar = false;
-		for(auto item : bundles::query(bundles::kFieldGrammarScope, to_s(self.document.fileType), scope::wildcard, bundles::kItemTypeGrammar, pair.second->uuid(), true, true))
-			selectedGrammar = true;
-		if(!selectedGrammar && pair.second->hidden_from_user() || pair.second->menu().empty())
+		// Precedence kept as written: (!selected && hidden) || !hasMenu.
+		if(!bundle.selectedGrammar && bundle.hiddenFromUser || !bundle.hasMenu)
 			continue;
 
-		NSMenuItem* menuItem = [bundleItemsMenu addItemWithTitle:[NSString stringWithCxxString:pair.first] action:NULL keyEquivalent:@""];
-		menuItem.submenu = [[NSMenu alloc] initWithTitle:[NSString stringWithCxxString:pair.second->uuid()]];
+		NSMenuItem* menuItem = [bundleItemsMenu addItemWithTitle:bundle.name action:NULL keyEquivalent:@""];
+		menuItem.submenu = [[NSMenu alloc] initWithTitle:bundle.uuidString];
 		menuItem.submenu.delegate = BundleMenuDelegate.sharedInstance;
 
-		if(selectedGrammar)
+		if(bundle.selectedGrammar)
 		{
 			[menuItem setState:NSControlStateValueOn];
 			selectedItem = menuItem;
 		}
 	}
 
-	if(ordered.empty())
+	// On the *unfiltered* list, as it was on the multimap — which is why a bundle
+	// with no menu yields a blank menu rather than this row. Pinned in
+	// t_document_view.mm; fixing it is a separate, deliberate change.
+	if(bundles.count == 0)
 		[bundleItemsMenu addItemWithTitle:@"No Bundles Loaded" action:@selector(nop:) keyEquivalent:@""];
 
 	if(selectedItem)
@@ -602,7 +602,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 - (void)setTabSize:(NSUInteger)newTabSize
 {
 	_textView.tabSize = newTabSize;
-	settings_t::set(kSettingsTabSizeKey, (size_t)newTabSize, to_s(self.document.fileType));
+	[OakDocumentViewSupport setTabSize:newTabSize forFileType:self.document.fileType];
 }
 
 - (IBAction)takeTabSizeFrom:(id)sender
@@ -615,13 +615,13 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 - (IBAction)setIndentWithSpaces:(id)sender
 {
 	_textView.softTabs = YES;
-	settings_t::set(kSettingsSoftTabsKey, true, to_s(self.document.fileType));
+	[OakDocumentViewSupport setSoftTabs:YES forFileType:self.document.fileType];
 }
 
 - (IBAction)setIndentWithTabs:(id)sender
 {
 	_textView.softTabs = NO;
-	settings_t::set(kSettingsSoftTabsKey, false, to_s(self.document.fileType));
+	[OakDocumentViewSupport setSoftTabs:NO forFileType:self.document.fileType];
 }
 
 - (IBAction)showTabSizeSelectorPanel:(id)sender

@@ -28,3 +28,9 @@
 
 // OTVStatusBar declares `delegate` with this type, so Swift has to see it.
 #import "OTVStatusBarDelegate.h"
+
+// OakTextView itself: OakDocumentView holds one and drives it. Its theme_ptr and
+// bundles::item_ptr members cannot cross into Swift and are answered by
+// OakDocumentViewSupport instead; the importer simply drops them.
+#import "OakTextView.h"
+#import "OakDocumentViewSupport.h"

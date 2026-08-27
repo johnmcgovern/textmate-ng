@@ -979,7 +979,10 @@ framework that is partly done; it is one that has never been started.
 
 ### The two real candidates
 
-**`HTMLOutput` — 1843 lines, 0 Swift, 0 tests.** Three of its seven files are
+**`HTMLOutput` — 1843 lines, 0 Swift, 1 test file.** (This first read "0 tests" —
+wrong, from globbing `t_*.mm` when the existing test is `t_add_to_buffer.cc`. Its
+`tests` glob is now `t_*.{cc,mm}` so adding ObjC++ tests does not drop it.)
+Three of its seven files are
 C++-free and portable-shaped:
 
 | file | lines | C++ hits |

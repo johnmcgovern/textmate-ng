@@ -314,3 +314,22 @@ in the hierachy returns YES, the key (equivalent) event is then passed to the me
 	self.needsNewWebView = YES;
 }
 @end
+
+// ==========================================================================
+// = The four URL/string helpers above, reachable from tests                =
+// ==========================================================================
+//
+// They are the whole of this file's logic and every one of them is subtle, so
+// they are pinned (rule 18) — but a `static` function cannot be called from a
+// test, and making them extern would not survive the port either: Swift can call
+// a free function but never export one (rule 19).
+//
+// Class methods do survive. After the port these are `@objc static func` on the
+// Swift class and t_browser_view.mm keeps compiling unchanged, which is the
+// property that makes this seam worth having in the shipping binary.
+@implementation HOBrowserView (Testing)
++ (BOOL)isProtocolRelativeURL:(NSURL*)url { return IsProtocolRelativeURL(url); }
++ (NSURL*)rewrittenURL:(NSURL*)url        { return RewrittenURL(url);          }
++ (BOOL)isLoadableScheme:(NSURL*)url      { return IsLoadableScheme(url);      }
++ (NSString*)escapeHTML:(NSString*)str    { return EscapeHTML(str);            }
+@end

@@ -73,13 +73,3 @@
 		[webView tryToPerform:@selector(performClose:) with:self];
 }
 @end
-
-@interface HTMLTMFileDummyProtocol : NSURLProtocol { }
-@end
-
-@implementation HTMLTMFileDummyProtocol
-+ (void)load                                                                                                                                      { [self registerClass:self]; }
-+ (BOOL)canInitWithRequest:(NSURLRequest*)request                                                                                                 { return [[[request URL] scheme] isEqualToString:@"tm-file"]; }
-+ (NSURLRequest*)canonicalRequestForRequest:(NSURLRequest*)request                                                                                { return request; }
-+ (BOOL)requestIsCacheEquivalent:(NSURLRequest*)a toRequest:(NSURLRequest*)b                                                                      { return NO; }
-@end

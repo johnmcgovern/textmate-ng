@@ -3,6 +3,8 @@
 
 @class HOStatusBar;
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface HOBrowserView : NSView <WKNavigationDelegate>
 - (instancetype)initWithFrame:(NSRect)aRect configuration:(WKWebViewConfiguration*)aConfiguration;
 
@@ -16,3 +18,5 @@
 @property (nonatomic, readonly) HOStatusBar* statusBar;
 - (void)setUpdatesProgress:(BOOL)flag;
 @end
+
+NS_ASSUME_NONNULL_END

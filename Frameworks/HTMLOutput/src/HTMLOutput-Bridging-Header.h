@@ -13,3 +13,7 @@
 // OakCreateNSBoxSeparator, OakStatusBarFont and OakAddAutoLayoutViewsToSuperview,
 // which build the bar.
 #import <OakAppKit/OakUIConstructionFunctions.h>
+
+// HOBrowserView, which the UI delegate builds for a script-opened window. Still
+// ObjC++, so this is an ordinary header rather than a hand declaration.
+#import "browser/HOBrowserView.h"

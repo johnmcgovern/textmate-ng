@@ -14,6 +14,7 @@
 // which build the bar.
 #import <OakAppKit/OakUIConstructionFunctions.h>
 
-// HOBrowserView, which the UI delegate builds for a script-opened window. Still
-// ObjC++, so this is an ordinary header rather than a hand declaration.
-#import "browser/HOBrowserView.h"
+// HOFileHandleScheme's handler and the two scheme constants the configuration is
+// built from.
+#import "../HOFileHandleScheme.h"
+#import "../HTMLOutput.h"

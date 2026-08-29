@@ -1,3 +1,8 @@
+// Hand-declared (rule 23): this class is defined in HOBrowserView.swift.
+//
+// It must not appear in HTMLOutput-Bridging-Header.h, where it would collide with
+// the generated HTMLOutput-Swift.h (rule 43) — it was there for the
+// HOWebViewDelegateHelper port and has been taken back out.
 #import <WebKit/WebKit.h>
 #import <oak/misc.h>
 

@@ -22,10 +22,15 @@ import WebKit
 
 @objc(HOWebViewDelegateHelper)
 class HOWebViewDelegateHelper: NSObject, @preconcurrency WKUIDelegate {
-	// Vestigial, and kept as it was: nothing assigns this and nothing reads it —
-	// HOBrowserView creates the helper with -new and never sets it — and
-	// HOWebViewDelegateHelperProtocol has no adopters. Removing them is a separate
-	// decision from this port.
+	// Assigned but never read, and kept as it was.
+	//
+	// HOBrowserView sets this to its status bar. Nothing here reads it: the method
+	// that did was the legacy WebUIDelegate's mouse-over-element hook, which put a
+	// link's target into the status text and has no WKWebView equivalent. That is
+	// also what HOWebViewDelegateHelperProtocol's lone `statusText` was for.
+	//
+	// (An earlier commit message of mine said nothing assigns it. That was wrong —
+	// HOBrowserView.mm line 149 does.)
 	@objc weak var delegate: AnyObject?
 
 	// ================

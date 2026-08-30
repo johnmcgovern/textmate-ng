@@ -1026,6 +1026,61 @@ alpha.18 smoke pass (Bundles ▸ Swift ▸ Run renders compiler errors into it).
 `OakCommand` and `MenuBuilder` are C++ utility layers, not UI. The `TextMate`
 application shell (3442 across 12 files) is Phase 5, and is its own project.
 
+## Survey (2026-08-27): HTMLOutput's remaining three
+
+`browser/` is done — HOStatusBar, HOWebViewDelegateHelper and HOBrowserView are
+Swift, and `src/*.mm` is 1843 → 1322. What is left is three files plus the
+`+load` protocol, and they do **not** divide the way their C++ hit-counts
+suggest.
+
+### `HOFileHandleScheme.mm` (384) — take this one next
+
+**No C++ ivars anywhere**, which is the thing that decides it. All four classes
+in the file hold ObjC types: `NSFileHandle*`, `pid_t`, `NSMapTable`,
+`NSMutableSet`. The C++ is a static function, two locals and one call:
+
+* `RewriteLocalURLs(std::string const&, std::string&)` — byte-level rewriting of
+  the output stream with a **carry buffer** across chunk boundaries;
+* a local `std::string carry` in the read loop;
+* `oak::kill_process_group_in_background(pid)`.
+
+So rule 20 does not apply and the boundary is one function. That function is
+also the best pinning target in the framework after the URL helpers: a carry
+buffer that splits a URL across two reads is exactly the bug that only shows up
+under load, and never in a test that feeds it one chunk.
+
+### `OakHTMLOutputView.mm` (331) — portable, but it is the public face
+
+Two C++ sites, and each needs a different answer:
+
+* `@property std::map<std::string, std::string> environment` — rule 20, but this
+  is a plain value store rather than live state, so it boxes the way
+  `OakEncodingOptions` and `DWScopeContext` did.
+* `-loadRequest:environment:autoScrolls:` is declared in the framework's public
+  header and its **only external caller is `OakCommand.mm:240`**, which is not
+  moving. So the selector keeps an ObjC++ home in a category on the Swift class —
+  the `DocumentWindowSupport` shape.
+
+`HTMLOutputWindow-Bridging-Header.h` already documents the other half of this:
+the importer parses the header and silently omits that member, and its Swift
+controller never calls it. Nothing there breaks.
+
+### `HOJSBridge.mm` (408) — decline the larger half
+
+Two classes in one file, with opposite verdicts:
+
+* `HOJSShellCommand` holds `io::process_t process` and `std::string output,
+  error` as **ivars** — a running process and its buffers. It also has
+  `-exhaustFileDescriptor:inQueue:group:buffer:(std::string&)isError:`, a
+  non-const C++ reference parameter, which is the same thing that blocked
+  `OakCommandRefresh`. **This is the C++-state-object shape; do not port it.**
+* `HOJSBridge` itself is a `std::map` ivar plus an `NSMutableDictionary`, and
+  would box like OakHTMLOutputView's.
+
+Splitting them to move the smaller half is not obviously worth it: the bridge
+holds the dictionary of commands and the commands call back into it, so the
+split would be along a live edge rather than a seam.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

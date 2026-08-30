@@ -69,6 +69,38 @@ static std::string RewriteLocalURLs (std::string const& chunk, std::string& carr
 	return out;
 }
 
+// ==========================================================================
+// = The rewriter, as an object that owns its carry                         =
+// ==========================================================================
+//
+// RewriteLocalURLs is the subtle part of this file and it was unreachable: a
+// static function taking a `std::string&` cannot be called from a test, and the
+// carry it threads through the read loop is exactly what makes it worth testing.
+// A URL split across two reads is a bug that only appears under load.
+//
+// So the carry becomes owned state and the entry point becomes ObjC-clean. NSData
+// rather than NSString on purpose: this is a byte stream, and a chunk boundary
+// can fall inside a UTF-8 sequence — going through NSString would corrupt exactly
+// the case the carry exists to handle.
+@implementation HOLocalURLRewriter
+{
+	std::string _carry;
+}
+
+- (NSData*)rewriteChunk:(NSData*)chunk
+{
+	std::string const rewritten = RewriteLocalURLs(std::string((char const*)chunk.bytes, chunk.length), _carry);
+	return [NSData dataWithBytes:rewritten.data() length:rewritten.size()];
+}
+
+// Whatever is being held back as a possible partial `file://`. At EOF it was
+// never a real one and the caller emits it verbatim.
+- (NSData*)carry
+{
+	return [NSData dataWithBytes:_carry.data() length:_carry.size()];
+}
+@end
+
 // ==================
 // = The job record =
 // ==================
@@ -170,16 +202,15 @@ static std::string RewriteLocalURLs (std::string const& chunk, std::string& carr
 	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 		ssize_t len = 0;
 		char buf[8192];
-		std::string carry;
+		HOLocalURLRewriter* rewriter = [HOLocalURLRewriter new];
 		__block BOOL keepRunning = YES;
 
 		while(keepRunning && (len = read(fd, buf, sizeof(buf))) > 0)
 		{
-			std::string rewritten = RewriteLocalURLs(std::string(buf, len), carry);
-			if(rewritten.empty()) // whole chunk held back as a partial match
+			NSData* data = [rewriter rewriteChunk:[NSData dataWithBytes:buf length:len]];
+			if(data.length == 0) // whole chunk held back as a partial match
 				continue;
 
-			NSData* data = [NSData dataWithBytes:rewritten.data() length:rewritten.size()];
 			dispatch_sync(dispatch_get_main_queue(), ^{
 				if(keepRunning = !self->_stopped)
 					[self->_task didReceiveData:data];
@@ -190,9 +221,9 @@ static std::string RewriteLocalURLs (std::string const& chunk, std::string& carr
 			perror("HTMLOutput: read");
 
 		// A partial `file://` at EOF was never a real one — emit it verbatim.
-		if(keepRunning && !carry.empty())
+		NSData* tail = rewriter.carry;
+		if(keepRunning && tail.length != 0)
 		{
-			NSData* tail = [NSData dataWithBytes:carry.data() length:carry.size()];
 			dispatch_sync(dispatch_get_main_queue(), ^{
 				if(!self->_stopped)
 					[self->_task didReceiveData:tail];

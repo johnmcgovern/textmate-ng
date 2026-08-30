@@ -72,3 +72,11 @@ extern NSString* const kHOTMFileURLScheme;
 // disableJavaScriptAPI, which also disables the synchronous bridge.
 @property (nonatomic, weak) id <HOSyncCommandRunner> syncRunner;
 @end
+
+// Rewrites `file://` to the same-origin local prefix across a byte stream,
+// holding back a partial match at a chunk boundary until the next chunk arrives.
+// Pinned by t_local_url_rewriter.mm.
+@interface HOLocalURLRewriter : NSObject
+- (NSData*)rewriteChunk:(NSData*)chunk;
+@property (nonatomic, readonly) NSData* carry;
+@end

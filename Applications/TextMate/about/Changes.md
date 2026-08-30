@@ -2,6 +2,44 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-27 (v2026.8-alpha.19)
+
+**Entirely the ongoing Objective-C++ to Swift rewrite, and nothing here is meant to
+look different.** This round is one window: the **HTML output** view — where a bundle
+command's output appears, and where anything using ⌘R or the Bundles menu ends up.
+
+What was rewritten:
+
+* the **bar along the bottom** of an output window — the back and forward buttons,
+  the status line, and the progress indicator, which is really two controls
+  (a spinner while a command runs without reporting progress, a bar once it does);
+* the **navigation rules**: which links open in the window and which are handed to
+  the Finder or another app, how `file://` links resolve to a directory's
+  `index.html`, and the *Load Error* page;
+* the **dialogs a page can raise** from JavaScript — alert, confirm, and the file
+  picker — plus `window.open` and `window.close`.
+
+**Where to look if something is off.** Anything in an HTML output window. The most
+likely place for a surprise is a **link that goes somewhere unexpected**, because the
+URL-rewriting rules are the densest part of this change: a `file://` link to a folder
+should open that folder's `index.html`, a link to a missing file should show
+TextMate's own *Load Error* page rather than WebKit's, and a link to an
+`http://` address should open in the window while a `mailto:` should leave for your
+mail client.
+
+**What has no automated coverage:** the JavaScript dialogs and `window.open`. All of
+them end in a sheet or a new window positioned against the window they belong to, so
+the tests cannot open them; they were exercised by hand. The URL rules underneath
+them *are* covered — 29 tests written against the old code before it moved.
+
+**Not in this release, deliberately:** the part of the output window that streams a
+running command's text into the page is still the old code. Its logic — holding back
+a `file://` that gets split across two reads — is now covered by tests for the first
+time, but rewriting the threading around it is a change worth making on its own
+rather than at the end of a long session.
+
+**For the curious:** the test suite is 903 tests, up from 874.
+
 ## 2026-08-27 (v2026.8-alpha.18)
 
 **Almost all of this is the ongoing Objective-C++ to Swift rewrite, with one real

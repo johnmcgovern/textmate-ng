@@ -1,4 +1,5 @@
 #import "HOJSBridge.h"
+#import "../HOEnvironment.h"
 #import "add_to_buffer.h"
 #import <OakFoundation/NSString Additions.h>
 #import <OakAppKit/NSAlert Additions.h>
@@ -87,6 +88,11 @@
 - (void)setEnvironment:(const std::map<std::string, std::string>&)variables
 {
 	environment = variables;
+}
+
+- (void)setEnvironmentBox:(HOEnvironment*)environmentBox
+{
+	environment = environmentBox.cxxMap;
 }
 
 - (void)invalidate

@@ -1,5 +1,6 @@
 #import "OakHTMLOutputView.h"
 #import "HOFileHandleScheme.h"
+#import "HOEnvironment.h"
 #import "browser/HOStatusBar.h"
 #import "helpers/HOJSBridge.h"
 #import <OakFoundation/OakFoundation.h>
@@ -61,7 +62,7 @@ static WKUserScript* AutoScrollUserScript ()
 
 @interface OakHTMLOutputView ()
 @property (nonatomic, getter = isRunningCommand, readwrite) BOOL runningCommand;
-@property (nonatomic) std::map<std::string, std::string> environment;
+@property (nonatomic) HOEnvironment* environment;
 @property (nonatomic, getter = isVisible) BOOL visible;
 // The request object OakCommand handed us. WKWebView copies requests, and
 // NSURLProtocol properties do not survive the copy, so the original is kept here
@@ -122,7 +123,7 @@ static WKUserScript* AutoScrollUserScript ()
 	_jsBridge          = [HOJSBridge new];
 	_jsBridge.delegate = self.statusBar;
 	_jsBridge.webView  = self.webView;
-	[_jsBridge setEnvironment:_environment];
+	[_jsBridge setEnvironmentBox:_environment];
 
 	[contentController addScriptMessageHandler:_jsBridge name:kHOScriptMessageHandlerName];
 	[contentController addUserScript:script];
@@ -132,7 +133,17 @@ static WKUserScript* AutoScrollUserScript ()
 	[(HOFileHandleSchemeHandler*)[self.webView.configuration urlSchemeHandlerForURLScheme:kHOFileHandleURLScheme] setSyncRunner:_jsBridge];
 }
 
+/*
+	Rule 17 keeps this signature in ObjC++ permanently: OakCommand.mm is its only
+	caller and is not moving. Everything it does lives in the ObjC-clean method
+	below, so the C++ never has to be named again.
+*/
 - (void)loadRequest:(NSURLRequest*)aRequest environment:(std::map<std::string, std::string> const&)anEnvironment autoScrolls:(BOOL)flag
+{
+	[self loadRequest:aRequest environmentBox:[HOEnvironment environmentWithCxxMap:anEnvironment] autoScrolls:flag];
+}
+
+- (void)loadRequest:(NSURLRequest*)aRequest environmentBox:(HOEnvironment*)anEnvironment autoScrolls:(BOOL)flag
 {
 	[self teardownJavaScriptAPI];
 
@@ -298,9 +309,8 @@ static WKUserScript* AutoScrollUserScript ()
 	{
 		decisionHandler(WKNavigationActionPolicyCancel);
 
-		auto projectUUID = _environment.find("TM_PROJECT_UUID");
-		if(projectUUID != _environment.end())
-			url = [NSURL URLWithString:[[url absoluteString] stringByAppendingFormat:@"&project=%@", [NSString stringWithCxxString:projectUUID->second]]];
+		if(NSString* projectUUID = [_environment valueForVariable:@"TM_PROJECT_UUID"])
+			url = [NSURL URLWithString:[[url absoluteString] stringByAppendingFormat:@"&project=%@", projectUUID]];
 		[NSApp sendAction:@selector(handleTxMtURL:) to:nil from:url];
 		return;
 	}

@@ -5,6 +5,7 @@
 // file-static functions. This header names both.
 #import "../src/browser/HOStatusBar.h"
 #import "../src/browser/HOBrowserView.h"
+#import "../src/OakHTMLOutputView.h"
 #import "../src/HOLocalURLRewriter.h"
 #import <Cocoa/Cocoa.h>
 
@@ -32,4 +33,11 @@
 + (NSURL*)rewrittenURL:(NSURL*)url;
 + (BOOL)isLoadableScheme:(NSURL*)url;
 + (NSString*)escapeHTML:(NSString*)str;
+@end
+
+@interface OakHTMLOutputView (Testing)
+// Declared in the .mm's class extension and again in <HTMLOutput/HTMLOutput.h> —
+// but that header carries a second, narrower @interface for the same class, so a
+// test cannot import it alongside OakHTMLOutputView.h. Named here instead.
+@property (nonatomic, readonly, getter = isVisible) BOOL visible;
 @end

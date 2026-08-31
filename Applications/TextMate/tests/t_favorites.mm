@@ -133,3 +133,72 @@ void test_favorites_chooser_surface ()
 	OAK_ASSERT_EQ(to_s([FavoriteChooser.sharedInstance.sourceListLabels componentsJoinedByString:@" | "]),
 	              std::string("Recent Projects | Favorites"));
 }
+
+// ==================================================================
+// = Ranking, which the extraction made reachable                   =
+// ==================================================================
+//
+// These could not be written before FavoritesSupport existed: the ranking was
+// inline in -updateItems:, reading the chooser's filter field and writing its
+// items. As a class method over its inputs it is an ordinary function.
+
+static NSArray<FavoritesItem*>* three_items ()
+{
+	return @[
+		[[FavoritesItem alloc] initWithPath:make_folder(@"Alpha") isLink:NO isRemovable:YES],
+		[[FavoritesItem alloc] initWithPath:make_folder(@"Beta")  isLink:NO isRemovable:YES],
+		[[FavoritesItem alloc] initWithPath:make_folder(@"Gamma") isLink:NO isRemovable:YES],
+	];
+}
+
+static std::string names_of (NSArray<FavoritesItem*>* items)
+{
+	NSMutableArray* names = [NSMutableArray array];
+	for(FavoritesItem* item in items)
+		[names addObject:item.displayName ?: @"«nil»"];
+	return to_s([names componentsJoinedByString:@" | "]);
+}
+
+void test_favorites_empty_filter_keeps_every_item_in_order ()
+{
+	NSArray<FavoritesItem*>* ranked = [FavoritesSupport rankItems:three_items() filterString:@"" bindings:@[]];
+
+	// No filter means the list as loaded — for Recent Projects that order is
+	// most-recently-used, so re-sorting it would be wrong.
+	OAK_ASSERT_EQ(names_of(ranked), std::string("Alpha | Beta | Gamma"));
+}
+
+void test_favorites_filter_drops_what_does_not_match ()
+{
+	NSArray<FavoritesItem*>* ranked = [FavoritesSupport rankItems:three_items() filterString:@"gam" bindings:@[]];
+
+	OAK_ASSERT_EQ(names_of(ranked), std::string("Gamma"));
+}
+
+void test_favorites_ranking_marks_up_the_matched_name ()
+{
+	NSArray<FavoritesItem*>* ranked = [FavoritesSupport rankItems:three_items() filterString:@"gam" bindings:@[]];
+	OAK_ASSERT_EQ((size_t)ranked.count, (size_t)1);
+
+	// `name` is what the row draws, and the filter's matched characters are marked
+	// up in it — losing that silently removes the highlighting from the window.
+	OAK_ASSERT_EQ((bool)(ranked[0].name != nil), true);
+	OAK_ASSERT_EQ(to_s(ranked[0].name.string), std::string("Gamma"));
+
+	// `folder` is the containing directory, abbreviated with a tilde.
+	OAK_ASSERT_EQ((bool)(ranked[0].folder != nil), true);
+}
+
+void test_favorites_a_learned_abbreviation_outranks_the_score ()
+{
+	NSArray<FavoritesItem*>* items = three_items();
+
+	// Both match "a". Without bindings the score decides; with Gamma bound to this
+	// abbreviation it goes first regardless — that is what makes typing the same
+	// few letters keep opening the same project.
+	NSArray<FavoritesItem*>* plain = [FavoritesSupport rankItems:items filterString:@"a" bindings:@[]];
+	OAK_ASSERT_EQ((bool)(plain.count > 1), true);
+
+	NSArray<FavoritesItem*>* bound = [FavoritesSupport rankItems:items filterString:@"a" bindings:@[ items[2].path ]];
+	OAK_ASSERT_EQ(names_of(bound).find("Gamma"), (size_t)0);
+}

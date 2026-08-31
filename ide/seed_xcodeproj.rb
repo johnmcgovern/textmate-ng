@@ -352,7 +352,7 @@ end
 # .swift sources. The bridging header is committed source, found by convention
 # at <dir>/src/<Target>-Bridging-Header.h. See the Pass 1 comment for why
 # these are per-target and the global CLANG_ENABLE_MODULES=NO stays untouched.
-def apply_swift_settings(bs, config, dir, name, xcc)
+def apply_swift_settings(bs, config, dir, name, xcc, fallback_name = nil)
   bs["SWIFT_VERSION"]            = "6.0"
   bs["SWIFT_OBJC_INTEROP_MODE"]  = "objcxx"
   bs["SWIFT_OPTIMIZATION_LEVEL"] = config.name == "Release" ? "-O" : "-Onone"
@@ -360,8 +360,13 @@ def apply_swift_settings(bs, config, dir, name, xcc)
   bs["OTHER_SWIFT_FLAGS"]        = ["$(inherited)"] + xcc
   # tests/ first so a test bundle's bridging header lives next to its tests;
   # src/ is the convention for the framework/app targets themselves.
-  bh = ["tests", "src"].map { |sub| File.join(dir, sub, "#{name}-Bridging-Header.h") }
-                       .find { |p| File.exist?(File.join(ROOT, p)) }
+  #
+  # fallback_name is the target *under test*: a test bundle that compiles an
+  # application's own sources (see Pass 4) needs that application's bridging
+  # header, which is named for the app rather than for the bundle.
+  bh = [name, fallback_name].compact.uniq
+       .flat_map { |n| ["tests", "src"].map { |sub| File.join(dir, sub, "#{n}-Bridging-Header.h") } }
+       .find { |p| File.exist?(File.join(ROOT, p)) }
   bs["SWIFT_OBJC_BRIDGING_HEADER"] = "$(SRCROOT)/#{bh}" if bh
 end
 
@@ -1227,6 +1232,19 @@ specs.reject { |t| t["tests"].empty? }.each do |t|
   # files must stay free of ObjC metadata — see CommitWindowLogic.swift.)
   swift_tests, oak_tests = t["tests"].partition { |f| f.end_with?(".swift") }
   sources = swift_tests
+
+  # A test bundle links the *static libraries* under test. An application is not
+  # one — its sources compile straight into the app binary — so there is nothing
+  # for `link_libs` to pick up, and every class the app defines is absent from the
+  # bundle. Measured 2026-08-31: NSClassFromString("AppController") was Nil while
+  # framework classes resolved fine, which is why nothing under Applications/
+  # could be pinned.
+  #
+  # So for a non-lib target, its own sources compile *into* the bundle instead.
+  # Duplicate symbols are not a risk — the bundle is a separate binary — and an
+  # unreferenced main() is harmless in one.
+  own_sources = kind(t) == :lib ? [] : t["sources"]
+  sources += own_sources
   unless oak_tests.empty?
     cmd = ["ruby", File.join(ROOT, "ide/gen_xctest.rb"), name, GEN_TESTS, *oak_tests].shelljoin
     generated = `cd #{ROOT.shellescape} && #{cmd}`
@@ -1291,7 +1309,14 @@ specs.reject { |t| t["tests"].empty? }.each do |t|
     bs["OTHER_LDFLAGS"] = ["$(inherited)", "-ObjC", "-framework", "XCTest"] + ld_libs +
                           fworks.flat_map { |f| ["-framework", f] } + ld_extra +
                           (swift_tests.empty? && link_libs.any? { |n| BY_NAME[n]["sources"].any? { |s| s.end_with?(".swift") } } ? swift_runtime_ldflags : [])
-    apply_swift_settings(bs, config, t["dir"], test_name, swift_xcc_flags(specs)) unless swift_tests.empty?
+    unless swift_tests.empty? && own_sources.none? { |f| f.end_with?(".swift") }
+      apply_swift_settings(bs, config, t["dir"], test_name, swift_xcc_flags(specs), name)
+      # The bundle's Swift module is named for the bundle, so its generated header
+      # would be TextMateTests-Swift.h — but the app sources compiled in above
+      # import "TextMate-Swift.h" by that name. Pin the header to the target under
+      # test. Same hazard, and same fix, as PRODUCT_MODULE_NAME on the app itself.
+      bs["SWIFT_OBJC_INTERFACE_HEADER_NAME"] = "#{name}-Swift.h" unless own_sources.none? { |f| f.end_with?(".swift") }
+    end
   end
 
   nres = add_test_resources(project, target, t)

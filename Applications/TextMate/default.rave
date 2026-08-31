@@ -32,6 +32,7 @@ target "${dirname}" {
 	copy  @TextMateQL        "PlugIns"
 
 	sources src/*.{cc,mm,swift}
+	tests tests/t_*.mm
 	executable "MacOS/${target}"
 	frameworks Cocoa
 }

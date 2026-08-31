@@ -39,7 +39,9 @@ static NSUInteger const kOakSourceIndexFavorites      = 1;
 {
 	if(self = [super init])
 	{
-		NSError* error;
+		// Initialised: Cocoa writes an error out-parameter only on failure, so an
+		// uninitialised one leaves `if(error)` reading whatever was on the stack.
+		NSError* error = nil;
 
 		_path = isLink ? [NSFileManager.defaultManager destinationOfSymbolicLinkAtPath:path error:&error] : path;
 		_link = isLink ? path : nil;

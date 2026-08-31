@@ -16,5 +16,6 @@
 
 // HOFileHandleScheme's handler and the two scheme constants the configuration is
 // built from.
-#import "../HOFileHandleScheme.h"
+#import "../HOFileHandleSchemeSupport.h"
+#import "../HOLocalURLRewriter.h"
 #import "../HTMLOutput.h"

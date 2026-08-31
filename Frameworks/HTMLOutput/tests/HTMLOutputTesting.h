@@ -5,7 +5,7 @@
 // file-static functions. This header names both.
 #import "../src/browser/HOStatusBar.h"
 #import "../src/browser/HOBrowserView.h"
-#import "../src/HOFileHandleScheme.h"
+#import "../src/HOLocalURLRewriter.h"
 #import <Cocoa/Cocoa.h>
 
 @interface HOStatusBar (Testing)

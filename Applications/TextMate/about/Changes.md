@@ -2,6 +2,47 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-31 (v2026.8-alpha.20)
+
+**Entirely the ongoing Objective-C++ to Swift rewrite.** alpha.19 rewrote what you
+*see* in an HTML output window; this one rewrites what puts the text there. Nothing
+is meant to look different, but this is the more invasive half of the two, so it is
+worth a closer eye than alpha.19 was.
+
+What was rewritten:
+
+* the machinery that **streams a running command's output into the page** — the part
+  that reads the command's output as it arrives and hands it to the window;
+* the serving of **stylesheets, scripts and images** that command output refers to by
+  absolute path, which have to be fetched back off disk as the page parses;
+* the **output view itself** — starting a command, stopping one, the *Stop “…”?*
+  sheet, the window title, printing, and the handling of `txmt://` links inside
+  command output.
+
+**Where to look if something is off.** Anything that runs a bundle command and shows
+output: ⌘R, the Bundles menu, ⌘Y and the SCM commands. Specifically worth noticing:
+
+* output that **stops partway** or arrives truncated. The reader holds back a few
+  bytes at the end of each read in case they are the start of a path it needs to
+  rewrite, and releases them once it knows — a mistake there would drop or duplicate
+  a fragment. This logic now has tests for the first time, including the case where a
+  path is split across two reads.
+* a page whose **styling is missing** — that means the sub-resource path is not
+  serving files.
+* **Stop** on a long-running command: the sheet should dismiss and the command should
+  actually die.
+
+**What has no automated coverage, and cannot have:** the streaming itself. It needs a
+real command, a live web view and a running process, so no test can drive it. It was
+exercised by hand — a command's output streamed in, its stylesheet loaded, and the
+progress indicator stopped when it finished. **The case not exercised by hand either**
+is closing an output window *while* a command is still streaming; the code for it is a
+direct translation, but that particular race was not reproduced.
+
+**For the curious:** the test suite is 909 tests, up from 903. The interesting number
+is smaller: the byte-level reader described above went from no tests at all to ten,
+because it is the one piece here whose bugs only appear under load.
+
 ## 2026-08-27 (v2026.8-alpha.19)
 
 **Entirely the ongoing Objective-C++ to Swift rewrite, and nothing here is meant to

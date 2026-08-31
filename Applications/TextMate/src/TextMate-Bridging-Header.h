@@ -9,3 +9,9 @@
 #import <Foundation/Foundation.h>
 #include <string>
 #include <OakFoundation/OakFoundation.h>
+
+// The bundle list the About window's Bundles page is built from — summarised, not
+// the real thing. <BundlesManager/BundlesManager.h> cannot come in here: it pulls
+// plist/, oak/algorithm.h and boost, which this header's deliberately-minimal
+// prelude cannot parse. See AboutBundlesSupport.h.
+#include "AboutBundlesSupport.h"

@@ -623,3 +623,10 @@ knew.
 
     `BundleItemChooser` binds its scope bar the same way and is fine, because it
     lives *in* OakFilterList. The difference is the module, not the code.
+
+    **Scope: one confirmed case.** `FavoriteChooser` over `OakChooser` is the
+    only instance measured. The wording above generalises from its failure mode
+    — compiler and runtime disagreeing about the superclass — and that reasoning
+    predicts any app-target Swift subclass of a framework Swift class will break
+    on its first KVO registration. Nothing has tested that. Treat this rule as a
+    warning to probe with a throwaway subclass, not as a settled boundary.

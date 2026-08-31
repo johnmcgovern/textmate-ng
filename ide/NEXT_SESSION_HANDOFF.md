@@ -1109,8 +1109,16 @@ Three ways forward, none of them small:
 3. **Leave it ObjC++.** The extraction and pins still stand on their own, and the
    file is 300 lines.
 
-Option 2 is the one that generalises: every future Swift subclass in the app of a
-framework Swift class will hit rule 56 the moment it observes anything.
+**One confirmed case, not a measured rule.** What was observed is exactly this:
+`FavoriteChooser` in the app target, subclassing `OakChooser` through
+`OakChooser.h`, traps when the scope bar binds to it. Whether every app-target
+Swift subclass of a framework Swift class hits the same wall the moment it
+observes anything is an inference from the failure mode, not something that was
+tested — no second case exists yet.
+
+If the inference holds, option 2 is the one that generalises, and cheaply. If it
+does not, this may be narrower than it looks and option 1 or 3 is enough. Worth
+one throwaway subclass to find out before choosing.
 
 ## Before cutting a release: the five-minute smoke pass
 

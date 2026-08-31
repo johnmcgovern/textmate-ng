@@ -1081,6 +1081,37 @@ Splitting them to move the smaller half is not obviously worth it: the bridge
 holds the dictionary of commands and the commands call back into it, so the
 split would be along a live edge rather than a seam.
 
+## FavoriteChooser: extracted and pinned, translation reverted (2026-08-31)
+
+`Favorites.mm` is pinned (10 tests), its C++ is gone into `FavoritesSupport`, and
+a real crash in it is fixed — all committed. **The translation was written,
+failed, and was reverted.**
+
+It is blocked by rule 56, which this attempt discovered: a Swift subclass in the
+app target of `OakChooser` — a Swift class the app sees only through
+`OakChooser.h` — cannot be KVO-swizzled. `scopeBar.bind(.value, to: self,
+withKeyPath: "sourceIndex")` traps in `swift_objc_classCopyFixupHandler`, as a
+SIGTRAP rather than an exception, so the test process dies and the run reports
+"8 tests, 0 failures" instead of a failure.
+
+Inverting the binding was tried and does not help — `bind:` registers the
+observation either way.
+
+Three ways forward, none of them small:
+
+1. **Move FavoriteChooser into OakFilterList.** Its superclass would then be the
+   real Swift class and KVO works — `BundleItemChooser` does exactly this binding
+   from inside that framework. It is where a chooser arguably belongs, but it is
+   a structural move, and the class reaches into the app's recent-projects KVDB.
+2. **Give `OakScopeBarViewController` a target/action** so no KVO is needed. It
+   has `selectedIndex` and nothing else; adding an action is a small change to
+   OakAppKit that would unblock any app-target chooser.
+3. **Leave it ObjC++.** The extraction and pins still stand on their own, and the
+   file is 300 lines.
+
+Option 2 is the one that generalises: every future Swift subclass in the app of a
+framework Swift class will hit rule 56 the moment it observes anything.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

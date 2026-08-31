@@ -599,3 +599,27 @@ knew.
 
     What *does* still block a port is storage: rule 20. `GutterView` stays
     ObjC++ because its state is C++ ivars, not because of `GVLineRecord`.
+
+56. **A Swift subclass, in another module, of a Swift class seen through a
+    hand-declared ObjC header cannot be KVO-swizzled.** Registering any KVO
+    observation on such an object traps inside
+    `swift_objc_classCopyFixupHandler` during `objc_allocateClassPair` — a
+    SIGTRAP, not an exception, so a test process dies rather than failing.
+
+    The shape that hits it: `FavoriteChooser` (Swift, in `Applications/TextMate`)
+    subclassing `OakChooser` (Swift, in `OakFilterList`, which the app sees only
+    through `OakChooser.h`). The app's compiler believes the superclass is an
+    ObjC class; the runtime knows better; KVO's class copy cannot reconcile the
+    two.
+
+    **Rule 23's hand declarations stop at the module boundary for subclassing.**
+    Using another module's Swift class is fine — that is how `SymbolChooser` and
+    `OakChooser` are consumed everywhere. *Subclassing* one and then observing it
+    is not.
+
+    Inverting the binding does not help: `-bind:toObject:withKeyPath:` registers
+    the observer either way. What works is not subclassing across that boundary —
+    put the subclass in the same module as its superclass, or leave it ObjC++.
+
+    `BundleItemChooser` binds its scope bar the same way and is fine, because it
+    lives *in* OakFilterList. The difference is the module, not the code.

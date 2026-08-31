@@ -168,7 +168,10 @@ class HOStatusBar: NSVisualEffectView {
 	}
 
 	private var _busy: Bool = false
-	@objc var busy: Bool {
+	// Named isBusy on the Swift side, not busy: HOJSBridgeDelegate's imported
+	// requirement takes its name from the ObjC getter, and a conformance has to match
+	// it. The ObjC selectors are unchanged either way.
+	@objc var isBusy: Bool {
 		// rule 4: the getter is spelled isBusy while the setter is setBusy:.
 		@objc(isBusy) get { _busy }
 		@objc(setBusy:) set {

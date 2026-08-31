@@ -18,4 +18,12 @@
 // built from.
 #import "../HOFileHandleSchemeSupport.h"
 #import "../HOLocalURLRewriter.h"
-#import "../HTMLOutput.h"
+
+// The environment box, and the JavaScript bridge the view installs. Both stay
+// ObjC++ — the box because a std::map cannot be a Swift ivar (rule 20), the
+// bridge because it holds a running process and its buffers as ivars.
+#import "../HOEnvironment.h"
+#import "helpers/HOJSBridge.h"
+
+// OakIsEmptyString, which decides the main-frame title fallback.
+#import <OakFoundation/OakFoundation.h>

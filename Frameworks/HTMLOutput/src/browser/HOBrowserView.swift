@@ -166,7 +166,7 @@ class HOBrowserView: NSView, @preconcurrency WKNavigationDelegate {
 	// ========================
 
 	func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-		_statusBar.busy = true
+		_statusBar.isBusy = true
 		setUpdatesProgress(true)
 	}
 
@@ -224,7 +224,7 @@ class HOBrowserView: NSView, @preconcurrency WKNavigationDelegate {
 	func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
 		_statusBar.canGoBack    = _webView.canGoBack
 		_statusBar.canGoForward = _webView.canGoForward
-		_statusBar.busy         = false
+		_statusBar.isBusy         = false
 		_statusBar.progress     = 0
 	}
 

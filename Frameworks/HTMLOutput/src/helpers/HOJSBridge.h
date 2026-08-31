@@ -1,10 +1,17 @@
 #import <WebKit/WebKit.h>
-#import "../HOFileHandleScheme.h"
+#import "../HOFileHandleSchemeSupport.h"
 
+// Main-actor: the only adopter is the status bar, and every member of it drives a
+// control. Stated here so the conformance does not have to cross isolation.
+//
+// `progress` is CGFloat and `statusText` nullable because that is what HOStatusBar
+// actually has — CGFloat and double are the same type on this architecture, but
+// not to Swift's type checker, and an unaudited NSString* imports as String!.
+NS_SWIFT_UI_ACTOR
 @protocol HOJSBridgeDelegate
 @property (nonatomic, getter = isBusy) BOOL busy;
-@property (nonatomic) double progress;
-@property (nonatomic) NSString* statusText; // link under the pointer; see HTMLOutput.js
+@property (nonatomic) CGFloat progress;
+@property (nonatomic, nullable) NSString* statusText; // link under the pointer; see HTMLOutput.js
 @end
 
 /*

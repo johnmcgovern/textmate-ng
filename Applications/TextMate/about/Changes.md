@@ -29,8 +29,9 @@ than by anyone hitting them:
 and the toolbar — and the whole of plug-in loading and installing. Nothing is meant
 to look or behave differently.
 
-**Where to look if something is off.** The About window under ⌘? and its Bundles,
-Registration and Contributions pages, including ⌘⇧] / ⌘⇧[ to cycle them. Open Recent
+**Where to look if something is off.** The About window under ⌘? and all five of its
+pages — About, Changes, Bundles, Legal, Contributions — including ⌘⇧] / ⌘⇧[ to cycle
+them. Open Recent
 Project under ⌘⇧O, both of its lists. And if you run any `.tmplugin`, that it still
 loads at launch — the Dialog plug-ins that ship inside the app exercise the same path
 and are checked before each release.

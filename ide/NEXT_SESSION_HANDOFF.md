@@ -1109,16 +1109,35 @@ Three ways forward, none of them small:
 3. **Leave it ObjC++.** The extraction and pins still stand on their own, and the
    file is 300 lines.
 
-**One confirmed case, not a measured rule.** What was observed is exactly this:
-`FavoriteChooser` in the app target, subclassing `OakChooser` through
-`OakChooser.h`, traps when the scope bar binds to it. Whether every app-target
-Swift subclass of a framework Swift class hits the same wall the moment it
-observes anything is an inference from the failure mode, not something that was
-tested — no second case exists yet.
+**Measured on 2026-09-01, and it changes the ranking above.** Three throwaway
+app-target subclasses were built, each doing nothing but one
+`-addObserver:forKeyPath:`; all three trapped with an identical stack. Non-`final`
+over `OakChooser` traps, `final` over `OakChooser` traps, and — the one that
+matters — a subclass of `OakScopeBarViewController`, a bare `NSViewController`
+with none of the chooser's machinery, traps too. See rule 56 for the table. The
+probes were reverted; the app bundle is back to 23/23.
 
-If the inference holds, option 2 is the one that generalises, and cheaply. If it
-does not, this may be narrower than it looks and option 1 or 3 is enough. Worth
-one throwaway subclass to find out before choosing.
+So the inference held, but the useful part is what it rules out. It is not
+`final`, so this is a different bug from the alpha.16 corruption despite the same
+runtime handler. It is not `OakChooser`. It is the module boundary alone, and
+**registration is the trigger** — nothing was ever set.
+
+That last point demotes option 2. Giving the scope bar a target/action removes
+*this* observation, but the object stays unobservable by anything, forever,
+including AppKit doing it on its own; the port would ship an invariant no test
+can hold. It is still the cheapest thing that works today, and it is still worth
+having for its own sake, but it is not a fix.
+
+**Option 1 is now the one that actually removes the hazard**, and option 3 —
+leaving 300 lines of ObjC++ alone — is a perfectly respectable answer while the
+rest of the app shell has portable files left in it.
+
+**The root fix was scoped and is a build-system project.** Letting the app
+`import OakFilterList`/`OakAppKit` and subclass the real Swift class needs `open`
+on the class (which cascades through overrides and protocol conformances) and
+then does not build at all: `google::libc_allocator_with_realloc` has different
+definitions in the app's Swift compile and in the `TMText` module shim. Whoever
+picks this up is fixing the C++ module farm first, not the chooser.
 
 ## Before cutting a release: the five-minute smoke pass
 

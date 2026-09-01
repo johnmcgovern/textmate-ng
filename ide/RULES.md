@@ -624,9 +624,37 @@ knew.
     `BundleItemChooser` binds its scope bar the same way and is fine, because it
     lives *in* OakFilterList. The difference is the module, not the code.
 
-    **Scope: one confirmed case.** `FavoriteChooser` over `OakChooser` is the
-    only instance measured. The wording above generalises from its failure mode
-    — compiler and runtime disagreeing about the superclass — and that reasoning
-    predicts any app-target Swift subclass of a framework Swift class will break
-    on its first KVO registration. Nothing has tested that. Treat this rule as a
-    warning to probe with a throwaway subclass, not as a settled boundary.
+    **Measured, 2026-09-01.** This started as one crash and an inference; three
+    throwaway subclasses in the app target settled it. Each registers a single
+    `-addObserver:forKeyPath:` and does nothing else, and all three die with the
+    same stack — `swift_objc_classCopyFixupHandler` ← `alloc_class_for_subclass`
+    ← `objc_allocateClassPair` ← `_NSKVONotifyingCreateInfoWithOriginalClass`,
+    `EXC_BREAKPOINT`:
+
+    | Probe | Shape | Result |
+    | --- | --- | --- |
+    | A | non-`final`, over `OakChooser` | traps |
+    | B | `final`, over `OakChooser` | traps |
+    | C | non-`final`, over `OakScopeBarViewController` | traps |
+
+    So neither of the two narrower explanations holds. **It is not `final`** — A
+    traps without it, which also means this is *not* the alpha.16 heap-corruption
+    bug `dc66d10d` fixed, despite landing in the same runtime handler (that one
+    corrupted malloc; this one traps outright). **It is not `OakChooser`** — C
+    subclasses a bare `NSViewController` with no windows, no bindings and no
+    machinery, and dies identically. The module boundary is the whole cause, and
+    `-bind:` was only one way of reaching it.
+
+    **`addObserver:` is the trigger, not the callback.** Nothing was ever set in
+    these probes; registering the observation is enough. So the guard is not
+    "avoid bindings" — it is that the object must never be observed *at all*,
+    by anything, including AppKit doing it behind your back (see
+    `-[NSWindow _bindTitleToContentViewController]` in the alpha.16 write-up).
+
+    **The root fix is not one line either.** Letting the app `import OakAppKit`
+    and subclass the real Swift class — rather than the hand declaration — was
+    tried. It needs `open` on the class, which cascades (`loadView` and the
+    `NSMenuItemValidation` conformance must go public), and then the app's Swift
+    compile fails to build at all: `google::libc_allocator_with_realloc` has
+    different definitions in it and in the `TMText` module shim. Exporting real
+    Swift modules to the app is a build-system project, not a refactor.

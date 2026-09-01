@@ -777,6 +777,39 @@ specs.each do |t|
   puts "linked #{t['name']} [#{k}]: #{closure.size} libs, #{ext_libs.size} ext-libs, #{fworks.size} frameworks#{swift_ld.empty? ? '' : ', +swift-runtime'}"
 end
 
+# Pass 2b: lib -> lib edges, but ONLY where one target's Swift imports another's
+# module.
+#
+# Pass 2 deliberately adds no lib<->lib edges, and that stays right for *linking*:
+# the require graph has cycles and ld64 resolves static-archive cycles at link
+# time. It is wrong for *compiling*. When a target's Swift says `import Foo`, the
+# importer needs Foo.swiftmodule to already be in BUILT_PRODUCTS_DIR, and with no
+# edge Xcode is free to schedule the two targets in parallel.
+#
+# That makes it a race rather than an outright failure, which is why it survived
+# this long: an incremental build finds the module left over from last time and
+# passes. Only a clean build can lose. Found by wiping build/Release before
+# cutting v2026.9-alpha.21 — FileBrowser's SCMManager.swift does
+# `import TMFileReference`, the build failed with "no such module", and the very
+# next build succeeded with nothing changed.
+#
+# Derived from the sources rather than listed, so the next such import is ordered
+# the day it is written. It cannot introduce a cycle: Swift modules cannot import
+# one another circularly, so this subgraph is acyclic by construction.
+SWIFT_IMPORT = /^[[:space:]]*(?:@[A-Za-z_][A-Za-z0-9_]*[[:space:]]+)*import[[:space:]]+(?:(?:typealias|struct|class|enum|protocol|let|var|func)[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)/
+
+specs.select { |t| kind(t) == :lib }.each do |t|
+  target = targets[t["name"]] or next
+
+  imported = t["sources"].select { |s| s.end_with?(".swift") }.flat_map do |s|
+    path = File.join(ROOT, s)
+    File.exist?(path) ? File.read(path).scan(SWIFT_IMPORT).flatten : []
+  end.uniq.select { |m| m != t["name"] && targets[m] && BY_NAME[m] && kind(BY_NAME[m]) == :lib }
+
+  imported.each { |m| target.add_dependency(targets[m]) }
+  puts "swift-module deps #{t['name']}: #{imported.join(' ')}" unless imported.empty?
+end
+
 # Pass 3: bundle layout for app/plugin/appex targets. Each `files`/`copy` entry
 # becomes a Copy Files build phase. Plain inputs are copied from source; @refs are
 # built products (tools/bundles) copied in + a target dependency so they build

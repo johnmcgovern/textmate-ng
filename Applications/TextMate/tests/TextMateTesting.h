@@ -7,6 +7,7 @@
 #import "../src/AboutWindowController.h"
 #import "../src/Favorites.h"
 #import "../src/FavoritesSupport.h"
+#import "../src/TMPlugInController.h"
 #import <Cocoa/Cocoa.h>
 
 @interface AboutWindowController (Testing)
@@ -28,4 +29,12 @@
 @interface FavoriteChooser (Testing)
 @property (nonatomic) NSArray* sourceListLabels;
 @property (nonatomic) NSUInteger sourceIndex;
+@end
+
+@interface TMPlugInController (Testing)
+// -loadPlugInAtPath: is the whole decision — blacklist, API version, already
+// loaded — and it is declared only in the .mm. loadedPlugIns is what it decides
+// about.
+@property (nonatomic) NSMutableDictionary* loadedPlugIns;
+- (void)loadPlugInAtPath:(NSString*)aPath;
 @end

@@ -1,9 +1,6 @@
 #import "TMPlugInController.h"
+#import "TMPlugInSupport.h"
 #import <OakAppKit/NSAlert Additions.h>
-#import <OakSystem/application.h>
-#import <crash/info.h>
-#import <io/path.h>
-#import <ns/ns.h>
 #import <oak/debug.h>
 
 static NSInteger const kPlugInAPIVersion = 2;
@@ -12,17 +9,6 @@ static NSString* const kUserDefaultsDisabledPlugInsKey = @"disabledPlugIns";
 @interface TMPlugInController ()
 @property (nonatomic) NSMutableDictionary* loadedPlugIns;
 @end
-
-static id CreateInstanceOfPlugInClass (Class cl, TMPlugInController* controller)
-{
-	if(id instance = [cl alloc])
-	{
-		if([instance respondsToSelector:@selector(initWithPlugInController:)])
-				return [instance initWithPlugInController:controller];
-		else	return [instance init];
-	}
-	return nil;
-}
 
 @implementation TMPlugInController
 + (instancetype)sharedInstance
@@ -67,8 +53,8 @@ static id CreateInstanceOfPlugInClass (Class cl, TMPlugInController* controller)
 		{
 			if([[bundle objectForInfoDictionaryKey:@"TMPlugInAPIVersion"] intValue] == kPlugInAPIVersion)
 			{
-				std::string const crashedDuringPlugInLoad = path::join(path::temp(), "load_" + to_s(identifier));
-				if(path::exists(crashedDuringPlugInLoad))
+				NSString* crashedDuringPlugInLoad = [TMPlugInSupport crashMarkerPathForIdentifier:identifier];
+				if(access(crashedDuringPlugInLoad.fileSystemRepresentation, F_OK) == 0)
 				{
 					NSAlert* alert = [NSAlert tmAlertWithMessageText:[NSString stringWithFormat:@"Move “%@” plug-in to Trash?", name ?: identifier] informativeText:@"Previous attempt of loading the plug-in caused abnormal exit. Would you like to move it to trash?" buttons:@"Move to Trash", @"Cancel", @"Skip Loading", nil];
 					NSInteger choice = [alert runModal];
@@ -76,19 +62,18 @@ static id CreateInstanceOfPlugInClass (Class cl, TMPlugInController* controller)
 						[NSFileManager.defaultManager trashItemAtURL:[NSURL fileURLWithPath:aPath] resultingItemURL:nil error:nil];
 
 					if(choice != NSAlertThirdButtonReturn) // "Skip Loading"
-						unlink(crashedDuringPlugInLoad.c_str());
+						unlink(crashedDuringPlugInLoad.fileSystemRepresentation);
 
 					if(choice != NSAlertSecondButtonReturn) // "Cancel"
 						return;
 				}
 
-				close(open(crashedDuringPlugInLoad.c_str(), O_CREAT|O_TRUNC|O_WRONLY|O_CLOEXEC));
+				close(open(crashedDuringPlugInLoad.fileSystemRepresentation, O_CREAT|O_TRUNC|O_WRONLY|O_CLOEXEC));
 
 				NSError* loadError;
 				if([bundle loadAndReturnError:&loadError])
 				{
-					crash_reporter_info_t info("bad plug-in: %s", [identifier UTF8String]);
-					if(id instance = CreateInstanceOfPlugInClass([bundle principalClass], self))
+					if(id instance = [TMPlugInSupport instantiatePlugInClass:[bundle principalClass] controller:self identifier:identifier])
 					{
 						self.loadedPlugIns[identifier] = instance;
 					}
@@ -102,7 +87,7 @@ static id CreateInstanceOfPlugInClass (Class cl, TMPlugInController* controller)
 					NSLog(@"Failed to load ‘%@’ (%@): %@", name ?: identifier, [aPath stringByAbbreviatingWithTildeInPath], [loadError localizedDescription]);
 				}
 
-				unlink(crashedDuringPlugInLoad.c_str());
+				unlink(crashedDuringPlugInLoad.fileSystemRepresentation);
 			}
 			else
 			{
@@ -216,7 +201,7 @@ static id CreateInstanceOfPlugInClass (Class cl, TMPlugInController* controller)
 			alert.informativeText = [NSString stringWithFormat:@"To activate “%@” you will need to relaunch TextMate.", plugInName];
 			[alert addButtons:@"Relaunch", @"Cancel", nil];
 			if([alert runModal] == NSAlertFirstButtonReturn) // "Relaunch"
-				oak::application_t::relaunch();
+				[TMPlugInSupport relaunchApplication];
 		}
 		else
 		{

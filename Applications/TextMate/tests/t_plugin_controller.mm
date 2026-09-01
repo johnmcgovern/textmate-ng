@@ -1,4 +1,6 @@
 #import "TextMateTesting.h"
+#import "TMPlugInTestClasses.h"
+#import "../src/TMPlugInSupport.h"
 #import <ns/ns.h>
 #import <Cocoa/Cocoa.h>
 
@@ -159,4 +161,45 @@ void test_plugin_a_skipped_plugin_writes_no_crash_marker ()
 	[controller loadPlugInAtPath:make_plugin(@"Skipped.tmplugin", @"com.example.skipped", @1)];
 
 	OAK_ASSERT_EQ((bool)[NSFileManager.defaultManager fileExistsAtPath:marker], false);
+}
+
+// ==================================================================
+// = TMPlugInSupport — the extracted C++ boundary                   =
+// ==================================================================
+
+// path::join(path::temp(), "load_" + identifier). The shape matters because the
+// marker is looked for by name on the next launch: change it and every plug-in
+// that crashed during a load is silently forgiven.
+void test_plugin_support_marker_path_is_load_plus_identifier_in_temp ()
+{
+	NSString* marker = [TMPlugInSupport crashMarkerPathForIdentifier:@"com.example.marker"];
+	OAK_ASSERT_EQ(to_s([marker lastPathComponent]), std::string("load_com.example.marker"));
+	OAK_ASSERT_EQ((bool)[marker hasPrefix:@"/"], true);
+	OAK_ASSERT_EQ(to_s([TMPlugInSupport crashMarkerPathForIdentifier:@"other"]), to_s([[marker stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"load_other"]));
+}
+
+// -initWithPlugInController: is preferred, and the controller reaches the plug-in.
+void test_plugin_support_prefers_the_controller_initialiser ()
+{
+	TMPlugInController* controller = fresh_controller();
+	id instance = [TMPlugInSupport instantiatePlugInClass:TMPlugInTestPlugIn.class controller:controller identifier:@"com.example.plugin"];
+
+	OAK_ASSERT_EQ((bool)[instance isKindOfClass:TMPlugInTestPlugIn.class], true);
+	OAK_ASSERT_EQ((bool)(((TMPlugInTestPlugIn*)instance).controller == controller), true);
+}
+
+// A class that does not implement it gets -init, not a crash.
+void test_plugin_support_falls_back_to_plain_init ()
+{
+	id instance = [TMPlugInSupport instantiatePlugInClass:TMPlugInTestBarePlugIn.class controller:fresh_controller() identifier:@"com.example.bare"];
+
+	OAK_ASSERT_EQ((bool)[instance isKindOfClass:TMPlugInTestBarePlugIn.class], true);
+	OAK_ASSERT_EQ((bool)((TMPlugInTestBarePlugIn*)instance).plainInitWasUsed, true);
+}
+
+// [bundle principalClass] is Nil for a bundle that declares none, and the
+// original's `if(id instance = [cl alloc])` swallowed that. It still must.
+void test_plugin_support_a_nil_class_yields_nil ()
+{
+	OAK_ASSERT_EQ((bool)([TMPlugInSupport instantiatePlugInClass:Nil controller:fresh_controller() identifier:@"com.example.none"] == nil), true);
 }

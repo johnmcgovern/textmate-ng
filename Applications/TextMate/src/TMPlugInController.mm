@@ -111,7 +111,11 @@ static id CreateInstanceOfPlugInClass (Class cl, TMPlugInController* controller)
 		}
 		else
 		{
-			NSLog(@"Skip plug-in at path: %@ (already loaded %@)", identifier, [self.loadedPlugIns[identifier] bundlePath]);
+			// -bundlePath on the *instance*, which is whatever the plug-in's principal
+			// class is: nothing in the TMPlugIn protocol provides it and NSObject does
+			// not either, so this raised. +bundleForClass: answers the same question —
+			// where the loaded one came from — and always works.
+			NSLog(@"Skip plug-in at path: %@ (already loaded %@)", identifier, [[NSBundle bundleForClass:[self.loadedPlugIns[identifier] class]] bundlePath]);
 		}
 	}
 	else

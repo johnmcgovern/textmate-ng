@@ -49,6 +49,15 @@ static NSUInteger const kOakSourceIndexFavorites      = 1;
 - (KVDB*)sharedProjectStateDB
 {
 	NSString* appSupport = [[NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) objectAtIndex:0] stringByAppendingPathComponent:@"TextMate"];
+
+	// KVDB does not create the directory, and sqlite3_open fails rather than
+	// creating one, so this threw KVDBExceptionDBOpen wherever ~/Library/
+	// Application Support/TextMate did not already exist. Nothing guarantees it:
+	// oak::application_t::support only joins the path. In the app some other
+	// subsystem has always got there first; on a CI runner nothing had, which is
+	// how this surfaced.
+	[NSFileManager.defaultManager createDirectoryAtPath:appSupport withIntermediateDirectories:YES attributes:nil error:nil];
+
 	return [KVDB sharedDBUsingFile:@"RecentProjects.db" inDirectory:appSupport];
 }
 

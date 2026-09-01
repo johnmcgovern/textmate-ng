@@ -2,6 +2,39 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-01 (v2026.9-alpha.21)
+
+**First release of September, so the version rolls from 2026.8 to 2026.9.** That is
+the calendar scheme working as intended rather than anything new, but it is the first
+time the fork has crossed a month, and the ordering it depends on now has a test
+behind it instead of a claim in the alpha.1 notes.
+
+**Three real fixes**, all found by writing tests for code before rewriting it rather
+than by anyone hitting them:
+
+* **Favourites that are symlinks** — which is every actual favourite, as opposed to a
+  recent project — were built by way of an uninitialised error variable. Cocoa fills
+  an error out-parameter only on failure, so the success path read whatever happened
+  to be on the stack and asked it for a description. It survived in the shipping app
+  because that slot is almost always zero. Almost.
+* **Installing the same plug-in twice** raised an exception instead of logging that it
+  was already loaded. Reachable in ordinary use: plug-ins are looked for in every
+  Application Support domain and then inside the app, so the same one present in two
+  of those places hit it.
+* **Open Recent Project on a brand-new install** could fail to open its database when
+  `~/Library/Application Support/TextMate` did not exist yet. Nothing guaranteed that
+  directory existed; now this code makes it.
+
+**Rewritten in Swift this time:** the About window — its five pages, the tab cycling
+and the toolbar — and the whole of plug-in loading and installing. Nothing is meant
+to look or behave differently.
+
+**Where to look if something is off.** The About window under ⌘? and its Bundles,
+Registration and Contributions pages, including ⌘⇧] / ⌘⇧[ to cycle them. Open Recent
+Project under ⌘⇧O, both of its lists. And if you run any `.tmplugin`, that it still
+loads at launch — the Dialog plug-ins that ship inside the app exercise the same path
+and are checked before each release.
+
 ## 2026-08-31 (v2026.8-alpha.20)
 
 **Entirely the ongoing Objective-C++ to Swift rewrite.** alpha.19 rewrote what you

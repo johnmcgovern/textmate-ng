@@ -7,14 +7,6 @@
 
 	IBOutlet NSPanel* goToLinePanel;
 	IBOutlet NSTextField* goToLineTextField;
-
-	struct
-	{
-		std::string filter_string;
-		BOOL key_equivalent;
-		BOOL all_scopes;
-		int search_type;
-	} bundleItemSearch;
 }
 
 - (IBAction)orderFrontFindPanel:(id)sender;

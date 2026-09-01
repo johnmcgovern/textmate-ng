@@ -19,15 +19,16 @@ about that port, which is a fair warning about how much to trust the rest._
   The old note here said the id "must not move again"; it moved once more, on
   purpose, to match the product name while the audience was still alpha-only.
   Now it does match, so there is no third move worth making.
-- **Eight releases are published:** alpha.7 through alpha.14, the newest
-  `v2026.8-alpha.14` on 2026-08-18. (alpha.3–alpha.5 shipped 2026-08-02/03 but
-  were never backfilled to GitHub — see the end of "Distribution".) **3 commits
-  are unreleased and unpushed as of 2026-08-18** — the SCMManager shim, the
-  preference-class `final` fix, and the window-chrome theme change. Count what is
-  unreleased with `git rev-list --count "$(git tag | sort -V | tail -1)"..HEAD`
-  rather than by assertion — that number has been stated wrong here three times,
-  this bullet was stale for five releases and then again for two, and it is
-  cheaper to run the command than to trust the sentence.
+- **Fifteen releases are published:** alpha.7 through alpha.21, the newest
+  `v2026.9-alpha.21` on 2026-09-01 — the first release of September, so the
+  calendar version rolled 2026.8 → 2026.9. (alpha.3–alpha.5 shipped 2026-08-02/03
+  but were never backfilled to GitHub — see the end of "Distribution".)
+  **Do not trust the count in this sentence.** It has been stated wrong here
+  four times and was stale for five releases, then two, then seven. Run the
+  commands instead — they take a second each:
+
+      gh release list --limit 50 | wc -l                                  # published
+      git rev-list --count "$(git tag | sort -V | tail -1)"..HEAD         # unreleased
   **The crashes are understood and shipped fixed in alpha.15 — see "RESOLVED"
   below.** They were one heap-corruption bug (`dc66d10d`), reproduced deterministically
   and gone on HEAD. The `final` audit that completes the fix landed as `142b0059` (56
@@ -1138,6 +1139,127 @@ on the class (which cascades through overrides and protocol conformances) and
 then does not build at all: `google::libc_allocator_with_realloc` has different
 definitions in the app's Swift compile and in the `TMText` module shim. Whoever
 picks this up is fixing the C++ module farm first, not the chooser.
+
+## Session 2026-09-01 — alpha.21, and three things that were quietly broken
+
+**Shipped `v2026.9-alpha.21`** (`d235c784`), the fifteenth published release and
+the first of September, so the calendar version rolled 2026.8 → 2026.9. Notarized,
+stapled, Gatekeeper-accepted, full ten-surface smoke pass done before publishing.
+
+### Rule 56 is settled, and it is worse than it looked
+
+It began as one crash and an inference. Three throwaway app-target subclasses,
+each doing nothing but a single `-addObserver:forKeyPath:`, settled it — all
+three trap with an identical stack in `swift_objc_classCopyFixupHandler`. The
+table and the reasoning are in **rule 56**; the consequences for
+`FavoriteChooser` are in the section above.
+
+What matters for planning: it is **not** `final` (so it is a different bug from
+the alpha.16 heap corruption despite the same handler), it is **not**
+`OakChooser`, and **registration is the trigger** — nothing was ever set. So the
+guard is not "avoid bindings", it is that such an object must never be observed
+at all, by anything, including AppKit doing it on its own.
+
+The root fix was scoped and rejected as out of proportion: letting the app
+`import` a framework's real Swift module needs `open` on the class (which
+cascades through overrides and protocol conformances) and then does not build at
+all, because `google::libc_allocator_with_realloc` has different definitions in
+the app's Swift compile and in the `TMText` module shim. **That is a build-system
+project, not a refactor**, and it is the thing standing between this port and
+every remaining app-target Swift subclass.
+
+### `TMPlugInController` is ported (235 lines out)
+
+Pin → fix → extract → translate, four commits, `bf5d09a9`..`b18f1917`.
+`TMPlugInSupport` holds the three C++ touchpoints. The crash reporter is the one
+that needed a *boundary* rather than a helper: it is RAII, so the extracted
+method has to be the whole scope it guards, which narrows the note to the only
+code that can run a plug-in's own `-init`.
+
+The header had to split. `TMPlugInAPI.h` is the two protocols and is what the
+bridging header takes; `TMPlugInController.h` is the hand declaration and stays
+out of it (rule 43). **The protocol needed `NS_SWIFT_NAME`** because it shares its
+name with the class — Swift resolved the conformance to the class and rejected it
+as multiple inheritance. The ObjC name is untouched, so plug-ins are unaffected.
+
+Rule 8 came free: the app ships `Dialog.tmplugin` and `Dialog2.tmplugin`, so
+launching it drives the whole path, and `lsof` on the Release build shows both
+dylibs loaded.
+
+### CI had been red for fourteen consecutive pushes
+
+Nobody had looked. Every run since `a7d5ba54` failed, always on the same single
+test, and the local suite was green the whole time — the same shape as the
+Settings crash, one layer out.
+
+The cause was not the test. `-sharedProjectStateDB` hands KVDB a directory it
+assumes exists; `-initWithSQLFile:inDirectory:` calls `-createDatabase`
+immediately, that calls `sqlite3_open`, and **sqlite3_open fails rather than
+creating a missing parent** (verified both ways with the `sqlite3` CLI). Nothing
+guarantees `~/Library/Application Support/TextMate` is there:
+`oak::application_t::support` only joins the path. In the app some other
+subsystem has always written there first. A CI runner starts with an empty home.
+Fixed in `be5f647a`; CI went green on the next run and has stayed green.
+
+**Two lessons worth keeping.** First, *check CI*: it was telling the truth for a
+day and a half. Second, this was not reproducible locally — the directory exists
+on this machine, `NSHomeDirectory()` ignores an overridden `HOME` so a fake-home
+run proves nothing (it never wrote to the fake home at all), and moving the real
+one aside is not worth the risk to actual user data. **The runner was the only
+environment that could confirm it**, and that is a legitimate place to be, as
+long as you say so rather than claiming a local verification you did not do.
+
+### A clean Release build was a race, and had been for a long time
+
+`no such module 'TMFileReference'`. Pass 2 of the seed adds no lib↔lib dependency
+edges on purpose, and for *linking* that is right. It is wrong for *compiling*:
+when a target's Swift says `import Foo`, the importer needs `Foo.swiftmodule`
+already in `BUILT_PRODUCTS_DIR`, and with no edge Xcode may schedule both in
+parallel.
+
+Being a race is exactly why it survived — an incremental build finds the module
+left over from last time and passes, and **nothing here does a clean build except
+cutting a release**. Fixed in `00f9fda1` by deriving the edges from the sources;
+today that is exactly one, `FileBrowser → TMFileReference`. It cannot cycle,
+because Swift modules cannot import one another circularly.
+
+**It was proved by A/B, not by a retry**, and that distinction is the point: for
+a race, "it worked once" is worthless. Same wipe, same machine, back to back —
+stash the fix, wipe, `** BUILD FAILED **`; restore it, wipe, `** BUILD SUCCEEDED **`.
+
+### Calendar versioning is now pinned rather than claimed
+
+The alpha.1 notes claimed `year.month` plus a running `-alpha` counter "orders
+correctly" for software update and bundle requirements. Nothing tested it, and
+today was the first month boundary. `t_OakCompareVersionStrings.mm` now walks
+every shipped version in release order plus the rollovers still ahead. The
+load-bearing case is **9 → 10**, where a string sort puts `2026.10` first;
+`version::less` splits on `.-+` and compares numerically, so it is fine. December
+→ January and alpha-before-final are pinned too. It passed as written.
+
+### Open, and deliberately not acted on
+
+- **About ▸ Bundles renders oddly** — a heading, one grey bar, and the desktop
+  visible through the content area. **Not a regression**: the shipped alpha.20,
+  run from its own zip, renders identically. The Changes page shows the same
+  translucency. Pre-existing and cosmetic; nobody has looked at why.
+- **`b67fa0d0`'s message says the SoftwareUpdate bundle went "2 → 6 tests".** It
+  went **5 → 6** — three test functions in that file plus two in
+  `t_software_update_threading.mm`. The code and the suite count are right; only
+  that message is wrong, and it is left alone rather than force-pushed over.
+- **A macOS prompt was declined by inaction** — *"Claude is requesting to bypass
+  the system private window picker and directly access your screen and audio."*
+  That is a security setting and the user's call. `screencapture` worked without
+  it; the prompt reappears on each capture.
+
+### Numbers, as measured on 2026-09-01
+
+| | |
+| --- | --- |
+| Full suite | **947 tests, 0 failures, 0 crashes** |
+| Published releases | 15 (alpha.7 … alpha.21) |
+| Swift, non-test | 94 files, 27,198 lines |
+| App shell `src/*.mm` | 2,961 lines across 12 files |
 
 ## Before cutting a release: the five-minute smoke pass
 

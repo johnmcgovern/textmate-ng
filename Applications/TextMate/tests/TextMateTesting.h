@@ -5,6 +5,7 @@
 // compiles an application's own sources into its test bundle (73f8318e). Before
 // that no class declared under Applications/ was reachable from a test at all.
 #import "../src/AboutWindowController.h"
+#import "../src/AppController.h"
 #import "../src/Favorites.h"
 #import "../src/FavoritesSupport.h"
 #import "../src/TMPlugInController.h"
@@ -39,4 +40,13 @@
 // never replace it.
 @property (nonatomic, readonly) NSMutableDictionary* loadedPlugIns;
 - (void)loadPlugInAtPath:(NSString*)aPath;
+@end
+
+@interface AppController (Testing)
+// Declared only in the .mm. -mainMenu is the whole menu bar; the four NSMenu
+// ivars are what -menuNeedsUpdate: dispatches on, and MBCreateMenu writes them
+// through `.submenuRef` while building.
+- (NSMenu*)mainMenu;
+- (NSMenu*)applicationDockMenu:(NSApplication*)anApplication;
+- (BOOL)validateMenuItem:(NSMenuItem*)item;
 @end

@@ -117,7 +117,11 @@ static NSString* MBInternalDumpMenu (NSMenu* menu, NSInteger indent)
 				[row.other addObject:@".target = NSApp"];
 			else if(item.target == NSFontManager.sharedFontManager)
 				[row.other addObject:@".target = NSFontManager.sharedFontManager"];
-			else if(item.target == NSApp.delegate)
+			// The nil guard matters: NSApp.delegate is nil in a test process, so an
+			// unguarded comparison reports every *untargeted* item as targeting the
+			// delegate — which would let a port set .target and go unnoticed by a
+			// dump-comparison pin.
+			else if(item.target && item.target == NSApp.delegate)
 				[row.other addObject:@".target = NSApp.delegate"];
 			else if(item.target != nil)
 				[row.other addObject:@".target = «unknown»"];

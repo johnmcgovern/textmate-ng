@@ -1,0 +1,4 @@
+MBMenu const items = {
+	{ @"New File", @selector(newDocumentAndActivate:), .target = «unknown» },
+	{ @"Open…", @selector(openDocumentAndActivate:), .target = «unknown» },
+};

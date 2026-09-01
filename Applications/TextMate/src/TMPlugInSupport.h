@@ -10,7 +10,7 @@
 //
 // The rest of the class is NSBundle, NSUserDefaults, NSAlert and four POSIX
 // calls, all of which Swift reaches on its own.
-#import <Cocoa/Cocoa.h>
+#import <Foundation/Foundation.h>
 
 NS_ASSUME_NONNULL_BEGIN
 

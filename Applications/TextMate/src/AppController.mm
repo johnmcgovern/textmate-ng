@@ -1,7 +1,6 @@
 #import "AppController.h"
 #import "OakMainMenu.h"
 #import "Favorites.h"
-#import "TMPlugInController.h"
 #import "RMateServer.h"
 #import <BundleEditor/BundleEditor.h>
 #import <BundlesManager/BundlesManager.h>

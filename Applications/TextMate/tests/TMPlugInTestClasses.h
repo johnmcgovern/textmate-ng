@@ -5,7 +5,7 @@
 // OakChooserTestSubclass.h gives: ide/gen_xctest.rb wraps each test file's body
 // in `namespace <basename>`, where ObjC declarations may not appear, but hoists
 // every #import to the top.
-#import "../src/TMPlugInController.h"
+#import "../src/TMPlugInAPI.h"
 
 // The real plug-in shape: takes the controller and keeps it.
 @interface TMPlugInTestPlugIn : NSObject <TMPlugIn>

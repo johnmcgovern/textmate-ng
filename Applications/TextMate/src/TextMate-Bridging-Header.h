@@ -15,3 +15,12 @@
 // plist/, oak/algorithm.h and boost, which this header's deliberately-minimal
 // prelude cannot parse. See AboutBundlesSupport.h.
 #include "AboutBundlesSupport.h"
+
+// The plug-in protocols. TMPlugInController.swift conforms to the first and
+// hands itself to plug-ins as `id <TMPlugInController>`; the class declaration
+// in TMPlugInController.h stays out of here (rule 43).
+#include "TMPlugInAPI.h"
+
+// The extracted C++ boundary the controller calls. Foundation-only, like
+// AboutBundlesSupport.h.
+#include "TMPlugInSupport.h"

@@ -35,6 +35,8 @@
 // -loadPlugInAtPath: is the whole decision — blacklist, API version, already
 // loaded — and it is declared only in the .mm. loadedPlugIns is what it decides
 // about.
-@property (nonatomic) NSMutableDictionary* loadedPlugIns;
+// Get-only, matching the Swift: the tests seed the dictionary through it, they
+// never replace it.
+@property (nonatomic, readonly) NSMutableDictionary* loadedPlugIns;
 - (void)loadPlugInAtPath:(NSString*)aPath;
 @end

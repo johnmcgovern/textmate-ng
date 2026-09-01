@@ -1,5 +1,5 @@
 #import "TMPlugInSupport.h"
-#import "TMPlugInController.h"
+#import "TMPlugInAPI.h"
 #import <OakSystem/application.h>   // oak::application_t::relaunch
 #import <crash/info.h>              // crash_reporter_info_t
 #import <io/path.h>                 // path::join / temp

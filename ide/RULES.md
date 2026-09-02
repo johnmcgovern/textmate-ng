@@ -1,4 +1,4 @@
-# The numbered rules — all 51, in one place
+# The numbered rules — all 59, in one place
 
 Earned across every port in this project — Find, DocumentWindowController,
 OakAppKit, FileBrowser, OakFilterList. They live here, in one file, so a survey reads the whole
@@ -13,7 +13,12 @@ end. The port-by-port narrative that earned each rule stays in its own handoff
 (`FIND_PORT_HANDOFF.md`, `FILEBROWSER_PORT_HANDOFF.md`); only the rule statements
 were consolidated here, verbatim, on 2026-08-18. Rules 50–51 were added on
 2026-08-20 from the OakFilterList port and are stated in full below, that handoff
-being NEXT_SESSION_HANDOFF.md.
+being NEXT_SESSION_HANDOFF.md. Rules 52–56 followed from OakRolloverButton,
+OakEncodingPopUpButton, OakOpenWithMenu, OakDocumentView and FavoriteChooser;
+rules 57–59 were added on 2026-09-02 from the AppController pin and extractions.
+
+(The count in the title has been wrong before — it said "51" while there were 56.
+If you add a rule, fix it, and remember rule 10 applies to this file too.)
 
 ---
 
@@ -658,3 +663,70 @@ knew.
     compile fails to build at all: `google::libc_allocator_with_realloc` has
     different definitions in it and in the `TMText` module shim. Exporting real
     Swift modules to the app is a build-system project, not a refactor.
+
+---
+
+## Rules 57–59 — the AppController pin and extractions (2026-09-02)
+
+All three are about the same failure: **trusting a thing that cannot tell you it
+is wrong** — the harness, the oracle, and the app check.
+
+57. **A multi-line string literal cannot live in a test file.**
+    `ide/gen_xctest.rb` emits a `#line N "<path>"` directive before *every* line
+    when it inlines a test, so a raw string literal reaches the compiler with
+    `#line` directives spliced through its middle. The first attempt at the
+    AppController menu golden failed with
+
+        expected: #line 122 "…/t_app_controller.mm"
+
+    as the menu's second line, which reads as nonsense until you open the
+    generated `_impl.mm`. Put the text in a file under `tests/fixtures/` and read
+    it back through `__FILE__` — the `#line` rewriting is precisely what keeps
+    `__FILE__` pointing at the source tree, and `network/tests/t_download.cc`
+    already does this for its fixtures. Better anyway: a golden becomes a
+    reviewable file in a diff instead of hundreds of lines of literal.
+    Third member of the rules 29/34 family — the harness rewrites test files, and
+    what it does is invisible from the file you are editing.
+
+58. **A pin is only as good as its oracle — verify the oracle first, and check it
+    is order-independent.** Two ways `MBDumpMenu` lied while building the
+    AppController golden, both found only by reading it:
+    - **A nil-vs-nil comparison read as a match.** `item.target == NSApp.delegate`
+      is true for *every untargeted item* when `NSApp.delegate` is nil, which it
+      is in a test process, so the dump claimed 248 items targeted the delegate.
+      A pin built on that would not have noticed a port that really did set
+      `.target`. Fixed with a nil guard before trusting it.
+    - **The dumper read process-global state, so it was not idempotent.**
+      `MBCreateMenu` *assigns* `NSApp.servicesMenu`, `.windowsMenu`, `.helpMenu`
+      and the shared font menu for `.systemMenu` items, and `MBDumpMenu` prints
+      `.systemMenu = …` by comparing against those globals. Build the menu twice
+      and build #2's Services submenu is no longer the one NSApp holds, so it
+      dumps as a plain delegate-owned submenu. The tests share one build, which
+      is also what the app does.
+    Generalise both: before making something a golden, ask what it *reads* that
+    the code under test does not own, and prove two runs agree.
+
+59. **A rule-8 check that cannot fail proves nothing — this is rule 40 applied to
+    the app run.** Twice in one session an app check was worthless and looked
+    fine:
+    - "The app launched and reached `-applicationDidFinishLaunching:`" would have
+      passed with the theme registration deleted entirely.
+    - The first theme probe resolved the *user's own saved* `universalThemeUUID`
+      and never touched the registration domain at all — the exact thing the
+      change put at risk.
+    The fix is the same as for a test: pick the observation that differs between
+    working and broken, and say what it would have shown. The run that settled it
+    logged the ordering *and* the registration domain, and caught the machine in
+    dark mode with no override, so the read demonstrably went through the
+    fallback.
+    **The technique that made this affordable: instrument, run, revert, do not
+    commit.** Three checks this session were probes added to production files,
+    read out of `log show`, then reverted before the commit — the settings paths,
+    the theme ordering, and a real `txmt://` round trip. State in the commit that
+    the probe was reverted, and quote what it printed.
+    Two practicalities. `screencapture` and System Events both need permissions
+    that may simply not be available, so do not plan a check around a screenshot;
+    `/usr/bin/log show --predicate 'process == "…"'` needs the *executable* name,
+    which here is `TextMate-NG`, not the target name. And **driving a code path
+    that ends in `[NSAlert runModal]` wedges the app** — with accessibility
+    unavailable the only way out is to kill it.

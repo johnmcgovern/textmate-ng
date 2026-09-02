@@ -146,7 +146,7 @@ Two diagnostic traps that cost real time, both worth remembering:
 
 ## Documentation map (read in this order)
 
-1. **The numbered rules — all 49 of them, now in one file: `ide/RULES.md`.**
+1. **The numbered rules — all 59 of them, now in one file: `ide/RULES.md`.**
    **Read it before surveying a framework.** They used to be split 1–22 in
    `ide/FIND_PORT_HANDOFF.md` and 23–49 in `ide/FILEBROWSER_PORT_HANDOFF.md`, and
    this entry pointed at one file while saying "22 of them" — so anyone following
@@ -154,7 +154,9 @@ Two diagnostic traps that cost real time, both worth remembering:
    fixed (2026-08-18): the rule statements were consolidated verbatim into
    `ide/RULES.md` and both handoffs now carry a pointer stub. Numbering is stable
    and cross-referenced by number everywhere — append new rules at the end of
-   `RULES.md`, never renumber.
+   `RULES.md`, never renumber. **When you append, fix the count in both places** —
+   this entry said "49" and the file's own title said "51" while there were 56.
+   Rule 10 applies to the documentation too.
 2. `PROJECT_PHASES.md` — the 6-phase roadmap and the running record. End state =
    Swift app shell over the kept C++ core. **Phase 4 is current** (Phases 1–3 and
    2.5/2.6 are done); Phase 6, the core engine, is deliberately skipped, which is
@@ -165,7 +167,12 @@ Two diagnostic traps that cost real time, both worth remembering:
 4. `ide/STREAM5_HOJSBRIDGE_PLAN.md` — the WKWebView migration, complete, with the
    two design questions it answered.
 5. `ide/gen_xctest.rb` + `ide/xctest_preamble.h` — how the OAK-style tests become
-   XCTest bundles, and why everything compiles as ObjC++ with ARC off.
+   XCTest bundles, and why everything compiles as ObjC++ with ARC off. **Three
+   rules are about what this script does to your test file behind your back:**
+   it re-runs stale code unless you re-seed (rule 29), it wraps the body in a C++
+   namespace so an `@interface` will not compile (rule 34), and it emits a
+   `#line` before *every* line, which destroys any multi-line string literal
+   (rule 57 — put goldens in `tests/fixtures/` and read them via `__FILE__`).
 
 ## How to build and run
 
@@ -1260,6 +1267,230 @@ load-bearing case is **9 → 10**, where a string sort puts `2026.10` first;
 | Published releases | 15 (alpha.7 … alpha.21) |
 | Swift, non-test | 94 files, 27,198 lines |
 | App shell `src/*.mm` | 2,961 lines across 12 files |
+
+## Survey (2026-09-02): AppController, and what its port actually costs
+
+Asked for as a read before committing to the port, because 874 lines carrying 15
+C++ touches is much lighter than "the centre of the app" suggests. It is lighter
+than that — and the blocker is somewhere else entirely.
+
+### The four files
+
+1,481 lines, 1,254 of them code. They are categories on one class so they move as
+a unit, but once the class is Swift the categories become plain extensions.
+
+| file | lines | code | what it is |
+| --- | --- | --- | --- |
+| `AppController.mm` | 874 | 758 | 343 lines of MBMenu DSL; the rest is plain AppKit plus three small C++ clusters |
+| `AppController Menus.mm` | 323 | 244 | half ports cleanly; `+initialize`; one small MBMenu literal |
+| `AppController Documents.mm` | 220 | 194 | six clean methods and `handleTxMtURL:` |
+| `AppController Commands.mm` | 64 | 58 | **not portable at all** |
+
+### The blocker is MenuBuilder, not scattered C++
+
+**`-mainMenu` is 335 lines building 248 items and naming 143 distinct
+selectors**, all of it `MBMenu` — `std::vector<MBMenuItem>`, a struct with
+`NSMenu* __strong*` out-pointers and a nested `MBMenu`, populated with C++
+designated-initialiser syntax. `-applicationDockMenu:` adds 8 more and
+`-themesMenuNeedsUpdate:` about 10. Rule 36 was checked: MenuBuilder has exactly
+two headers and no ObjC-shaped sibling. So ~24% of the four files can never be
+Swift while MenuBuilder is what it is.
+
+**And there is an ordering deadlock.** This file says (above) *"MenuBuilder goes
+last, once its ObjC++ callers are gone."* There are exactly four live
+`MBCreateMenu` call sites: three are AppController, and the fourth is
+`FileBrowserViewControllerCxx.mm`, whose own comment declares it **permanent**
+ObjC++. So MenuBuilder is waiting on AppController and AppController's menus are
+waiting on MenuBuilder. One of them has to give.
+
+Prior art is consistent and says hand-roll: Find, DocumentWindowController,
+CommitWindow, Preferences and OTVStatusBar all reproduce `MBCreateMenuItem`'s
+defaults by hand, each with a comment saying why. But those were 15–20 items and
+rule 12 exists because those defaults bite. 248 items is a different animal —
+except that `MBDumpMenu` now makes it verifiable rather than careful.
+
+### `AppController Commands.mm` cannot be ported, and the reason is not rule 15
+
+The handoff flagged its `oak::uuid_t const&` block parameter (rule 15). That is
+real and it is the *least* of it. `-performBundleItem:(bundles::item_ptr)` is a
+responder-chain selector that OakTextView, DocumentWindow and BundleEditor all
+send, and its body runs `parse_command(item)` into
+`-[OakCommand initWithBundleCommand:(bundle_command_t const&)]` plus
+`item->bundle_variables()` → `std::map`. That is **rule 37**: C++-typed on both
+sides. It could not be Swift with the block removed. 64 lines that stay as an
+ObjC++ category, permanently — the BEInterop recipe.
+
+### `RMateServer.mm` and `ODBEditorSuite.mm`: no, and plainly
+
+Both were asked about with low confidence, and the code agrees with the low
+confidence.
+
+- **`RMateServer.mm` (639)** has **zero ObjC classes.** Not one `@interface`. It
+  is `std::function`, `std::shared_ptr`, `socket_t`, an anonymous namespace, raw
+  `new`/`delete this` and dispatch sources, in a `.mm` only because it touches
+  `OakDocument`. Its entire public surface is one free function. There is nothing
+  to port.
+- **`ODBEditorSuite.mm` (189)** is the same shape: zero ObjC classes, one
+  exported free function taking `AppleEvent const*`, an RAII `AEDesc` wrapper
+  with C++ default arguments, `delete this` from inside a notification block, and
+  a `#pragma pack(2)` struct reinterpret-cast out of a byte buffer.
+
+`OakMainMenu.mm` (81) was not on the list but is adjacent and also no: ~30 lines
+of code under 50 of comment, all `bundles::query` + `crash_reporter_info_t` +
+`OakShowMenuForBundleItems`.
+
+`GetURLScriptCommand.mm` (13) is clean and rides along with the flip.
+
+### The shape, and what is already done
+
+Flip, do not peel — rule 41 blocks peeling anything declared in `AppController.h`
+anyway, and rule 56 does *not* apply here (the superclass is NSObject, so this is
+the `AboutWindowController`/`TMPlugInController` shape that already works).
+
+Steps 1–4 are **done** (`0e136f94`, `8a86de5e`, `4cbc4f8f`, `00f06a22`,
+`5b064210`). Step 5 is the flip and is the next real work:
+
+1. ~~Delete the dead `bundleItemSearch` ivar.~~
+2. ~~Pin the menu and selector surface.~~
+3. ~~`+initialize` → explicit registration (rule 24).~~
+4. ~~Extract the C++ from `-applicationWillFinishLaunching:` and
+   `-handleTxMtURL:` (rule 25).~~
+5. Flip to Swift, keeping two ObjC++ categories: the menu DSL (~353 lines) and
+   `AppController Commands.mm` (58). No `final` (rule 49, nib-instantiated).
+
+Expect roughly **900 lines Swift, ~400 permanent ObjC++**. Getting past that
+needs four cross-framework additions, each small, together a second session: an
+ObjC-shaped `scopeContext` on OakTextView; exposing BundleEditor's existing
+`-revealItem:(TMBundleItem*)`; a `semanticClass` property and a scoped query on
+`TMBundleItem`; and an array-taking `-addButtons:` in OakAppKit.
+
+### Two non-C++ blockers that a C++ survey does not find
+
+Both are recorded in `AppControllerSupport.h` and neither is solved:
+
+- **`-[NSAlert addButtons:…, nil]` is an ObjC variadic** (rule 16), and
+  `NSAlert (Other)` declares *nothing but* variadics, so there is no sibling to
+  switch to. OakAppKit needs an array-taking spelling.
+- **`RegisterDefaults()`, `OakOpenDocuments()` and `DidHandleODBEditorEvent()`
+  are C++-linkage free functions.** Rule 19 says Swift can call a global, but
+  that is unsettled for a mangled C++ symbol under objcxx interop — `nm` on
+  libMenuBuilder.a shows `__Z10MBDumpMenuP6NSMenu`, so these are mangled too.
+  Needs a rule-55 probe or a one-line shim each. `OakOpenDocuments` also has a
+  **C++ default argument** (rule 19's corollary), and its only three call sites
+  are inside these files, so it can simply become a class method.
+
+## Session 2026-09-02 — the AppController prep, and three ways tooling lied
+
+Five commits, all pushed, **CI green on every one**. Suite **947 → 971**, 0
+failures, 0 crashes. `AppController Documents.mm` is down to **zero** C++.
+
+### The dead ivar that made the class look unportable
+
+`AppController.h` declared a `{ std::string; BOOL; BOOL; int; } bundleItemSearch`
+ivar block. It is referenced **nowhere** — grepped repo-wide across
+`.mm/.m/.h/.cc/.swift` and `MainMenu.xib`. That struct was the whole of the
+rule-20 storage blocker the header advertised, and it has been reading as
+"AppController cannot be ported" in every survey of the app shell. One-line
+deletion (`0e136f94`). The header now has exactly one C++ token left.
+
+### The pin, and the three things it found
+
+`8a86de5e`. Eight tests: the whole main menu and dock menu as normalised
+`MBDumpMenu` goldens in `tests/fixtures/`, set equality on the 15 of 143 menu
+selectors AppController answers, the 33 selectors reached by name from elsewhere,
+and the find-option tags by value against `find::options_t` (rule 5 — the menu
+writes `.tag = 2/8/4/128` as bare literals, upstream, and nothing had ever
+checked them).
+
+**The menu itself was clean.** Three of the previous four files had a real bug;
+this one did not. What it found was tooling:
+
+1. **`MBDumpMenu` reported every untargeted item as targeting the app delegate**
+   (nil == nil). Fixed — see rule 58.
+2. **A multi-line literal cannot live in a test file.** See rule 57.
+3. **Building the menu twice in one process is not idempotent.** See rule 58.
+
+Rule 54 also caught me in the act: replacing every `[[AppController new] mainMenu]`
+with the shared accessor rewrote the accessor's own body into unbounded
+recursion. Reading back the edit is what found it.
+
+### `+initialize` → explicit registration
+
+`4cbc4f8f`. Body verbatim into `+setupThemeDefaultsAndObservers`, `dispatch_once`,
+called from the top of `-applicationWillFinishLaunching:`. The risk is timing,
+not the diff: the only in-process reader of those defaults is
+`-[OakTextView effectiveThemeUUID]`, and the earliest an OakTextView exists is
+session restore, at the *end* of that same method.
+
+Proved by probe, because a launch alone would have passed with the registration
+deleted (rule 59): setup at `23:42:11.534`, first theme read at `.656`, the
+registration domain holding both values, and the resolved theme *was*
+`kTwilightThemeUUID` — dark mode, no user override, so the read went through the
+fallback.
+
+### The two extractions
+
+`00f06a22` and `5b064210`. `AppControllerSupport` takes the settings paths, the
+DefaultBundles unpack and the session-restore marker; `TxMtURLSupport` takes the
+txmt:// query parsing, the selection string and the file:// prefix walk. Fourteen
+new tests, all mutation-checked.
+
+**The boundary that turned out to be unnecessary** is the useful part.
+`-handleTxMtURL:` ends in `-showDocument:andSelect:inProject:bringToFront:`,
+whose selection argument is `text::range_t const&` — the obvious shim. But that
+method's entire use of the range is `aDocument.selection = to_ns(range)`, and
+`OakDocument.selection` is an NSString property. So the caller sets `.selection`
+and uses the plain `-showDocument:inProject:bringToFront:`, which forwards an
+undefined range and skips that assignment. Identical behaviour, no C++, no new
+API in DocumentWindow. **Rule 36 fired three times this session** — check what
+the callee already offers before designing a boundary for it.
+
+Two faithfulness notes carried in the code rather than assumed: `path` is
+deliberately *not* nil-guarded at the txmt call site, because `to_s(nil)` is
+`NULL_STR` and that is exactly what `path::is_directory`/`path::exists` used to
+receive; and the two file:// prefix loops keep their order, because a tilde URL
+matches a *root* prefix first and is then overwritten.
+
+### Recorded, not fixed
+
+- **`txmt://open?line=0`** — and any non-numeric line — yields the selection
+  string `"0"`. `atoi` answers 0, the `-1` is applied to a `size_t` so it wraps
+  to `SIZE_MAX`, and printing adds 1 back. Shipped behaviour, pinned by a test,
+  and precisely **rule 3**: a Swift port using `Int` would trap or emit `-1`.
+- **`find::full_words` is unreachable from the menu.** `-validateMenuItem:`
+  handles it, no menu item carries tag 1, and there is no Whole Word item.
+  Pinned as an assertion that no tag equals it. Adding one is a product decision.
+- **`+installDefaultBundlesIfNeeded` is untested.** It is a no-op once
+  `~/Library/Application Support/TextMate/Managed` exists, it hardcodes
+  `path::home()` with no injection point, and moving a real user's bundles aside
+  to force it is not worth the risk. It moved verbatim and is unchanged.
+
+### Numbers, as measured on 2026-09-02
+
+Measured, not subtracted (rule 10). The app shell got *larger* in lines while
+getting more portable: two support files and three ported classes are in that
+count, which is why the interesting figure is the third row, not the first.
+
+| | |
+| --- | --- |
+| Full suite | **971 tests, 0 failures, 0 crashes** (started 971, passed 971) |
+| App shell `src/*.mm` | 3,085 lines across 15 files |
+| App shell `src/*.swift` | 616 lines across 3 files |
+| C++ lines in the four AppController files | **80 → 46**, and 0 of them in `Documents.mm` (29/19/25/7 → 20/19/0/7) |
+| Swift, non-test | 94 files, 27,198 lines |
+| Published releases | 15 (alpha.7 … alpha.21) |
+
+### Still open from 2026-09-01
+
+Both unchanged and still deliberately not acted on: the **About ▸ Bundles page
+renders oddly** (confirmed pre-existing against the shipped alpha.20, cosmetic),
+and **rule 56 / `FavoriteChooser`** is blocked behind a build-system project, not
+a refactor.
+
+New this session: **screen capture and accessibility are both unavailable.**
+`screencapture` fails with "could not create image from display" and System
+Events reports `User canceled (-128)`, so no screenshot or menu-bar readout was
+possible. Rule 59 records what to do instead.
 
 ## Before cutting a release: the five-minute smoke pass
 

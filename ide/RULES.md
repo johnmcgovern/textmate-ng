@@ -586,6 +586,20 @@ knew.
     that a green-looking summary hid a crash; treat "0 failures" as meaningless
     until the crash counter is also zero.
 
+    **Both greps miss a trap that happens after the last test in a bundle passes**
+    (added 2026-09-02). Every test starts and passes, so the counts agree, and
+    locally xctest prints no restart banner at all — only the trap itself. A third
+    grep is required:
+
+        grep -c "Fatal error:" "$log"
+
+    `OakPasteboard.swift` trapped on a nil `NSApp` at the end of every `FindTests`
+    run from the commit that ported it until this was found, and **four
+    consecutive local full-suite runs in one session were reported as "0
+    crashes"** on the strength of the two greps above. CI caught it only because
+    the runner's log *did* carry the restart banner. `.github/workflows/build.yml`
+    now gates on this grep too.
+
 55. **A trivially-copyable C++ struct *does* import into Swift; rule 17 is
     narrower than it looks.** `GVLineRecord` is a C++ struct with a constructor,
     returned **by value** from `GutterViewDelegate`. The OakDocumentView port was

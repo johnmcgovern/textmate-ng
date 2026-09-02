@@ -93,4 +93,15 @@ jobs:
           grep -B2 "Restarting after unexpected exit" /tmp/test.log | grep "Test Case" || true
           exit 1
         fi
+        # A Swift runtime trap *after* the last test in a bundle has passed leaves
+        # started == passed and, locally, no restart banner at all — so the two checks
+        # above can both agree while a process is dying every run. That is not
+        # hypothetical either: OakPasteboard.swift trapped on a nil NSApp at the end of
+        # every FindTests run from the port that introduced it until 2026-09-02, and
+        # four consecutive local full-suite runs were reported as "0 crashes".
+        if grep -q "Fatal error:" /tmp/test.log; then
+          echo "::error::A Swift runtime trap occurred during the tests:"
+          grep "Fatal error:" /tmp/test.log | sort -u || true
+          exit 1
+        fi
         exit $test_status

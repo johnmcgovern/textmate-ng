@@ -429,7 +429,15 @@ class OakPasteboard: NSObject, OakPasteboardIdleObserving {
 		// Do not touch clipboard unless we are active as CFPasteboardCopyData can stall.
 		// This fires from the main run loop's idle observer, so the NSApp read is on the
 		// main actor.
-		guard MainActor.assumeIsolated({ NSApp.isActive }) else { return }
+		//
+		// `NSApp?`, not `NSApp`, and it is load-bearing. The ObjC++ this replaced was
+		// `if(!NSApp.isActive) return;`, and NSApp is **nil** in a process that never
+		// created the shared application — every test bundle without an
+		// NSApplicationLoad() in its setup, FindTests among them. Messaging nil answered
+		// NO and returned; the imported `NSApplication!` traps instead, which crashed
+		// that bundle's process at exit on every run since the port (rules 33 and 44).
+		// Nil means "not active", which is what the original did.
+		guard MainActor.assumeIsolated({ NSApp?.isActive ?? false }) else { return }
 
 		if changeCount != pasteboard.changeCount {
 			ensurePasteboardItemIsInDatabase()

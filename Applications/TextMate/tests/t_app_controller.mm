@@ -706,3 +706,40 @@ void test_main_menu_builder_hands_back_its_four_submenus ()
 	OAK_ASSERT_EQ(to_s(refs.spellingMenu.title),   std::string("Spelling"));
 	OAK_ASSERT_EQ(to_s(refs.wrapColumnMenu.title), std::string("Wrap Column"));
 }
+
+// MARK: - The Theme menu
+
+// The fixed part of the Theme menu, which -themesMenuNeedsUpdate: builds before
+// filling the two per-appearance submenus from the bundle index.
+//
+// This had no coverage at all before the conversion and could not have had any:
+// the MBMenu literal sat below `if(ordered.empty()) { … return; }`, and a test
+// process loads no bundle index, so that branch always fired. Extracting the
+// literal into a function that does not need the index is what makes it
+// reachable — rule 35, the same dividend the C++ extractions paid.
+//
+// The golden was captured by running the *original* literal verbatim in a
+// throwaway probe, so it is an independent check rather than a copy of the Swift.
+void test_theme_menu_fixed_part_is_unchanged ()
+{
+	NSMenu* menu = [[NSMenu alloc] initWithTitle:@"AMainMenu"];
+	[TMMenus buildThemeMenuInto:menu target:[AppController new]];
+	assert_same_dump(normalised_dump(menu), golden(@"AppControllerThemeMenu.txt"));
+}
+
+// -themesMenuNeedsUpdate: sorts every theme into these two submenus by identity,
+// so a nil or a shared reference silently puts every theme in one list.
+void test_theme_menu_hands_back_both_appearance_submenus ()
+{
+	NSMenu* menu = [[NSMenu alloc] initWithTitle:@"AMainMenu"];
+	TMThemeMenuRefs* refs = [TMMenus buildThemeMenuInto:menu target:[AppController new]];
+
+	NSMutableArray* missing = [NSMutableArray array];
+	if(!refs.lightMenu) [missing addObject:@"lightMenu"];
+	if(!refs.darkMenu)  [missing addObject:@"darkMenu"];
+	OAK_ASSERT_EQ(sorted_lines(missing), std::string(""));
+
+	OAK_ASSERT_EQ((bool)(refs.lightMenu == refs.darkMenu), false);
+	OAK_ASSERT_EQ(to_s(refs.lightMenu.title), std::string("Theme for Light Appearance"));
+	OAK_ASSERT_EQ(to_s(refs.darkMenu.title),  std::string("Theme for Dark Appearance"));
+}

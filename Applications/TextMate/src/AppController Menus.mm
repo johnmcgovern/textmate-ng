@@ -9,7 +9,7 @@
 #import <OakAppKit/NSMenuItem Additions.h>
 #import <OakAppKit/NSMenuItemCxx.h> // -setKeyEquivalentCxxString:
 #import <OakAppKit/OakToolTip.h>
-#import <MenuBuilder/MenuBuilder.h>
+#import "TextMate-Swift.h"
 #import <OakFoundation/NSString Additions.h>
 #import <OakTextView/OakTextView.h>
 #import <oak/debug.h>
@@ -244,19 +244,9 @@ static NSString* NameForLocaleIdentifier (NSString* languageCode)
 		return;
 	}
 
-	NSMenu* lightMenu;
-	NSMenu* darkMenu;
-
-	MBMenu const items = {
-		{ @"Appearance",       @selector(nop:),                                                                          },
-		{ @"Light",            @selector(takeThemeAppearanceFrom:), .indent = 1, .target = self, .representedObject = @"light" },
-		{ @"Dark",             @selector(takeThemeAppearanceFrom:), .indent = 1, .target = self, .representedObject = @"dark"  },
-		{ @"Auto",             @selector(takeThemeAppearanceFrom:), .indent = 1, .target = self, .representedObject = nil      },
-		{ /* -------- */ },
-		{ @"Theme for Light Appearance", .submenuRef = &lightMenu },
-		{ @"Theme for Dark Appearance",  .submenuRef = &darkMenu  },
-	};
-	MBCreateMenu(items, aMenu);
+	TMThemeMenuRefs* refs = [TMMenus buildThemeMenuInto:aMenu target:self];
+	NSMenu* lightMenu = refs.lightMenu;
+	NSMenu* darkMenu  = refs.darkMenu;
 
 	for(NSMenu* submenu : { lightMenu, darkMenu })
 	{

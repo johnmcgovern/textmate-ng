@@ -1,0 +1,15 @@
+MBMenu const items = {
+	{ @"Appearance", @selector(nop:) },
+	{ @"Light", @selector(takeThemeAppearanceFrom:), .target = «unknown», .indent = 1, .representedObject = «unknown» },
+	{ @"Dark", @selector(takeThemeAppearanceFrom:), .target = «unknown», .indent = 1, .representedObject = «unknown» },
+	{ @"Auto", @selector(takeThemeAppearanceFrom:), .target = «unknown», .indent = 1 },
+	{ /* -------- */ },
+	{ @"Theme for Light Appearance",
+		.submenu = {
+		}
+	},
+	{ @"Theme for Dark Appearance",
+		.submenu = {
+		}
+	},
+};

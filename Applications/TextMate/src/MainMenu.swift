@@ -446,6 +446,45 @@ func makeMenu(_ items: [MenuSpec], into existingMenu: NSMenu? = nil) -> NSMenu {
 		return MainMenuRefs(bundles: bundlesMenu, themes: themesMenu, spelling: spellingMenu, wrapColumn: wrapColumnMenu)
 	}
 
+	// The two submenus -themesMenuNeedsUpdate: fills in afterwards, from the bundle
+	// index. Same `.submenuRef` shape as the main menu's four.
+	@objc(TMThemeMenuRefs) class ThemeMenuRefs: NSObject {
+		@objc let lightMenu: NSMenu?
+		@objc let darkMenu: NSMenu?
+
+		init(light: NSMenu?, dark: NSMenu?) {
+			lightMenu = light
+			darkMenu  = dark
+		}
+	}
+
+	// The fixed part of the Theme menu — everything above the two per-appearance
+	// submenus, which -themesMenuNeedsUpdate: populates from the bundle index and
+	// which stay in ObjC++ because that walk is bundles::query and std::multimap.
+	//
+	// Testable on its own, which the ObjC++ was not: the literal sat below an early
+	// return that always fires in a test process, since no bundle index loads there.
+	// Its golden was captured by running the original literal once, verbatim, in a
+	// throwaway probe.
+	@objc(buildThemeMenuInto:target:)
+	class func buildThemeMenu(into existingMenu: NSMenu, target: AnyObject) -> ThemeMenuRefs {
+		var lightMenu: NSMenu?
+		var darkMenu: NSMenu?
+
+		let items: [MenuSpec] = [
+			MenuSpec(title: "Appearance", action: Selector(("nop:"))),
+			MenuSpec(title: "Light", action: Selector(("takeThemeAppearanceFrom:")), indent: 1, target: target, representedObject: "light"),
+			MenuSpec(title: "Dark", action: Selector(("takeThemeAppearanceFrom:")), indent: 1, target: target, representedObject: "dark"),
+			MenuSpec(title: "Auto", action: Selector(("takeThemeAppearanceFrom:")), indent: 1, target: target, representedObject: nil),
+			separatorSpec(),
+			MenuSpec(title: "Theme for Light Appearance", submenuRef: { lightMenu = $0 }),
+			MenuSpec(title: "Theme for Dark Appearance", submenuRef: { darkMenu = $0 }),
+		]
+		makeMenu(items, into: existingMenu)
+
+		return ThemeMenuRefs(light: lightMenu, dark: darkMenu)
+	}
+
 	// -[AppController applicationDockMenu:]. The only place the app sets an
 	// explicit `.target`: the dock menu is shown with no key window, so the
 	// responder chain cannot be relied on.

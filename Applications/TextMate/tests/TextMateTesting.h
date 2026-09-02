@@ -66,7 +66,13 @@
 @property (nonatomic, readonly) NSMenu* wrapColumnMenu;
 @end
 
+@interface TMThemeMenuRefs : NSObject
+@property (nonatomic, readonly) NSMenu* lightMenu;
+@property (nonatomic, readonly) NSMenu* darkMenu;
+@end
+
 @interface TMMenus : NSObject
 + (TMMainMenuRefs*)buildMainMenuInto:(NSMenu*)existingMenu target:(id)target appName:(NSString*)appName;
++ (TMThemeMenuRefs*)buildThemeMenuInto:(NSMenu*)existingMenu target:(id)target;
 + (NSMenu*)dockMenuWithTarget:(id)target;
 @end

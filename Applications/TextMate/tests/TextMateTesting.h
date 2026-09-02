@@ -7,6 +7,7 @@
 #import "../src/AboutWindowController.h"
 #import "../src/AppController.h"
 #import "../src/AppControllerSupport.h"
+#import "../src/TxMtURLSupport.h"
 #import "../src/Favorites.h"
 #import "../src/FavoritesSupport.h"
 #import "../src/TMPlugInController.h"

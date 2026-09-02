@@ -4,6 +4,7 @@
 #import <regexp/find.h>
 #import <theme/theme.h>
 #import <objc/runtime.h>
+#import <io/path.h>
 #import <Cocoa/Cocoa.h>
 
 // A pin for AppController, written against the ObjC++ and before any port of it
@@ -487,4 +488,134 @@ void test_creating_a_marker_truncates_an_existing_one ()
 	OAK_ASSERT_EQ((size_t)[NSFileManager.defaultManager attributesOfItemAtPath:path error:nil].fileSize, (size_t)0);
 
 	[AppControllerSupport removeMarkerAtPath:path];
+}
+
+// MARK: - TxMtURLSupport
+//
+// txmt://open?… is a real external interface — `mate`, the HTML output view and
+// every bundle command that links to a file go through it — and until this
+// extraction none of it was reachable from a test: it was 60 lines of C++ inside
+// a method that ends in modal alerts and window ordering. This is rule 35's "the
+// extraction makes it testable, take the test while it is cheap".
+
+static std::string describe (NSString* str)
+{
+	return str ? to_s(str) : std::string("«nil»");
+}
+
+void test_txmt_query_parsing ()
+{
+	NSDictionary* p = [TxMtURLSupport parametersFromQuery:@"url=file:///tmp/x&line=12&column=4"];
+	OAK_ASSERT_EQ((size_t)p.count, (size_t)3);
+	OAK_ASSERT_EQ(describe(p[@"url"]),    std::string("file:///tmp/x"));
+	OAK_ASSERT_EQ(describe(p[@"line"]),   std::string("12"));
+	OAK_ASSERT_EQ(describe(p[@"column"]), std::string("4"));
+}
+
+void test_txmt_query_percent_decodes_both_halves ()
+{
+	NSDictionary* p = [TxMtURLSupport parametersFromQuery:@"url=file:///tmp/a%20b&od%64=1"];
+	OAK_ASSERT_EQ(describe(p[@"url"]), std::string("file:///tmp/a b"));
+	OAK_ASSERT_EQ(describe(p[@"odd"]), std::string("1"));
+}
+
+void test_txmt_query_skips_pairs_that_are_not_key_equals_value ()
+{
+	// The guard is `[keyValue count] == 2`, so a bare word and anything with a
+	// second `=` both drop out. Worth pinning: a port that reached for
+	// -componentsSeparatedByString: with a limit, or for NSURLComponents, would
+	// keep them and change what a malformed link does.
+	NSDictionary* p = [TxMtURLSupport parametersFromQuery:@"line=3&bare&a=b=c&x="];
+	OAK_ASSERT_EQ((size_t)p.count, (size_t)2);
+	OAK_ASSERT_EQ(describe(p[@"line"]), std::string("3"));
+	OAK_ASSERT_EQ(describe(p[@"x"]),    std::string(""));
+}
+
+void test_txmt_query_last_duplicate_wins ()
+{
+	NSDictionary* p = [TxMtURLSupport parametersFromQuery:@"line=1&line=2"];
+	OAK_ASSERT_EQ(describe(p[@"line"]), std::string("2"));
+}
+
+void test_txmt_query_of_a_url_with_none ()
+{
+	OAK_ASSERT_EQ((size_t)[TxMtURLSupport parametersFromQuery:nil].count, (size_t)0);
+	OAK_ASSERT_EQ((size_t)[TxMtURLSupport parametersFromQuery:@""].count, (size_t)0);
+}
+
+// The selection string, and the ±1 that a port is most likely to get wrong: the
+// URL is 1-based, text::pos_t is 0-based, and the string form adds 1 back.
+void test_txmt_selection_string_is_one_based_again ()
+{
+	OAK_ASSERT_EQ(describe([TxMtURLSupport selectionStringForLine:@"12" column:@"4"]), std::string("12:4"));
+
+	// No column means column 1, and pos_t prints no `:` for column 0.
+	OAK_ASSERT_EQ(describe([TxMtURLSupport selectionStringForLine:@"12" column:nil]), std::string("12"));
+	OAK_ASSERT_EQ(describe([TxMtURLSupport selectionStringForLine:@"1"  column:@"1"]), std::string("1"));
+}
+
+void test_txmt_selection_string_is_nil_without_a_line ()
+{
+	// This is the `range == text::range_t::undefined` the caller branches on, so
+	// nil here is what makes a url-less, uuid-less txmt:// link show the "Missing
+	// Parameter" alert rather than hunting for a text view.
+	OAK_ASSERT_EQ(describe([TxMtURLSupport selectionStringForLine:nil column:@"4"]), std::string("«nil»"));
+	OAK_ASSERT_EQ(describe([TxMtURLSupport selectionStringForLine:nil column:nil]),  std::string("«nil»"));
+}
+
+// RECORDED, NOT FIXED. atoi returns 0 for "0" and for anything non-numeric, and
+// the -1 is applied to a size_t, so it wraps to SIZE_MAX and prints as 0 again.
+// The behaviour is nonsense but it is the *shipped* nonsense, and it is exactly
+// what rule 3 is about: a Swift port using Int would trap or produce -1 instead.
+// Whoever changes this should mean to.
+void test_txmt_selection_string_wraps_on_line_zero ()
+{
+	OAK_ASSERT_EQ(describe([TxMtURLSupport selectionStringForLine:@"0"   column:nil]), std::string("0"));
+	OAK_ASSERT_EQ(describe([TxMtURLSupport selectionStringForLine:@"abc" column:nil]), std::string("0"));
+	OAK_ASSERT_EQ(describe([TxMtURLSupport selectionStringForLine:@"5" column:@"0"]),  std::string("5:0"));
+}
+
+// The five file:// spellings, plus the bare fallback. The order matters and is
+// not obvious: a tilde URL matches a root prefix *first* and is then overwritten
+// by the tilde branch, so the loops cannot be reordered.
+void test_txmt_file_url_prefixes ()
+{
+	NSString* home = to_ns(path::home());
+
+	OAK_ASSERT_EQ(describe([TxMtURLSupport pathForFileURLString:@"file:///tmp/x"]),           std::string("/tmp/x"));
+	OAK_ASSERT_EQ(describe([TxMtURLSupport pathForFileURLString:@"file://localhost/tmp/x"]),  std::string("/tmp/x"));
+
+	OAK_ASSERT_EQ(describe([TxMtURLSupport pathForFileURLString:@"file:///~/x"]),             to_s([home stringByAppendingPathComponent:@"x"]));
+	OAK_ASSERT_EQ(describe([TxMtURLSupport pathForFileURLString:@"file://~/x"]),              to_s([home stringByAppendingPathComponent:@"x"]));
+	OAK_ASSERT_EQ(describe([TxMtURLSupport pathForFileURLString:@"file://localhost/~/x"]),    to_s([home stringByAppendingPathComponent:@"x"]));
+
+	// Not one of the five, so it falls through to the bare file:// branch, which
+	// joins against home rather than root.
+	OAK_ASSERT_EQ(describe([TxMtURLSupport pathForFileURLString:@"file://x"]),                to_s([home stringByAppendingPathComponent:@"x"]));
+}
+
+void test_txmt_non_file_url_has_no_path ()
+{
+	// nil is the NULL_STR the caller passes straight into pathIsDirectory: and
+	// pathExists: — both NO — and then into the "does not exist" alert.
+	OAK_ASSERT_EQ(describe([TxMtURLSupport pathForFileURLString:@"http://example.com/x"]), std::string("«nil»"));
+	OAK_ASSERT_EQ(describe([TxMtURLSupport pathForFileURLString:@"/tmp/x"]),               std::string("«nil»"));
+}
+
+void test_txmt_path_predicates ()
+{
+	NSString* dir  = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tm-txmt-tests"];
+	NSString* file = [dir stringByAppendingPathComponent:@"file.txt"];
+	[NSFileManager.defaultManager createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+	[@"x" writeToFile:file atomically:YES encoding:NSUTF8StringEncoding error:nil];
+
+	OAK_ASSERT_EQ((bool)[TxMtURLSupport pathIsDirectory:dir],  true);
+	OAK_ASSERT_EQ((bool)[TxMtURLSupport pathExists:dir],       true);
+	OAK_ASSERT_EQ((bool)[TxMtURLSupport pathIsDirectory:file], false);
+	OAK_ASSERT_EQ((bool)[TxMtURLSupport pathExists:file],      true);
+
+	// nil becomes NULL_STR, which is what a non-file:// url resolves to. Both must
+	// answer NO rather than crash — the caller relies on it and does not guard.
+	OAK_ASSERT_EQ((bool)[TxMtURLSupport pathIsDirectory:nil], false);
+	OAK_ASSERT_EQ((bool)[TxMtURLSupport pathExists:nil],      false);
 }

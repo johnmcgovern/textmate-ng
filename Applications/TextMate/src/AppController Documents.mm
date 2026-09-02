@@ -1,11 +1,10 @@
 #import "AppController.h"
+#import "TxMtURLSupport.h"
 #import <DocumentWindow/DocumentWindowController.h>
 #import "ODBEditorSuite.h"
 #import <Preferences/Keys.h>
 #import <OakAppKit/NSSavePanel Additions.h>
 #import <OakFoundation/NSString Additions.h>
-#import <ns/ns.h>
-#import <text/decode.h>
 #import <document/OakDocument.h>
 #import <document/OakDocumentController.h>
 
@@ -72,92 +71,69 @@
 {
 	if([[aURL host] isEqualToString:@"open"])
 	{
-		std::map<std::string, std::string> parameters;
-		for(NSString* part in [[aURL query] componentsSeparatedByString:@"&"])
+		NSDictionary<NSString*, NSString*>* parameters = [TxMtURLSupport parametersFromQuery:[aURL query]];
+
+		NSString* url     = parameters[@"url"];
+		NSString* uuid    = parameters[@"uuid"];
+		NSString* project = parameters[@"project"];
+
+		// nil exactly when there was no line parameter, which is the
+		// `range == text::range_t::undefined` the three branches below used to test.
+		NSString* selection = [TxMtURLSupport selectionStringForLine:parameters[@"line"] column:parameters[@"column"]];
+
+		NSUUID* projectUUID = project ? [[NSUUID alloc] initWithUUIDString:project] : nil;
+		if(url)
 		{
-			NSArray* keyValue = [part componentsSeparatedByString:@"="];
-			if([keyValue count] == 2)
+			// nil for a url that matches no file:// prefix — the NULL_STR the
+			// original carried into path::is_directory and path::exists, which both
+			// answer NO for it, and then into the alert, which showed “(null)”.
+			// Deliberately not guarded here, so that path is unchanged.
+			NSString* path = [TxMtURLSupport pathForFileURLString:url];
+
+			if([TxMtURLSupport pathIsDirectory:path])
 			{
-				std::string key = decode::url_part(to_s([keyValue firstObject]));
-				parameters[key] = decode::url_part(to_s([keyValue lastObject]));
+				[OakDocumentController.sharedInstance showFileBrowserAtPath:path];
 			}
-		}
-
-		std::map<std::string, std::string>::const_iterator const& url     = parameters.find("url");
-		std::map<std::string, std::string>::const_iterator const& uuid    = parameters.find("uuid");
-		std::map<std::string, std::string>::const_iterator const& line    = parameters.find("line");
-		std::map<std::string, std::string>::const_iterator const& column  = parameters.find("column");
-		std::map<std::string, std::string>::const_iterator const& project = parameters.find("project");
-
-		text::range_t range = text::range_t::undefined;
-		size_t col = column != parameters.end() ? atoi(column->second.c_str()) : 1;
-		if(line != parameters.end())
-			range = text::pos_t(atoi(line->second.c_str())-1, col-1);
-
-		NSUUID* projectUUID = project != parameters.end() ? [[NSUUID alloc] initWithUUIDString:to_ns(project->second)] : nil;
-		if(url != parameters.end())
-		{
-			static std::string const kTildeURLPrefixes[] = { "file://localhost/~/", "file:///~/", "file://~/" };
-			static std::string const kRootURLPrefixes[]  = { "file://localhost/", "file:///" };
-
-			std::string const& urlStr = url->second;
-			std::string path = NULL_STR;
-
-			for(auto root : kRootURLPrefixes)
+			else if([TxMtURLSupport pathExists:path])
 			{
-				if(urlStr.find(root) == 0)
-					path = path::join("/", urlStr.substr(root.size()));
-			}
-
-			for(auto tilde : kTildeURLPrefixes)
-			{
-				if(urlStr.find(tilde) == 0)
-					path = path::join(path::home(), urlStr.substr(tilde.size()));
-			}
-
-			if(path == NULL_STR && urlStr.find("file://") == 0)
-				path = path::join(path::home(), urlStr.substr(std::string("file://").size()));
-
-			if(path::is_directory(path))
-			{
-				[OakDocumentController.sharedInstance showFileBrowserAtPath:to_ns(path)];
-			}
-			else if(path::exists(path))
-			{
-				OakDocument* doc = [OakDocumentController.sharedInstance documentWithPath:to_ns(path)];
+				OakDocument* doc = [OakDocumentController.sharedInstance documentWithPath:path];
 				doc.recentTrackingDisabled = YES;
-				[OakDocumentController.sharedInstance showDocument:doc andSelect:range inProject:projectUUID bringToFront:YES];
+				if(selection)
+					doc.selection = selection;
+				[OakDocumentController.sharedInstance showDocument:doc inProject:projectUUID bringToFront:YES];
 			}
 			else
 			{
 				NSAlert* alert        = [[NSAlert alloc] init];
 				alert.messageText     = @"File Does not Exist";
-				alert.informativeText = [NSString stringWithFormat:@"The item “%@” does not exist.", [NSString stringWithCxxString:path]];
+				alert.informativeText = [NSString stringWithFormat:@"The item “%@” does not exist.", path];
 				[alert addButtonWithTitle:@"Continue"];
 				[alert runModal];
 			}
 		}
-		else if(uuid != parameters.end())
+		else if(uuid)
 		{
-			if(OakDocument* doc = [OakDocumentController.sharedInstance findDocumentWithIdentifier:[[NSUUID alloc] initWithUUIDString:to_ns(uuid->second)]])
+			if(OakDocument* doc = [OakDocumentController.sharedInstance findDocumentWithIdentifier:[[NSUUID alloc] initWithUUIDString:uuid]])
 			{
 				doc.recentTrackingDisabled = YES;
-				[OakDocumentController.sharedInstance showDocument:doc andSelect:range inProject:projectUUID bringToFront:YES];
+				if(selection)
+					doc.selection = selection;
+				[OakDocumentController.sharedInstance showDocument:doc inProject:projectUUID bringToFront:YES];
 			}
 			else
 			{
 				NSAlert* alert        = [[NSAlert alloc] init];
 				alert.messageText     = @"File Does not Exist";
-				alert.informativeText = [NSString stringWithFormat:@"No document found for UUID %@.", [NSString stringWithCxxString:uuid->second]];
+				alert.informativeText = [NSString stringWithFormat:@"No document found for UUID %@.", uuid];
 				[alert addButtonWithTitle:@"Continue"];
 				[alert runModal];
 			}
 		}
-		else if(range != text::range_t::undefined)
+		else if(selection)
 		{
 			for(NSWindow* win in [NSApp orderedWindows])
 			{
-				BOOL foundTextView = [[win firstResponder] tryToPerform:@selector(setSelectionString:) with:[NSString stringWithCxxString:range]];
+				BOOL foundTextView = [[win firstResponder] tryToPerform:@selector(setSelectionString:) with:selection];
 				if(!foundTextView)
 				{
 					NSMutableArray* allViews = [[[win contentView] subviews] mutableCopy];
@@ -168,7 +144,7 @@
 					{
 						if([view respondsToSelector:@selector(setSelectionString:)])
 						{
-							[view performSelector:@selector(setSelectionString:) withObject:[NSString stringWithCxxString:range]];
+							[view performSelector:@selector(setSelectionString:) withObject:selection];
 							[win makeFirstResponder:view];
 							foundTextView = YES;
 							break;

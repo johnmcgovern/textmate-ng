@@ -146,7 +146,7 @@ Two diagnostic traps that cost real time, both worth remembering:
 
 ## Documentation map (read in this order)
 
-1. **The numbered rules — all 59 of them, now in one file: `ide/RULES.md`.**
+1. **The numbered rules — all 60 of them, now in one file: `ide/RULES.md`.**
    **Read it before surveying a framework.** They used to be split 1–22 in
    `ide/FIND_PORT_HANDOFF.md` and 23–49 in `ide/FILEBROWSER_PORT_HANDOFF.md`, and
    this entry pointed at one file while saying "22 of them" — so anyone following
@@ -172,7 +172,10 @@ Two diagnostic traps that cost real time, both worth remembering:
    it re-runs stale code unless you re-seed (rule 29), it wraps the body in a C++
    namespace so an `@interface` will not compile (rule 34), and it emits a
    `#line` before *every* line, which destroys any multi-line string literal
-   (rule 57 — put goldens in `tests/fixtures/` and read them via `__FILE__`).
+   (rule 57 — put goldens in `tests/fixtures/` and read them via `__FILE__`), and
+   it compiles test bodies with **ARC off**, so ObjC++ copied in from a project
+   file changes meaning and an uninitialised local becomes a silent crash
+   (rule 60).
 
 ## How to build and run
 
@@ -510,8 +513,13 @@ below predate that work and are kept only for the two items still standing
   checklist rules 15–17 and 19–21 now encode: block parameters, C variadics,
   C++ *ivars*, `+initialize`, free functions and `extern` constants in the
   public header, and whether that header is imported by another public header.
-- `MenuBuilder` goes **last**, once its ObjC++ callers are gone. `HTMLOutput`
-  needs a `std::map` API redesign before it is portable at all.
+- ~~`MenuBuilder` goes **last**, once its ObjC++ callers are gone.~~ **Settled
+  2026-09-02: they are gone, and the answer is that it is not ported at all.**
+  The application's three call sites became Swift (see "Session 2026-09-02, part
+  two"), leaving exactly one anywhere — `FileBrowserViewControllerCxx.mm`, which
+  its own comment declares permanent ObjC++. MenuBuilder stays C++ and nothing
+  waits on it. `HTMLOutput` still needs a `std::map` API redesign before it is
+  portable at all.
 
 ## The gutter bug, and why it belongs in a handoff
 
@@ -1296,7 +1304,9 @@ designated-initialiser syntax. `-applicationDockMenu:` adds 8 more and
 two headers and no ObjC-shaped sibling. So ~24% of the four files can never be
 Swift while MenuBuilder is what it is.
 
-**And there is an ordering deadlock.** This file says (above) *"MenuBuilder goes
+**[RESOLVED 2026-09-02 — the menu was converted; see "part two". The paragraph
+below is kept because it is why the decision needed making.]** And there is an
+ordering deadlock. This file says (above) *"MenuBuilder goes
 last, once its ObjC++ callers are gone."* There are exactly four live
 `MBCreateMenu` call sites: three are AppController, and the fourth is
 `FileBrowserViewControllerCxx.mm`, whose own comment declares it **permanent**
@@ -1355,8 +1365,12 @@ Steps 1–4 are **done** (`0e136f94`, `8a86de5e`, `4cbc4f8f`, `00f06a22`,
 3. ~~`+initialize` → explicit registration (rule 24).~~
 4. ~~Extract the C++ from `-applicationWillFinishLaunching:` and
    `-handleTxMtURL:` (rule 25).~~
-5. Flip to Swift, keeping two ObjC++ categories: the menu DSL (~353 lines) and
-   `AppController Commands.mm` (58). No `final` (rule 49, nib-instantiated).
+5. ~~The menu DSL.~~ Converted to Swift instead (`ada0cb92`, `336c4d39`,
+   `5384ee61`) — see "part two" below. The deadlock described above is resolved:
+   MenuBuilder's only remaining caller is FileBrowser's, which is permanent, so
+   MenuBuilder stays C++ and nothing waits on it.
+6. Flip to Swift, keeping `AppController Commands.mm` (58 lines) as an ObjC++
+   category. No `final` (rule 49, nib-instantiated).
 
 Expect roughly **900 lines Swift, ~400 permanent ObjC++**. Getting past that
 needs four cross-framework additions, each small, together a second session: an
@@ -1491,6 +1505,130 @@ New this session: **screen capture and accessibility are both unavailable.**
 `screencapture` fails with "could not create image from display" and System
 Events reports `User canceled (-128)`, so no screenshot or menu-bar readout was
 possible. Rule 59 records what to do instead.
+
+## Session 2026-09-02, part two — the menus are Swift, and a crash that had been hiding
+
+Four more commits (`cee8a2a7`, `ada0cb92`, `336c4d39`, `5384ee61`). Suite
+**971 → 975**, and for the first time this session genuinely 0 traps as well as
+0 failures — see the correction below.
+
+### CORRECTION: "0 crashes" was wrong four times
+
+A test process was trapping on **every** full-suite run of this session and the
+check missed it every time. CI going red on a *documentation-only* commit is the
+only reason it surfaced.
+
+`OakPasteboard.swift`'s `checkForExternalPasteboardChanges` fires from the main
+run loop's idle observer. The ObjC++ it replaced was `if(!NSApp.isActive) return;`
+and **`NSApp` is nil in any process that never created the shared application** —
+every test bundle whose setup does not call `NSApplicationLoad()`, which includes
+`FindTests`, since it has no setup at all. Messaging nil answered NO and
+returned; the imported `NSApplication!` traps. Rules 33 and 44 together, both
+already written down, and it still shipped in `0389638f`.
+
+It cannot affect the app — NSApp is never nil there — so this was purely a
+CI/test-reliability bug. Fixed in `cee8a2a7` with `NSApp?.isActive ?? false`.
+
+**Why it hid is the part to keep.** Rule 54's two checks cannot see a trap that
+happens *after the last test in a bundle passes*: started equals passed, and
+locally xctest prints no restart banner at all, only the trap line. CI caught it
+only because the runner's log did carry the banner, and even then not every run.
+Both gates are wider now — `.github/workflows/build.yml` fails on `Fatal error:`
+independently of the banner and the exit status, and rule 54 carries the third
+grep. **Use all three:**
+
+    grep -c "Restarting after unexpected exit" "$log"
+    grep -c "Fatal error:" "$log"
+    grep -c "Test Case .* started" "$log"; grep -c "Test Case .* passed" "$log"
+
+### The menus are Swift, and MenuBuilder's ordering note is resolved
+
+`MainMenu.swift` restates `MBMenuItem` and `MBCreateMenuItem` as `MenuSpec` and
+`makeItem` — field for field, branch for branch, including the three defaults
+rule 12 warns about. Then the dock menu (2 items), the main menu (**248 items,
+12 top-level menus, 143 selectors**) and the Theme menu's fixed part (7 items).
+
+**Generated, not retyped.** A throwaway parser read the C++ aggregate — balanced
+braces, top-level comma splitting, strings and comments skipped — and emitted the
+MenuSpecs, so no title, selector, key equivalent or modifier mask passed through
+a human. Rule 6's discipline applied where rule 6 itself cannot be: the text
+could not move verbatim, so nothing about it moved by hand instead.
+
+Every conversion was checked twice: against the `MBDumpMenu` golden taken from
+the ObjC++ *before* the Swift existed, and against an A/B of the running app
+(rule 13), with the probe reverted rather than committed:
+
+| menu | app dump before | after | diff |
+| --- | --- | --- | --- |
+| main menu | 366 lines | 366 lines | empty |
+| Theme menu | 35 lines | 35 lines | empty |
+
+Both controls were confirmed to have done real work rather than nothing — "About
+TextMate-NG" in the first, 20 real theme items in the second — which is the check
+rule 13 exists to force.
+
+**There is now no `MBCreateMenu` call site in the application, and exactly one
+anywhere:** `FileBrowserViewControllerCxx.mm`, which its own comment already
+declares permanent ObjC++. That settles the note this file has carried since the
+FileBrowser port — *"MenuBuilder goes last, once its ObjC++ callers are gone."*
+They are gone. **MenuBuilder simply stays C++ and nothing is waiting on it.**
+Delete that item from any plan that still lists it.
+
+### Three findings from doing it
+
+1. **A test whose first version could not fail.** The test asserting the four
+   `.submenuRef` submenus come back walked the built menu by title — and
+   pointing Wrap Column's submenuRef at `spellingMenu` left the *structure*
+   untouched, so it passed the mutation. Rewritten to call the builder and read
+   the returned refs. Rule 40 is not satisfied by writing a test.
+2. **Rule 60**: test bodies compile with ARC **off**, so `NSMenu* lightMenu;`
+   copied out of an ARC file into a test crashes with no message. Only visible
+   because the restart counter is checked.
+3. Rule 28 again (`+delegateUsingSelector:` imports as `delegate(using:)`) and
+   rule 43 again (the test bundle cannot import the generated `TextMate-Swift.h`
+   alongside its hand declarations, so `TMMenus`/`TMMainMenuRefs`/
+   `TMThemeMenuRefs` get hand declarations too).
+
+`<Find/FindTypes.h>` **cannot** enter the app's bridging header — it pulls
+`<text/types.h>` then `oak/algorithm.h`, which needs the full prelude that header
+deliberately avoids. So the three Find menu tags are the literals 0/3/5, pinned
+by `static_assert` against `FFSearchTarget` plus a test that reads them back off
+the built menu (rule 5), the same treatment `find::options_t` has. That probe
+cost a build; do not repeat it.
+
+### Numbers, measured 2026-09-02 (end of session)
+
+Measured, not subtracted (rule 10). The app shell's ObjC++ dropped by 323 lines
+while Swift grew by 498 — the difference is `MainMenu.swift`, which is longer
+than the DSL it replaces because it carries the restated builder as well.
+
+| | |
+| --- | --- |
+| Full suite | **975 tests, 0 failures, 0 restarts, 0 traps** |
+| App shell `src/*.mm` | 2,762 lines across 15 files (was 3,085) |
+| App shell `src/*.swift` | 1,114 lines across 4 files (was 616) |
+| C++ lines in the four AppController files | **80 → 35** (10 / 18 / 0 / 7) |
+| `AppController.mm` | 522 lines (was 874) |
+| Swift, non-test | 95 files, 27,704 lines |
+| `MBCreateMenu` call sites outside MenuBuilder | **1** (FileBrowser, permanent) |
+
+### What is left before AppController can flip
+
+The prep is done. `AppController.mm` is ~500 lines from 874, and
+`AppController Documents.mm` has no C++ at all.
+
+| blocker | shape | size |
+| --- | --- | --- |
+| `AppController Commands.mm` | rule 37, C++-typed on both sides — stays ObjC++ forever | 58 lines |
+| `-[NSAlert addButtons:…, nil]` | rule 16 variadic; `NSAlert (Other)` declares nothing else | needs an array-taking sibling in OakAppKit |
+| `RegisterDefaults()`, `OakOpenDocuments()`, `DidHandleODBEditorEvent()` | C++-linkage free functions; importability under objcxx unsettled | rule 55 probe, or a one-line shim each |
+| `-[OakTextView scopeContext]` | returns `scope::context_t` | needs an ObjC-shaped `TMScopeContext*` property |
+| `-revealBundleItem:` | C++-typed | BundleEditor already has `-revealItem:(TMBundleItem*)`; expose it |
+| `bundles::query` in the menus | `semanticClass`, scoped query | two additions to `TMBundleItem` |
+
+None is large; together they are a session. After them the flip is mechanical,
+and the expected shape is roughly **900 lines Swift with ~400 permanently ObjC++**
+(the Commands category and whatever the list above does not clear).
 
 ## Before cutting a release: the five-minute smoke pass
 

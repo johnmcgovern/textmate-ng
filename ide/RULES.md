@@ -1,4 +1,4 @@
-# The numbered rules — all 59, in one place
+# The numbered rules — all 60, in one place
 
 Earned across every port in this project — Find, DocumentWindowController,
 OakAppKit, FileBrowser, OakFilterList. They live here, in one file, so a survey reads the whole
@@ -15,7 +15,8 @@ were consolidated here, verbatim, on 2026-08-18. Rules 50–51 were added on
 2026-08-20 from the OakFilterList port and are stated in full below, that handoff
 being NEXT_SESSION_HANDOFF.md. Rules 52–56 followed from OakRolloverButton,
 OakEncodingPopUpButton, OakOpenWithMenu, OakDocumentView and FavoriteChooser;
-rules 57–59 were added on 2026-09-02 from the AppController pin and extractions.
+rules 57–59 were added on 2026-09-02 from the AppController pin and extractions,
+and rule 60 from the menu conversion the same day.
 
 (The count in the title has been wrong before — it said "51" while there were 56.
 If you add a rule, fix it, and remember rule 10 applies to this file too.)
@@ -744,3 +745,31 @@ is wrong** — the harness, the oracle, and the app check.
     which here is `TextMate-NG`, not the target name. And **driving a code path
     that ends in `[NSAlert runModal]` wedges the app** — with accessibility
     unavailable the only way out is to kill it.
+
+---
+
+## Rule 60 — the menu conversion (2026-09-02)
+
+60. **A test file is compiled with ARC off, so ObjC++ copied into one from a
+    project file does not mean the same thing.** `ide/seed_xcodeproj.rb` sets
+    `CLANG_ENABLE_OBJC_ARC = NO` for the generated test bundles on purpose —
+    some tests reach headers ARC rejects, e.g. `settings/src/track_paths.h`
+    calls `dispatch_release`. The consequence nobody had hit until now:
+
+        NSMenu* lightMenu;          // nil under ARC. Garbage in a test file.
+
+    `-themesMenuNeedsUpdate:` declares its two submenu locals exactly like that
+    and is correct, because `AppController Menus.mm` compiles under ARC. Copied
+    verbatim into a test to capture a golden, the same lines **crashed the test
+    process with no message at all** — no assertion, no exception, nothing in the
+    log but the restart banner.
+
+    Two things follow. **Initialise every ObjC local you move into a test file**,
+    even when the original does not. And when a probe copied from working code
+    dies, suspect the compilation mode before you suspect the code: the harness
+    builds your test differently from the thing it is testing.
+
+    Fourth member of the rules 29/34/57 family — the test harness rewrites and
+    recompiles your test file, and none of what it does is visible from the file
+    you are editing. It was only caught because rule 54's restart counter is
+    checked now; the run reported zero failures.

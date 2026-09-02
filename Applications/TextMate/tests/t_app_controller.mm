@@ -5,6 +5,7 @@
 #import <theme/theme.h>
 #import <objc/runtime.h>
 #import <io/path.h>
+#import <Find/FindTypes.h>
 #import <Cocoa/Cocoa.h>
 
 // A pin for AppController, written against the ObjC++ and before any port of it
@@ -618,4 +619,90 @@ void test_txmt_path_predicates ()
 	// answer NO rather than crash — the caller relies on it and does not guard.
 	OAK_ASSERT_EQ((bool)[TxMtURLSupport pathIsDirectory:nil], false);
 	OAK_ASSERT_EQ((bool)[TxMtURLSupport pathExists:nil],      false);
+}
+
+// MARK: - The Swift menu construction
+
+// Rule 5, the second instance in this file. MainMenu.swift writes the three Find
+// menu tags as the literals 0, 3 and 5, because <Find/FindTypes.h> cannot enter
+// the app's bridging header — it pulls <text/types.h> and then oak/algorithm.h,
+// which needs the full prelude that header deliberately avoids. The literals are
+// therefore unchecked by the compiler on the Swift side; this is the check.
+static_assert(FFSearchTargetDocument == 0, "FFSearchTarget renumbered — MainMenu.swift has literals");
+static_assert(FFSearchTargetProject  == 3, "FFSearchTarget renumbered — MainMenu.swift has literals");
+static_assert(FFSearchTargetOther    == 5, "FFSearchTarget renumbered — MainMenu.swift has literals");
+
+void test_find_panel_menu_tags_are_the_search_targets ()
+{
+	NSMutableDictionary* tags = [NSMutableDictionary dictionary];
+	NSMutableArray* queue = [@[ shared_main_menu() ] mutableCopy];
+	while(queue.count)
+	{
+		NSMenu* next = queue.firstObject;
+		[queue removeObjectAtIndex:0];
+		for(NSMenuItem* item in next.itemArray)
+		{
+			if(item.action == @selector(orderFrontFindPanel:))
+				tags[item.title] = @(item.tag);
+			if(item.submenu)
+				[queue addObject:item.submenu];
+		}
+	}
+
+	OAK_ASSERT_EQ((size_t)tags.count, (size_t)3);
+	OAK_ASSERT_EQ((int)[tags[@"Find and Replace…"] intValue], (int)FFSearchTargetDocument);
+	OAK_ASSERT_EQ((int)[tags[@"Find in Project…"]  intValue], (int)FFSearchTargetProject);
+	OAK_ASSERT_EQ((int)[tags[@"Find in Folder…"]   intValue], (int)FFSearchTargetOther);
+}
+
+// MBMenuItem's `.submenuRef` was an `NSMenu* __strong*` that MBCreateMenu wrote
+// while building; the Swift builder hands the four back in a MainMenuRefs.
+// -menuNeedsUpdate: dispatches on their identity, so a nil is not an error — it
+// is a menu that silently stops populating, which is the rule 18 failure shape
+// one level up.
+//
+// The first version of this test walked the built menu by title instead, and a
+// mutation proved it worthless: pointing Wrap Column's submenuRef at
+// `spellingMenu` left the menu *structure* untouched, so it passed. It has to
+// call the builder and read what comes back.
+void test_main_menu_builder_hands_back_its_four_submenus ()
+{
+	// Force the cached build first, so this test's second build cannot be the one
+	// the golden sees.
+	(void)shared_main_menu();
+
+	// Building a menu reassigns four process-global AppKit menus (rule 58), so
+	// they are saved and put back — before the assertions, not after, because a
+	// failing OAK_ASSERT throws and would skip the restore (rule 53).
+	NSMenu* savedServices = NSApp.servicesMenu;
+	NSMenu* savedWindows  = NSApp.windowsMenu;
+	NSMenu* savedHelp     = NSApp.helpMenu;
+	NSMenu* savedFont     = [NSFontManager.sharedFontManager fontMenu:NO];
+
+	TMMainMenuRefs* refs = [TMMenus buildMainMenuInto:[[NSMenu alloc] initWithTitle:@"AMainMenu"]
+	                                           target:[AppController new]
+	                                          appName:@"xctest"];
+
+	NSApp.servicesMenu = savedServices;
+	NSApp.windowsMenu  = savedWindows;
+	NSApp.helpMenu     = savedHelp;
+	[NSFontManager.sharedFontManager setFontMenu:savedFont];
+
+	NSMutableArray* missing = [NSMutableArray array];
+	if(!refs.bundlesMenu)    [missing addObject:@"bundlesMenu"];
+	if(!refs.themesMenu)     [missing addObject:@"themesMenu"];
+	if(!refs.spellingMenu)   [missing addObject:@"spellingMenu"];
+	if(!refs.wrapColumnMenu) [missing addObject:@"wrapColumnMenu"];
+	OAK_ASSERT_EQ(sorted_lines(missing), std::string(""));
+
+	// Four references to four different menus, not four to the same one — the
+	// failure a mis-pointed submenuRef produces.
+	NSSet* distinct = [NSSet setWithArray:@[ refs.bundlesMenu, refs.themesMenu, refs.spellingMenu, refs.wrapColumnMenu ]];
+	OAK_ASSERT_EQ((size_t)distinct.count, (size_t)4);
+
+	// And each is the submenu of the item it belongs to.
+	OAK_ASSERT_EQ(to_s(refs.bundlesMenu.title),    std::string("Bundles"));
+	OAK_ASSERT_EQ(to_s(refs.themesMenu.title),     std::string("Theme"));
+	OAK_ASSERT_EQ(to_s(refs.spellingMenu.title),   std::string("Spelling"));
+	OAK_ASSERT_EQ(to_s(refs.wrapColumnMenu.title), std::string("Wrap Column"));
 }

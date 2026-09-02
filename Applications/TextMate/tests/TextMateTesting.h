@@ -52,3 +52,21 @@
 - (NSMenu*)applicationDockMenu:(NSApplication*)anApplication;
 - (BOOL)validateMenuItem:(NSMenuItem*)item;
 @end
+
+// Hand declarations for the two Swift classes in MainMenu.swift, rather than
+// importing the generated TextMate-Swift.h: this header already declares
+// AboutWindowController, FavoriteChooser and TMPlugInController by hand, and
+// importing the generated header alongside them gives every one of those two
+// interfaces (rule 43). AppController.mm reaches them through TextMate-Swift.h
+// in its own translation unit, which is unaffected.
+@interface TMMainMenuRefs : NSObject
+@property (nonatomic, readonly) NSMenu* bundlesMenu;
+@property (nonatomic, readonly) NSMenu* themesMenu;
+@property (nonatomic, readonly) NSMenu* spellingMenu;
+@property (nonatomic, readonly) NSMenu* wrapColumnMenu;
+@end
+
+@interface TMMenus : NSObject
++ (TMMainMenuRefs*)buildMainMenuInto:(NSMenu*)existingMenu target:(id)target appName:(NSString*)appName;
++ (NSMenu*)dockMenuWithTarget:(id)target;
+@end

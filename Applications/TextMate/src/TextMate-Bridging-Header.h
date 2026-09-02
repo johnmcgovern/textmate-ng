@@ -24,3 +24,13 @@
 // The extracted C++ boundary the controller calls. Foundation-only, like
 // AboutBundlesSupport.h.
 #include "TMPlugInSupport.h"
+
+// AppKit, for the Swift menu construction in MainMenu.swift. The header above
+// this line needs only Foundation; NSMenu does not.
+#import <Cocoa/Cocoa.h>
+
+// +delegateUsingSelector:, which MBMenuItem's `.delegate` field used to reach.
+// This is the only part of MenuBuilder a bridging header can take —
+// MenuBuilder.h itself is `typedef std::vector<MBMenuItem> MBMenu` and cannot
+// come in here, which is the whole reason MainMenu.swift restates the builder.
+#import <MenuBuilder/MBMenuDelegate.h>

@@ -427,11 +427,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 - (NSMenu*)applicationDockMenu:(NSApplication*)anApplication
 {
-	MBMenu const items = {
-		{ @"New File", @selector(newDocumentAndActivate:),  .target = self },
-		{ @"Open…",    @selector(openDocumentAndActivate:), .target = self },
-	};
-	return MBCreateMenu(items);
+	return [TMMenus dockMenuWithTarget:self];
 }
 
 - (void)setKeyWindowHasBackAndForwardActions:(BOOL)flag

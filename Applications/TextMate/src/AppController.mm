@@ -1,4 +1,5 @@
 #import "AppController.h"
+#import "AppControllerSupport.h"
 #import "OakMainMenu.h"
 #import "Favorites.h"
 #import "RMateServer.h"
@@ -26,11 +27,8 @@
 #import <document/OakDocument.h>
 #import <document/OakDocumentController.h>
 #import <bundles/query.h>
-#import <io/path.h>
 #import <regexp/glob.h>
-#import <network/tbz.h>
 #import <ns/ns.h>
-#import <settings/settings.h>
 #import <oak/debug.h>
 #import <oak/oak.h>
 #import <scm/scm.h>
@@ -504,8 +502,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 	// J23-owned update feed exists; SoftwareUpdate.mm's checkForTestBuild: does
 	// the lookup by name against whatever channels dict is set here.
 
-	settings_t::set_default_settings_path([[[NSBundle mainBundle] pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);
-	settings_t::set_global_settings_path(path::join(path::home(), "Library/Application Support/TextMate/Global.tmProperties"));
+	[AppControllerSupport setupSettingsPaths];
 
 	[NSUserDefaults.standardUserDefaults registerDefaults:@{
 		@"NSRecentDocumentsLimit": @25,
@@ -515,54 +512,15 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 	[TMPlugInController.sharedInstance loadAllPlugIns:nil];
 
-	std::string dest = path::join(path::home(), "Library/Application Support/TextMate/Managed");
-	if(!path::exists(dest))
-	{
-		if(NSString* archive = [[NSBundle mainBundle] pathForResource:@"DefaultBundles" ofType:@"tbz"])
-		{
-			path::make_dir(dest);
-
-			network::tbz_t tbz(dest);
-			if(tbz)
-			{
-				int fd = open([archive fileSystemRepresentation], O_RDONLY|O_CLOEXEC);
-				if(fd != -1)
-				{
-					char buf[4096];
-					ssize_t len;
-					while((len = read(fd, buf, sizeof(buf))) > 0)
-					{
-						if(write(tbz.input_fd(), buf, len) != len)
-						{
-							os_log_error(OS_LOG_DEFAULT, "Failed writing bytes to tar");
-							break;
-						}
-					}
-					close(fd);
-				}
-
-				std::string output, error;
-				if(!tbz.wait_for_tbz(&output, &error))
-					os_log_error(OS_LOG_DEFAULT, "tar: %{public}s%{public}s", output.c_str(), error.c_str());
-			}
-			else
-			{
-				os_log_error(OS_LOG_DEFAULT, "Unable to launch tar");
-			}
-		}
-		else
-		{
-			os_log_error(OS_LOG_DEFAULT, "No ‘DefaultBundles.tbz’ in TextMate.app");
-		}
-	}
+	[AppControllerSupport installDefaultBundlesIfNeeded];
 	[BundlesManager.sharedInstance loadBundlesIndex];
 
 	if(BOOL restoreSession = ![NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsDisableSessionRestoreKey])
 	{
-		std::string const prematureTerminationDuringRestore = path::join(path::temp(), "textmate_session_restore");
+		NSString* const prematureTerminationDuringRestore = AppControllerSupport.sessionRestoreMarkerPath;
 
 		NSString* promptUser = nil;
-		if(path::exists(prematureTerminationDuringRestore))
+		if([AppControllerSupport markerExistsAtPath:prematureTerminationDuringRestore])
 			promptUser = @"Previous attempt of restoring your session caused an abnormal exit. Would you like to skip session restore?";
 		else if([NSEvent modifierFlags] & NSEventModifierFlagShift)
 			promptUser = @"By holding down shift (⇧) you have indicated that you wish to disable restoring the documents which were open in last session.";
@@ -579,10 +537,10 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 		if(restoreSession)
 		{
-			close(open(prematureTerminationDuringRestore.c_str(), O_CREAT|O_TRUNC|O_WRONLY|O_CLOEXEC));
+			[AppControllerSupport createMarkerAtPath:prematureTerminationDuringRestore];
 			[DocumentWindowController restoreSession];
 		}
-		unlink(prematureTerminationDuringRestore.c_str());
+		[AppControllerSupport removeMarkerAtPath:prematureTerminationDuringRestore];
 	}
 }
 

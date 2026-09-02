@@ -428,3 +428,63 @@ void test_setup_registers_the_theme_defaults ()
 	[AppController setupThemeDefaultsAndObservers];
 	OAK_ASSERT_EQ(to_s([NSUserDefaults.standardUserDefaults stringForKey:@"universalThemeUUID"]), std::string(kMacClassicThemeUUID));
 }
+
+// MARK: - AppControllerSupport (rule 25's extraction, and rule 35's free test)
+
+// A scratch marker of our own. Never AppControllerSupport.sessionRestoreMarkerPath:
+// that is a fixed path shared with the running app, and a test that created one
+// and then failed before cleaning up would make the next real launch offer to
+// skip session restore (rule 53).
+static NSString* scratch_marker (NSString* name)
+{
+	return [NSTemporaryDirectory() stringByAppendingPathComponent:[@"tm-marker-tests-" stringByAppendingString:name]];
+}
+
+void test_session_restore_marker_path_is_named_in_the_temp_directory ()
+{
+	NSString* path = AppControllerSupport.sessionRestoreMarkerPath;
+
+	OAK_ASSERT_EQ(to_s(path.lastPathComponent), std::string("textmate_session_restore"));
+
+	// path::temp() is confstr(_CS_DARWIN_USER_TEMP_DIR); the directory has to be
+	// there already, since nothing creates it before the marker is written.
+	BOOL isDirectory = NO;
+	OAK_ASSERT_EQ((bool)[NSFileManager.defaultManager fileExistsAtPath:path.stringByDeletingLastPathComponent isDirectory:&isDirectory], true);
+	OAK_ASSERT_EQ((bool)isDirectory, true);
+
+	// The original computed it once into a local and used it three times, so the
+	// three primitives recomputing it must give the same answer every call.
+	OAK_ASSERT_EQ(to_s(AppControllerSupport.sessionRestoreMarkerPath), to_s(path));
+}
+
+void test_marker_round_trip ()
+{
+	NSString* path = scratch_marker(@"round-trip");
+	[NSFileManager.defaultManager removeItemAtPath:path error:nil];
+
+	OAK_ASSERT_EQ((bool)[AppControllerSupport markerExistsAtPath:path], false);
+	[AppControllerSupport createMarkerAtPath:path];
+	OAK_ASSERT_EQ((bool)[AppControllerSupport markerExistsAtPath:path], true);
+	[AppControllerSupport removeMarkerAtPath:path];
+	OAK_ASSERT_EQ((bool)[AppControllerSupport markerExistsAtPath:path], false);
+
+	// Removing one that is not there is a plain unlink() failure, ignored — which
+	// is what the caller relies on: it unlinks unconditionally, including on the
+	// path where it never created one.
+	[AppControllerSupport removeMarkerAtPath:path];
+	OAK_ASSERT_EQ((bool)[AppControllerSupport markerExistsAtPath:path], false);
+}
+
+// O_TRUNC, and it is load-bearing rather than incidental: the marker survives a
+// crash, so the next launch creates it again over a file that is already there.
+void test_creating_a_marker_truncates_an_existing_one ()
+{
+	NSString* path = scratch_marker(@"truncate");
+	[@"left over from a previous run" writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+	OAK_ASSERT_GT((size_t)[NSFileManager.defaultManager attributesOfItemAtPath:path error:nil].fileSize, (size_t)0);
+
+	[AppControllerSupport createMarkerAtPath:path];
+	OAK_ASSERT_EQ((size_t)[NSFileManager.defaultManager attributesOfItemAtPath:path error:nil].fileSize, (size_t)0);
+
+	[AppControllerSupport removeMarkerAtPath:path];
+}

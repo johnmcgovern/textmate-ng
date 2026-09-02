@@ -6,6 +6,7 @@
 // that no class declared under Applications/ was reachable from a test at all.
 #import "../src/AboutWindowController.h"
 #import "../src/AppController.h"
+#import "../src/AppControllerSupport.h"
 #import "../src/Favorites.h"
 #import "../src/FavoritesSupport.h"
 #import "../src/TMPlugInController.h"

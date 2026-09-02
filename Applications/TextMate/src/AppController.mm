@@ -490,6 +490,9 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 - (void)applicationWillFinishLaunching:(NSNotification*)aNotification
 {
+	// First, because it used to run at nib-load time — see the note on the method.
+	[AppController setupThemeDefaultsAndObservers];
+
 	if(NSMenu* menu = [self mainMenu])
 		NSApp.mainMenu = menu;
 

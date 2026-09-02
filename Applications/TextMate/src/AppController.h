@@ -34,6 +34,8 @@
 @end
 
 @interface AppController (BundlesMenu)
+// Was +initialize; -applicationWillFinishLaunching: calls it now (rule 24).
++ (void)setupThemeDefaultsAndObservers;
 - (BOOL)validateThemeMenuItem:(NSMenuItem*)item;
 @end
 

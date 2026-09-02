@@ -63,50 +63,71 @@ static NSString* NameForLocaleIdentifier (NSString* languageCode)
 		[aMenu addItemWithTitle:@"No Bundles Loaded" action:@selector(nop:) keyEquivalent:@""];
 }
 
-+ (void)initialize
+// Was +initialize, converted to explicit registration (rule 24).
+//
+// A Swift class cannot provide +initialize, so this had to move before the class
+// could be ported — and it is a behaviour-preserving step on its own, which is
+// why it is its own commit.
+//
+// Timing is the whole risk in the move. +initialize ran when MainMenu.xib
+// instantiated AppController; this runs at the top of
+// -applicationWillFinishLaunching:, the first of the app's own code after the
+// nib is loaded. Nothing reads these defaults in between — the only in-process
+// reader is -[OakTextView effectiveThemeUUID], and the earliest an OakTextView
+// exists is session restore, at the *end* of that same method. The three
+// observers still register before NSApplicationDidFinishLaunchingNotification
+// is posted, which is what they wait for.
+//
+// dispatch_once because +initialize ran once and these are notification
+// registrations: calling it twice would apply the theme appearance twice per
+// defaults change, and re-arm a migration that is supposed to happen once.
++ (void)setupThemeDefaultsAndObservers
 {
-	[NSUserDefaults.standardUserDefaults registerDefaults:@{
-		@"universalThemeUUID": @(kMacClassicThemeUUID),
-		@"darkModeThemeUUID":  @(kTwilightThemeUUID),
-	}];
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		[NSUserDefaults.standardUserDefaults registerDefaults:@{
+			@"universalThemeUUID": @(kMacClassicThemeUUID),
+			@"darkModeThemeUUID":  @(kTwilightThemeUUID),
+		}];
 
-	// MIGRATION from 2.0.12 and earlier
-	__weak __block id token = [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification object:NSApp queue:nil usingBlock:^(NSNotification* notification){
-		[NSNotificationCenter.defaultCenter removeObserver:token];
+		// MIGRATION from 2.0.12 and earlier
+		__weak __block id token = [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification object:NSApp queue:nil usingBlock:^(NSNotification* notification){
+			[NSNotificationCenter.defaultCenter removeObserver:token];
 
-		std::string const savedThemeUUID = settings_for_path().get(kSettingsThemeKey);
-		if(savedThemeUUID != NULL_STR)
-		{
-			os_log(OS_LOG_DEFAULT, "Remove old theme setting from Global.tmProperties: %{public}@", to_ns(savedThemeUUID));
-			settings_t::set(kSettingsThemeKey, NULL_STR);
-
-			if(bundles::item_ptr themeItem = bundles::lookup(savedThemeUUID))
+			std::string const savedThemeUUID = settings_for_path().get(kSettingsThemeKey);
+			if(savedThemeUUID != NULL_STR)
 			{
-				bool darkTheme = themeItem->value_for_field(bundles::kFieldSemanticClass).find("theme.dark") == 0;
-				NSString* mode        = darkTheme ? @"dark"              : @"light";
-				NSString* defaultsKey = darkTheme ? @"darkModeThemeUUID" : @"universalThemeUUID";
+				os_log(OS_LOG_DEFAULT, "Remove old theme setting from Global.tmProperties: %{public}@", to_ns(savedThemeUUID));
+				settings_t::set(kSettingsThemeKey, NULL_STR);
 
-				os_log(OS_LOG_DEFAULT, "Set preferred appearance to %{public}@", mode);
-				[NSUserDefaults.standardUserDefaults setObject:to_ns(savedThemeUUID) forKey:defaultsKey];
-				[NSUserDefaults.standardUserDefaults setObject:mode forKey:@"themeAppearance"];
+				if(bundles::item_ptr themeItem = bundles::lookup(savedThemeUUID))
+				{
+					bool darkTheme = themeItem->value_for_field(bundles::kFieldSemanticClass).find("theme.dark") == 0;
+					NSString* mode        = darkTheme ? @"dark"              : @"light";
+					NSString* defaultsKey = darkTheme ? @"darkModeThemeUUID" : @"universalThemeUUID";
+
+					os_log(OS_LOG_DEFAULT, "Set preferred appearance to %{public}@", mode);
+					[NSUserDefaults.standardUserDefaults setObject:to_ns(savedThemeUUID) forKey:defaultsKey];
+					[NSUserDefaults.standardUserDefaults setObject:mode forKey:@"themeAppearance"];
+				}
 			}
-		}
 
-		[NSUserDefaults.standardUserDefaults removeObjectForKey:@"changeThemeBasedOnAppearance"];
-	}];
+			[NSUserDefaults.standardUserDefaults removeObjectForKey:@"changeThemeBasedOnAppearance"];
+		}];
 
-	// Apply the theme appearance to the *application*, not just the editor. See
-	// +applyThemeAppearance. Both on the main queue deliberately: user-defaults
-	// change notifications are delivered on whichever thread made the change —
-	// including another process — and NSApp.appearance is main-thread-only. That
-	// is the same hazard that shipped as the alpha.13 Software Update crash.
-	[NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification object:NSApp queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* notification){
-		[self applyThemeAppearance];
-	}];
+		// Apply the theme appearance to the *application*, not just the editor. See
+		// +applyThemeAppearance. Both on the main queue deliberately: user-defaults
+		// change notifications are delivered on whichever thread made the change —
+		// including another process — and NSApp.appearance is main-thread-only. That
+		// is the same hazard that shipped as the alpha.13 Software Update crash.
+		[NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification object:NSApp queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* notification){
+			[self applyThemeAppearance];
+		}];
 
-	[NSNotificationCenter.defaultCenter addObserverForName:NSUserDefaultsDidChangeNotification object:NSUserDefaults.standardUserDefaults queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* notification){
-		[self applyThemeAppearance];
-	}];
+		[NSNotificationCenter.defaultCenter addObserverForName:NSUserDefaultsDidChangeNotification object:NSUserDefaults.standardUserDefaults queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* notification){
+			[self applyThemeAppearance];
+		}];
+	});
 }
 
 // Make the window chrome follow the chosen theme appearance.

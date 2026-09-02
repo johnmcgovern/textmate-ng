@@ -2,6 +2,8 @@
 #import <MenuBuilder/MenuBuilder.h>
 #import <ns/ns.h>
 #import <regexp/find.h>
+#import <theme/theme.h>
+#import <objc/runtime.h>
 #import <Cocoa/Cocoa.h>
 
 // A pin for AppController, written against the ObjC++ and before any port of it
@@ -382,4 +384,47 @@ void test_unrecognised_actions_stay_enabled ()
 	AppController* controller = [AppController new];
 	NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:@"Save" action:@selector(saveDocument:) keyEquivalent:@""];
 	OAK_ASSERT_EQ((bool)[controller validateMenuItem:item], true);
+}
+
+// MARK: - The +initialize conversion (rule 24)
+
+// A Swift class cannot provide +initialize, so this class must not regain one.
+// The check is deliberately against AppController's *own* metaclass rather than
+// +respondsToSelector:, which would answer YES for NSObject's implementation and
+// pass no matter what.
+void test_app_controller_declares_no_class_initialize ()
+{
+	unsigned int count = 0;
+	Method* methods = class_copyMethodList(object_getClass([AppController class]), &count);
+
+	NSMutableArray* names = [NSMutableArray array];
+	for(unsigned int i = 0; i < count; ++i)
+		[names addObject:NSStringFromSelector(method_getName(methods[i]))];
+	free(methods);
+
+	OAK_ASSERT_EQ((bool)[names containsObject:@"initialize"], false);
+	OAK_ASSERT_EQ((bool)[names containsObject:@"setupThemeDefaultsAndObservers"], true);
+}
+
+// What +initialize used to do at nib-load time, now done explicitly from
+// -applicationWillFinishLaunching:. Without these two registrations a machine
+// whose owner never picked a theme opens documents with no highlighting — the
+// same failure TMQLRender.mm spells its own fallbacks out to avoid, since a
+// registration domain is private to the process that registers it.
+//
+// This writes NSRegistrationDomain, which is per-process and never persisted, so
+// it cannot reach the user's real defaults (rule 53). It is also what +initialize
+// already did in every test process that touched this class.
+void test_setup_registers_the_theme_defaults ()
+{
+	[AppController setupThemeDefaultsAndObservers];
+
+	OAK_ASSERT_EQ(to_s([NSUserDefaults.standardUserDefaults stringForKey:@"universalThemeUUID"]), std::string(kMacClassicThemeUUID));
+	OAK_ASSERT_EQ(to_s([NSUserDefaults.standardUserDefaults stringForKey:@"darkModeThemeUUID"]),  std::string(kTwilightThemeUUID));
+
+	// dispatch_once, so a second call must not re-register the observers. Nothing
+	// here can count them; what it can check is that calling twice is not an error
+	// and leaves the values alone.
+	[AppController setupThemeDefaultsAndObservers];
+	OAK_ASSERT_EQ(to_s([NSUserDefaults.standardUserDefaults stringForKey:@"universalThemeUUID"]), std::string(kMacClassicThemeUUID));
 }

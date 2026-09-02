@@ -1,4 +1,4 @@
-# The numbered rules — all 60, in one place
+# The numbered rules — all 61, in one place
 
 Earned across every port in this project — Find, DocumentWindowController,
 OakAppKit, FileBrowser, OakFilterList. They live here, in one file, so a survey reads the whole
@@ -16,7 +16,8 @@ were consolidated here, verbatim, on 2026-08-18. Rules 50–51 were added on
 being NEXT_SESSION_HANDOFF.md. Rules 52–56 followed from OakRolloverButton,
 OakEncodingPopUpButton, OakOpenWithMenu, OakDocumentView and FavoriteChooser;
 rules 57–59 were added on 2026-09-02 from the AppController pin and extractions,
-and rule 60 from the menu conversion the same day.
+rule 60 from the menu conversion the same day, and rule 61 from the free-function
+probe that followed it.
 
 (The count in the title has been wrong before — it said "51" while there were 56.
 If you add a rule, fix it, and remember rule 10 applies to this file too.)
@@ -192,7 +193,8 @@ see.
     an `extern NSNotificationName const` drops its `Notification` suffix
     (`…MouseDidEnterNotification` → `.OakRolloverButtonMouseDidEnter`); a **C++
     default argument is not imported** so every arg must be passed
-    (`OakCreateActionPopUpButton(false)`); and `…AtURL:`/`…ForURL:` selectors trim
+    (`OakCreateActionPopUpButton(false)`) — **WRONG; corrected 2026-09-02 by
+    measurement, see rule 61**; and `…AtURL:`/`…ForURL:` selectors trim
     the trailing `URL` inconsistently (`repositoryAtURL:` → `repository(at:)` but
     `addObserverToRepositoryAtURL:usingBlock:` → `addObserverToRepository(at:usingBlock:)`).
 
@@ -773,3 +775,55 @@ is wrong** — the harness, the oracle, and the app check.
     recompiles your test file, and none of what it does is visible from the file
     you are editing. It was only caught because rule 54's restart counter is
     checked now; the run reported zero failures.
+
+---
+
+## Rule 61 — the free-function probe (2026-09-02)
+
+61. **C++-linkage free functions and their default arguments DO reach Swift under
+    `SWIFT_OBJC_INTEROP_MODE=objcxx`. Two earlier claims in this file were
+    inferences, and both were wrong.**
+
+    Measured with a throwaway probe (rule 55), reverted before commit. All of
+    these compiled *and linked* into the app from Swift:
+
+    | declaration | header | result |
+    | --- | --- | --- |
+    | `void RegisterDefaults ()` | `Preferences/Keys.h` | calls, links |
+    | `void OakOpenDocuments (NSArray*, BOOL = NO)` | `AppController.h` | calls, links, **and the default applies** |
+    | `bool DidHandleODBEditorEvent (AppleEvent const*)` | `ODBEditorSuite.h` | calls, links |
+    | `extern NSString* const kUserDefaults…Key` | `Preferences/Keys.h` | reads |
+
+    **The control matters and is the reason to believe it.** A declared-but-
+    nonexistent `void RegisterDefaultsThatDoNotExist ()` called the same way
+    fails at link with
+
+        Undefined symbols for architecture arm64:
+          "RegisterDefaultsThatDoNotExist()", referenced from:
+
+    — note the demangled C++ signature with `()`, which is what says the linker
+    really is resolving Swift's calls against C++ mangled symbols rather than the
+    whole thing being dead-stripped. A probe that cannot fail proves nothing
+    (rule 59); this one was made to fail on purpose first.
+
+    **What this corrects.** Rule 28 says "a C++ default argument is not imported
+    so every arg must be passed", citing `OakCreateActionPopUpButton(false)`.
+    Tested on that exact function: `OakCreateActionPopUpButton()` with no
+    arguments compiles. Either it was never true or the toolchain changed; either
+    way do not plan around it. Rule 28 now carries a pointer here.
+
+    **What this does *not* change.** Rule 19 still holds in the direction that
+    matters: Swift can **call** a global but can never **export** one, so a file
+    whose public surface is free functions still cannot become Swift while its
+    callers are ObjC++. And rule 19's corollary — that a default argument hides a
+    function from a survey, because the call sites never mention the parameter —
+    is about reading code, not importing it, and is untouched.
+
+    The practical consequence for the AppController port: `RegisterDefaults()`,
+    `OakOpenDocuments()` and `DidHandleODBEditorEvent()` are **not** blockers and
+    need no shims. One thing does follow, though: `OakOpenDocuments` is declared
+    in `AppController.h` alongside `@interface AppController`, so when that class
+    becomes Swift its hand declaration must stay out of the bridging header
+    (rule 43) while the free function must go in — which means splitting the
+    header first. That is rule 11, and it is now a step in the flip rather than a
+    surprise during it.

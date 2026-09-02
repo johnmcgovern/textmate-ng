@@ -146,7 +146,7 @@ Two diagnostic traps that cost real time, both worth remembering:
 
 ## Documentation map (read in this order)
 
-1. **The numbered rules — all 60 of them, now in one file: `ide/RULES.md`.**
+1. **The numbered rules — all 61 of them, now in one file: `ide/RULES.md`.**
    **Read it before surveying a framework.** They used to be split 1–22 in
    `ide/FIND_PORT_HANDOFF.md` and 23–49 in `ide/FILEBROWSER_PORT_HANDOFF.md`, and
    this entry pointed at one file while saying "22 of them" — so anyone following
@@ -1621,12 +1621,22 @@ The prep is done. `AppController.mm` is ~500 lines from 874, and
 | --- | --- | --- |
 | `AppController Commands.mm` | rule 37, C++-typed on both sides — stays ObjC++ forever | 58 lines |
 | `-[NSAlert addButtons:…, nil]` | rule 16 variadic; `NSAlert (Other)` declares nothing else | needs an array-taking sibling in OakAppKit |
-| `RegisterDefaults()`, `OakOpenDocuments()`, `DidHandleODBEditorEvent()` | C++-linkage free functions; importability under objcxx unsettled | rule 55 probe, or a one-line shim each |
+| ~~`RegisterDefaults()`, `OakOpenDocuments()`, `DidHandleODBEditorEvent()`~~ | **NOT blockers — probed 2026-09-02, rule 61.** All three call and link from Swift, defaults included | no work |
+| `AppController.h` declares both the class and `OakOpenDocuments` | rule 11 split: the hand declaration must stay out of the bridging header (rule 43) while the free function must go in | do it before the flip |
 | `-[OakTextView scopeContext]` | returns `scope::context_t` | needs an ObjC-shaped `TMScopeContext*` property |
 | `-revealBundleItem:` | C++-typed | BundleEditor already has `-revealItem:(TMBundleItem*)`; expose it |
 | `bundles::query` in the menus | `semanticClass`, scoped query | two additions to `TMBundleItem` |
 
-None is large; together they are a session. After them the flip is mechanical,
+**Probed 2026-09-02 and settled (rule 61):** the three free functions were the
+row most likely to need real work and turned out to need none — Swift calls and
+links C++-mangled free functions under objcxx interop, and their default
+arguments apply. That probe also *corrected rule 28*, which had claimed the
+opposite about default arguments; the claim was an inference and never held.
+Verified with a deliberately-nonexistent control function so the result could
+fail (rule 59).
+
+None of what is left is large; together they are a session. After them the flip
+is mechanical,
 and the expected shape is roughly **900 lines Swift with ~400 permanently ObjC++**
 (the Commands category and whatever the list above does not clear).
 

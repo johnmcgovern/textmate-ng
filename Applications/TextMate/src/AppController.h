@@ -1,3 +1,7 @@
+// OakOpenDocuments lives in its own header now (rule 11) and is imported here,
+// so every existing `#import "AppController.h"` is unchanged.
+#import "OakOpenDocuments.h"
+
 @interface AppController : NSObject <NSMenuDelegate>
 {
 	NSMenu* bundlesMenu;
@@ -38,5 +42,3 @@
 + (void)setupThemeDefaultsAndObservers;
 - (BOOL)validateThemeMenuItem:(NSMenuItem*)item;
 @end
-
-void OakOpenDocuments (NSArray* paths, BOOL treatFilePackageAsFolder = NO);

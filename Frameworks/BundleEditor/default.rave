@@ -1,6 +1,6 @@
 target "${dirname}" {
 	require BundlesManager OakAppKit OakCommand OakFoundation OakTextView TMBundleModel TMFileReference bundles cf command document io ns plist regexp settings text
-	headers src/BundleEditor.h
+	headers src/{BundleEditor,BundleEditorCxx}.h
 
 	files resources/* templates/*.plist gfx/**/*.png "Resources"
 

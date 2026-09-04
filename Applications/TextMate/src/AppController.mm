@@ -3,7 +3,7 @@
 #import "OakMainMenu.h"
 #import "Favorites.h"
 #import "RMateServer.h"
-#import <BundleEditor/BundleEditor.h>
+#import <BundleEditor/BundleEditorCxx.h>
 #import <BundlesManager/BundlesManager.h>
 #import <CrashReporter/CrashReporter.h>
 #import <DocumentWindow/DocumentWindowController.h>

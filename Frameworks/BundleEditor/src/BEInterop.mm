@@ -2,7 +2,7 @@
 //
 // Everything else about the window controller is Swift; this file is small on
 // purpose, and each piece here is here for a reason Swift cannot argue with.
-#import "BundleEditor.h"
+#import "BundleEditorCxx.h"
 #import "BESwiftClasses.h"
 #import <TMBundleModel/TMBundleModelCxx.h>
 #import <OakCommand/OakCommand.h>
@@ -12,8 +12,10 @@
 // What the category below forwards to. Declared here rather than in
 // BESwiftClasses.h because a category needs the real @interface, and
 // BESwiftClasses.h deliberately cannot import BundleEditor.h.
+//
+// -revealItem: used to be declared here too. It is public now (BundleEditor.h),
+// because the app needs it by name once AppController is Swift.
 @interface BundleEditor (BESwiftInternals)
-- (void)revealItem:(TMBundleItem*)item;
 @property (nonatomic, readonly) OakDocumentView* documentView;
 @end
 

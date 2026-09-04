@@ -2,7 +2,7 @@
 #import "DWScopeContextCxx.h"
 #import <OakTextView/OakTextView.h>
 #import <OakAppKit/OakSavePanel.h>
-#import <BundleEditor/BundleEditor.h>
+#import <BundleEditor/BundleEditorCxx.h>
 #import <Find/Find.h>
 #import <OakSystem/application.h>
 #import <document/OakDocumentController.h>

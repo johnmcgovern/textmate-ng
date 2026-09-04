@@ -1,4 +1,4 @@
-#import "../src/BundleEditor.h"
+#import "../src/BundleEditorCxx.h"
 #import "../src/BESwiftClasses.h"
 #import <TMBundleModel/TMBundleModelCxx.h>
 #import <OakTextView/OakDocumentView.h>
@@ -9,11 +9,15 @@
 // BundleEditor is Swift, reached from ObjC++ through declarations that NOTHING
 // checks against it at build time:
 //
-//   * BundleEditor.h — the public surface, including -revealBundleItem:, which
-//     takes bundles::item_ptr and is called from AppController.mm and
-//     DocumentWindowController.mm.
+//   * BundleEditor.h — the C++-free public surface: -revealItem:, which takes a
+//     TMBundleItem and is what a Swift consumer calls.
+//   * BundleEditorCxx.h — -revealBundleItem:, which takes bundles::item_ptr and
+//     is called from AppController.mm and DocumentWindowSupport.mm. Split out of
+//     BundleEditor.h on 2026-09-03 (rule 11) so the class could reach a Swift
+//     bridging header at all; the `#include <bundles/bundles.h>` it used to
+//     carry for this one selector kept the whole thing out.
 //   * BESwiftClasses.h — PropertiesViewController and OakRot13Transformer.
-//   * BEInterop.mm's own @interface for -revealItem: / -documentView.
+//   * BEInterop.mm's own @interface for -documentView.
 //
 // A drift in any of them is an unrecognized selector at runtime, in a window a
 // user opened. These tests are the build-time check that was missing, and they
@@ -55,19 +59,24 @@ void test_public_surface_from_bundle_editor_h ()
 
 	OAK_ASSERT([klass respondsToSelector:@selector(sharedInstance)]);
 	OAK_ASSERT([klass instancesRespondToSelector:@selector(showWindow:)]);
-	OAK_ASSERT([klass instancesRespondToSelector:@selector(revealBundleItem:)]);
+	OAK_ASSERT([klass instancesRespondToSelector:@selector(revealItem:)]);
 	OAK_ASSERT([klass instancesRespondToSelector:@selector(browserSelectionDidChange:)]);
 }
 
-// What BEInterop.mm's category forwards to. These are internal to the
-// framework, so nothing but that hand-written @interface names them — which is
-// precisely why a test has to.
+// The C++ half, now in its own header. Same contract, same two callers; only the
+// file it is declared in changed.
+void test_cxx_surface_from_bundle_editor_cxx_h ()
+{
+	OAK_ASSERT([bundle_editor_class() instancesRespondToSelector:@selector(revealBundleItem:)]);
+}
+
+// What BEInterop.mm's category forwards to. -documentView is internal to the
+// framework, so nothing but that hand-written @interface names it — which is
+// precisely why a test has to. (-revealItem: used to be here too; it is public
+// now and is asserted above.)
 void test_internal_surface_beinterop_forwards_to ()
 {
-	Class klass = bundle_editor_class();
-
-	OAK_ASSERT([klass instancesRespondToSelector:@selector(revealItem:)]);
-	OAK_ASSERT([klass instancesRespondToSelector:@selector(documentView)]);
+	OAK_ASSERT([bundle_editor_class() instancesRespondToSelector:@selector(documentView)]);
 }
 
 // OakCommand finds this by walking the responder chain, so it has to be on the

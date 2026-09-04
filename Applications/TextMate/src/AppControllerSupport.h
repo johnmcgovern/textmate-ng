@@ -112,6 +112,32 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)disableSCM;
 + (void)enableSCM;
 
+// MARK: - The old global theme setting
+//
+// A migration from TextMate 2.0.12 and earlier, run once from
+// +setupThemeDefaultsAndObservers: a theme chosen back then was written into
+// Global.tmProperties, and it moves to user defaults. Both halves are
+// settings_t, which has no ObjC spelling.
+
+// settings_for_path().get(kSettingsThemeKey). nil when unset, rather than the
+// C++ NULL_STR — the migration branches on exactly that.
++ (nullable NSString*)globalThemeSetting;
+
+// settings_t::set(kSettingsThemeKey, NULL_STR), which removes the key.
++ (void)clearGlobalThemeSetting;
+
+// MARK: - Menu collation
+//
+// text::less_t, which is case-insensitive and is what every one of these menus
+// ordered through before. Menu order is user-visible, so this is not
+// -localizedCaseInsensitiveCompare: by another name — it is the existing
+// comparator, exposed rather than approximated. TMBundleItem.sortedByName(_:)
+// covers bundle items; this is for the plain strings the spelling menu sorts.
+//
+// Sort with NSSortStable: the std::multimap it replaces kept equal keys in
+// insertion order, and NSArray's default sort makes no such promise.
++ (NSComparisonResult)compareForMenuOrder:(nullable NSString*)lhs to:(nullable NSString*)rhs;
+
 @end
 
 NS_ASSUME_NONNULL_END

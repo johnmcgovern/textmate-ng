@@ -7,6 +7,7 @@
 #import <OakTextView/OakTextView.h>
 #import <text/types.h>
 #import <scm/scm.h>
+#import <text/ctype.h>
 #import <oak/oak.h>
 
 // The marker path, computed the way the original did: once, into a local, from
@@ -117,6 +118,26 @@ static std::string const& session_restore_marker ()
 + (void)enableSCM
 {
 	scm::enable();
+}
+
++ (NSString*)globalThemeSetting
+{
+	return to_ns(settings_for_path().get(kSettingsThemeKey));
+}
+
++ (void)clearGlobalThemeSetting
+{
+	settings_t::set(kSettingsThemeKey, NULL_STR);
+}
+
++ (NSComparisonResult)compareForMenuOrder:(NSString*)lhs to:(NSString*)rhs
+{
+	text::less_t const less;
+	if(less(to_s(lhs), to_s(rhs)))
+		return NSOrderedAscending;
+	if(less(to_s(rhs), to_s(lhs)))
+		return NSOrderedDescending;
+	return NSOrderedSame;
 }
 
 @end

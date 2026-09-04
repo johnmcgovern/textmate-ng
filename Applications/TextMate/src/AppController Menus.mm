@@ -1,21 +1,16 @@
 #import "AppController.h"
-#import <oak/oak.h>
-#import <text/ctype.h>
-#import <text/parse.h>
-#import <bundles/bundles.h>
-#import <command/parser.h>
-#import <cf/cf.h>
-#import <ns/ns.h>
+#import "AppControllerSupport.h"
 #import <OakAppKit/NSMenuItem Additions.h>
-#import <OakAppKit/NSMenuItemCxx.h> // -setKeyEquivalentCxxString:
 #import <OakAppKit/OakToolTip.h>
-#import "TextMate-Swift.h"
-#import <OakFoundation/NSString Additions.h>
+// Only for NSWrapColumnWindowWidth, NSWrapColumnAskUser and
+// kUserDefaultsWrapColumnPresetsKey — three extern constants at the top of a
+// header that is otherwise C++. Splitting them out is the last thing between
+// this file and Swift (rule 11, the same split BundleEditor.h just had).
 #import <OakTextView/OakTextView.h>
-#import <oak/debug.h>
+#import "TextMate-Swift.h"
 #import <BundleMenu/BundleMenu.h>
+#import <TMBundleModel/TMBundleItem.h>
 #import <theme/theme.h>
-#import <settings/settings.h>
 
 static NSString* NameForLocaleIdentifier (NSString* languageCode)
 {
@@ -45,21 +40,21 @@ static NSString* NameForLocaleIdentifier (NSString* languageCode)
 		[aMenu removeItemAtIndex:i];
 	}
 
-	std::multimap<std::string, bundles::item_ptr, text::less_t> ordered;
-	for(auto const& item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeBundle))
-		ordered.emplace(item->name(), item);
+	// -sortedByName: is stable_sort over text::less_t, which is exactly what the
+	// std::multimap keyed on the name gave: equal names keep insertion order.
+	NSArray<TMBundleItem*>* ordered = [TMBundleItem itemsSortedByName:[TMBundleItem itemsOfKinds:TMBundleItemKindBundle inScope:nil]];
 
-	for(auto const& pair : ordered)
+	for(TMBundleItem* item in ordered)
 	{
-		if(pair.second->menu().empty())
+		if(item.menu.count == 0)
 			continue;
 
-		NSMenuItem* menuItem = [aMenu addItemWithTitle:[NSString stringWithCxxString:pair.first] action:NULL keyEquivalent:@""];
-		menuItem.submenu = [[NSMenu alloc] initWithTitle:[NSString stringWithCxxString:pair.second->uuid()]];
+		NSMenuItem* menuItem = [aMenu addItemWithTitle:item.name action:NULL keyEquivalent:@""];
+		menuItem.submenu = [[NSMenu alloc] initWithTitle:item.uuidString];
 		menuItem.submenu.delegate = BundleMenuDelegate.sharedInstance;
 	}
 
-	if(ordered.empty())
+	if(ordered.count == 0)
 		[aMenu addItemWithTitle:@"No Bundles Loaded" action:@selector(nop:) keyEquivalent:@""];
 }
 
@@ -94,20 +89,22 @@ static NSString* NameForLocaleIdentifier (NSString* languageCode)
 		__weak __block id token = [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification object:NSApp queue:nil usingBlock:^(NSNotification* notification){
 			[NSNotificationCenter.defaultCenter removeObserver:token];
 
-			std::string const savedThemeUUID = settings_for_path().get(kSettingsThemeKey);
-			if(savedThemeUUID != NULL_STR)
+			NSString* savedThemeUUID = AppControllerSupport.globalThemeSetting;
+			if(savedThemeUUID)
 			{
-				os_log(OS_LOG_DEFAULT, "Remove old theme setting from Global.tmProperties: %{public}@", to_ns(savedThemeUUID));
-				settings_t::set(kSettingsThemeKey, NULL_STR);
+				os_log(OS_LOG_DEFAULT, "Remove old theme setting from Global.tmProperties: %{public}@", savedThemeUUID);
+				[AppControllerSupport clearGlobalThemeSetting];
 
-				if(bundles::item_ptr themeItem = bundles::lookup(savedThemeUUID))
+				if(TMBundleItem* themeItem = [TMBundleItem itemWithUUIDString:savedThemeUUID])
 				{
-					bool darkTheme = themeItem->value_for_field(bundles::kFieldSemanticClass).find("theme.dark") == 0;
+					// -hasPrefix: on a nil semanticClass is NO, which is what
+					// std::string::find(…) == 0 answered for NULL_STR.
+					BOOL darkTheme        = [themeItem.semanticClass hasPrefix:@"theme.dark"];
 					NSString* mode        = darkTheme ? @"dark"              : @"light";
 					NSString* defaultsKey = darkTheme ? @"darkModeThemeUUID" : @"universalThemeUUID";
 
 					os_log(OS_LOG_DEFAULT, "Set preferred appearance to %{public}@", mode);
-					[NSUserDefaults.standardUserDefaults setObject:to_ns(savedThemeUUID) forKey:defaultsKey];
+					[NSUserDefaults.standardUserDefaults setObject:savedThemeUUID forKey:defaultsKey];
 					[NSUserDefaults.standardUserDefaults setObject:mode forKey:@"themeAppearance"];
 				}
 			}
@@ -212,8 +209,8 @@ static NSString* NameForLocaleIdentifier (NSString* languageCode)
 		if(defaultsKey)
 		{
 			NSString* themeUUID = [NSUserDefaults.standardUserDefaults stringForKey:defaultsKey];
-			if(bundles::item_ptr themeItem = bundles::lookup(to_s(themeUUID)))
-				item.title = [NSString stringWithFormat:@"%@ (%@)", label, to_ns(themeItem->name())];
+			if(TMBundleItem* themeItem = [TMBundleItem itemWithUUIDString:themeUUID])
+				item.title = [NSString stringWithFormat:@"%@ (%@)", label, themeItem.name];
 		}
 	}
 	else if(item.action == @selector(takeUniversalThemeUUIDFrom:))
@@ -227,18 +224,25 @@ static NSString* NameForLocaleIdentifier (NSString* languageCode)
 {
 	[aMenu removeAllItems];
 
-	std::map<std::string, std::multimap<std::string, bundles::item_ptr, text::less_t>> ordered;
-	for(auto const& item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeTheme))
+	NSMutableDictionary<NSString*, NSMutableArray<TMBundleItem*>*>* ordered = [NSMutableDictionary dictionary];
+	for(TMBundleItem* item in [TMBundleItem itemsOfKinds:TMBundleItemKindTheme inScope:nil])
 	{
-		if(item->hidden_from_user())
+		if(item.isHiddenFromUser)
 			continue;
 
-		auto semanticClass = text::split(item->value_for_field(bundles::kFieldSemanticClass), ".");
-		std::string themeClass = semanticClass.size() > 2 && semanticClass.front() == "theme" ? semanticClass[1] : "unspecified";
-		ordered[themeClass].emplace(item->name(), item);
+		// A nil semanticClass splits to an empty array, so it falls to
+		// "unspecified" — which is what text::split(NULL_STR, ".") did, since the
+		// sentinel is one component and the test is `> 2`.
+		NSArray<NSString*>* semanticClass = [item.semanticClass componentsSeparatedByString:@"."];
+		NSString* themeClass = semanticClass.count > 2 && [semanticClass.firstObject isEqualToString:@"theme"] ? semanticClass[1] : @"unspecified";
+
+		NSMutableArray* group = ordered[themeClass];
+		if(!group)
+			ordered[themeClass] = group = [NSMutableArray array];
+		[group addObject:item];
 	}
 
-	if(ordered.empty())
+	if(ordered.count == 0)
 	{
 		[aMenu addItemWithTitle:@"No Themes Loaded" action:@selector(nop:) keyEquivalent:@""];
 		return;
@@ -248,24 +252,38 @@ static NSString* NameForLocaleIdentifier (NSString* languageCode)
 	NSMenu* lightMenu = refs.lightMenu;
 	NSMenu* darkMenu  = refs.darkMenu;
 
-	for(NSMenu* submenu : { lightMenu, darkMenu })
+	// std::map iterated its keys in byte order; -compare: is the same ordering for
+	// these ("dark", "light", "unspecified"), and the group order is what puts the
+	// separators in the right places.
+	NSArray<NSString*>* themeClasses = [ordered.allKeys sortedArrayUsingSelector:@selector(compare:)];
+
+	// A C++ initializer_list tolerated a nil menu and messaging nil is a no-op; an
+	// NSArray literal would throw instead, so build the list rather than assume
+	// both submenus came back.
+	NSMutableArray<NSMenu*>* submenus = [NSMutableArray array];
+	if(lightMenu)
+		[submenus addObject:lightMenu];
+	if(darkMenu)
+		[submenus addObject:darkMenu];
+
+	for(NSMenu* submenu in submenus)
 	{
-		std::string skipThemeClass = submenu == lightMenu ? "dark" : "light";
+		NSString* skipThemeClass = submenu == lightMenu ? @"dark" : @"light";
 		SEL action = submenu == lightMenu ? @selector(takeUniversalThemeUUIDFrom:) : @selector(takeDarkThemeUUIDFrom:);
 
-		for(auto const& themeClasses : ordered)
+		for(NSString* themeClass in themeClasses)
 		{
-			if(themeClasses.first == skipThemeClass)
+			if([themeClass isEqualToString:skipThemeClass])
 				continue;
 
 			if(submenu.numberOfItems)
 				[submenu addItem:[NSMenuItem separatorItem]];
 
-			for(auto const& pair : themeClasses.second)
+			for(TMBundleItem* item in [TMBundleItem itemsSortedByName:ordered[themeClass]])
 			{
-				NSMenuItem* menuItem = [submenu addItemWithTitle:[NSString stringWithCxxString:pair.first] action:action keyEquivalent:@""];
-				[menuItem setKeyEquivalentCxxString:key_equivalent(pair.second)];
-				[menuItem setRepresentedObject:[NSString stringWithCxxString:pair.second->uuid()]];
+				NSMenuItem* menuItem = [submenu addItemWithTitle:item.name action:action keyEquivalent:@""];
+				[menuItem setKeyEquivalentString:item.keyEquivalent];
+				[menuItem setRepresentedObject:item.uuidString];
 			}
 		}
 	}
@@ -280,20 +298,30 @@ static NSString* NameForLocaleIdentifier (NSString* languageCode)
 			[aMenu removeItemAtIndex:i];
 	}
 
-	std::multimap<std::string, NSString*, text::less_t> ordered;
-
 	NSSpellChecker* spellChecker = NSSpellChecker.sharedSpellChecker;
+
+	// The display name is computed once per language, as the multimap key was —
+	// NameForLocaleIdentifier builds a CFLocale each call, and a comparator would
+	// invoke it O(n log n) times.
+	NSMutableDictionary<NSString*, NSString*>* displayNames = [NSMutableDictionary dictionary];
 	for(NSString* lang in [spellChecker availableLanguages])
-		ordered.emplace(to_s(NameForLocaleIdentifier(lang)), lang);
+		displayNames[lang] = NameForLocaleIdentifier(lang);
+
+	// Sorting -availableLanguages rather than the dictionary's keys: NSSortStable
+	// keeps equal display names in *that* order, which is the insertion order the
+	// std::multimap preserved. allKeys has no defined order to be stable about.
+	NSArray<NSString*>* ordered = [[spellChecker availableLanguages] sortedArrayWithOptions:NSSortStable usingComparator:^NSComparisonResult(NSString* lhs, NSString* rhs){
+		return [AppControllerSupport compareForMenuOrder:displayNames[lhs] to:displayNames[rhs]];
+	}];
 
 	NSString* systemSpellingLanguage = [spellChecker automaticallyIdentifiesLanguages] ? @"Automatic by Language" : NameForLocaleIdentifier([spellChecker language]);
 	NSMenuItem* menuItem = [aMenu addItemWithTitle:[NSString stringWithFormat:@"System (%@)", systemSpellingLanguage] action:@selector(takeSpellingLanguageFrom:) keyEquivalent:@""];
 	menuItem.representedObject = @"";
 
-	for(auto const& it : ordered)
+	for(NSString* lang in ordered)
 	{
-		NSMenuItem* menuItem = [aMenu addItemWithTitle:[NSString stringWithCxxString:it.first] action:@selector(takeSpellingLanguageFrom:) keyEquivalent:@""];
-		menuItem.representedObject = it.second;
+		NSMenuItem* menuItem = [aMenu addItemWithTitle:displayNames[lang] action:@selector(takeSpellingLanguageFrom:) keyEquivalent:@""];
+		menuItem.representedObject = lang;
 	}
 }
 

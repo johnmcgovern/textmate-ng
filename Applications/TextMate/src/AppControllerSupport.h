@@ -77,6 +77,25 @@ NS_ASSUME_NONNULL_BEGIN
 // [target hasSelection], or NO when target is nil.
 + (BOOL)targetHasSelection:(nullable id)target;
 
+// MARK: - A position string, normalised
+//
+// `to_ns(text::range_t(text::pos_t(position)))` — parse a position in pos_t's own
+// notation and render it back. -editBundleItem: passes the result to
+// OakDocument.selection instead of calling
+// -showDocument:andSelect:inProject:bringToFront:, whose only use of its
+// `text::range_t const&` is that same assignment.
+//
+// The round trip is NOT a no-op and the string cannot simply be forwarded.
+// text::pos_t parses "%zu:%zu+%zu" and stops, so "5-7" is the *point* 5;
+// text::range_t, which is what OakDocument.selection is eventually read as,
+// splits on "-x" first and would make it the *range* 5 to 7. Normalising here
+// keeps the point the original produced.
+//
+// Not to be confused with +[TxMtURLSupport selectionStringForLine:column:],
+// which takes decimal line and column numbers from a URL and converts 1-based to
+// 0-based. This one takes a string already in pos_t notation.
++ (nullable NSString*)selectionStringForPositionString:(nullable NSString*)position;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -3,7 +3,7 @@
 #import "OakMainMenu.h"
 #import "Favorites.h"
 #import "RMateServer.h"
-#import <BundleEditor/BundleEditorCxx.h>
+#import <BundleEditor/BundleEditor.h>
 #import <BundlesManager/BundlesManager.h>
 #import <CrashReporter/CrashReporter.h>
 #import <DocumentWindow/DocumentWindowController.h>
@@ -14,7 +14,6 @@
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/OakPasteboard.h>
 #import <OakFilterList/BundleItemChooser.h>
-#import <TMBundleModel/TMBundleModelCxx.h>
 #import <OakFoundation/OakFoundation.h>
 #import <OakFoundation/NSString Additions.h>
 #import <OakTextView/OakDocumentView.h>
@@ -24,13 +23,11 @@
 #import <SoftwareUpdate/SoftwareUpdate.h>
 #import <document/OakDocument.h>
 #import <document/OakDocumentController.h>
-#import <bundles/query.h>
 #import <regexp/glob.h>
 #import <ns/ns.h>
 #import <oak/debug.h>
 #import <oak/oak.h>
 #import <scm/scm.h>
-#import <text/types.h>
 #import "TextMate-Swift.h"
 
 void OakOpenDocuments (NSArray* paths, BOOL treatFilePackageAsFolder)
@@ -496,19 +493,27 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 	if(NSString* uuid = [[[sender selectedItems] lastObject] valueForKey:@"uuid"])
 	{
-		[BundleEditor.sharedInstance revealBundleItem:bundles::lookup(to_s(uuid))];
+		[BundleEditor.sharedInstance revealItem:[TMBundleItem itemWithUUIDString:uuid]];
 	}
 	else if(NSString* path = [[[sender selectedItems] lastObject] valueForKey:@"file"])
 	{
 		OakDocument* doc = [OakDocumentController.sharedInstance documentWithPath:path];
 		NSString* line = [[[sender selectedItems] lastObject] valueForKey:@"line"];
-		[OakDocumentController.sharedInstance showDocument:doc andSelect:(line ? text::pos_t(to_s(line)) : text::pos_t::undefined) inProject:nil bringToFront:YES];
+
+		// Was -showDocument:andSelect:inProject:bringToFront:, whose entire use of
+		// its text::range_t is `aDocument.selection = to_ns(range)`. Setting it
+		// here and calling the range-free variant — which forwards an undefined
+		// range and therefore skips that assignment — is the same two steps in the
+		// same order. Same move -handleTxMtURL: already made.
+		if(NSString* selection = [AppControllerSupport selectionStringForPositionString:line])
+			doc.selection = selection;
+		[OakDocumentController.sharedInstance showDocument:doc inProject:nil bringToFront:YES];
 	}
 }
 
 - (void)editBundleItemWithUUIDString:(NSString*)uuidString
 {
-	[BundleEditor.sharedInstance revealBundleItem:bundles::lookup(to_s(uuidString))];
+	[BundleEditor.sharedInstance revealItem:[TMBundleItem itemWithUUIDString:uuidString]];
 }
 
 // ============

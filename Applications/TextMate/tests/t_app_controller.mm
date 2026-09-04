@@ -9,6 +9,7 @@
 #import <TMBundleModel/TMBundleModelCxx.h>
 #import <OakTextView/OakDocumentView.h>
 #import <scope/scope.h>
+#import <text/types.h>
 #import <Cocoa/Cocoa.h>
 
 // A pin for AppController, written against the ObjC++ and before any port of it
@@ -791,4 +792,46 @@ void test_a_live_text_view_reports_its_own_scope ()
 	// Whatever it is, it came from the view rather than from the fallback.
 	scope::selector_t const anything("source.ruby");
 	OAK_ASSERT(!anything.does_match(scope.cxxContext).has_value());
+}
+
+// MARK: - Position strings
+
+// -editBundleItem: used to hand a text::range_t to
+// -showDocument:andSelect:inProject:bringToFront:; it now sets
+// OakDocument.selection, which is that method's only use of the range anyway.
+// The conversion is only safe because the string is normalised on the way
+// through — these tests are what says so.
+void test_position_string_round_trips_a_point ()
+{
+	OAK_ASSERT_EQ(describe([AppControllerSupport selectionStringForPositionString:@"5"]),   std::string("5"));
+	OAK_ASSERT_EQ(describe([AppControllerSupport selectionStringForPositionString:@"5:3"]), std::string("5:3"));
+	OAK_ASSERT_EQ(describe([AppControllerSupport selectionStringForPositionString:@"1"]),   std::string("1"));
+}
+
+// THE case the boundary exists for. text::pos_t parses "%zu:%zu+%zu" and stops
+// at the dash, so "5-7" is the *point* 5. OakDocument.selection is eventually
+// read as a text::range_t, which splits on "-x" first and would make the same
+// string the *range* 5 to 7 — a different selection, silently.
+//
+// Asserted against the C++ both ways, so the test states the difference rather
+// than just the answer.
+void test_position_string_is_not_forwarded_verbatim ()
+{
+	NSString* normalised = [AppControllerSupport selectionStringForPositionString:@"5-7"];
+
+	OAK_ASSERT_EQ(describe(normalised), std::string("5"));
+	OAK_ASSERT_EQ(describe(normalised), (std::string)text::range_t(text::pos_t("5-7")));
+
+	// What forwarding the raw string would have meant instead.
+	OAK_ASSERT_EQ((std::string)text::range_t("5-7"), std::string("5-7"));
+	OAK_ASSERT(text::range_t("5-7") != text::range_t(text::pos_t("5-7")));
+}
+
+// nil is how -editBundleItem: says "no line", and it must leave the document's
+// selection alone. The ObjC++ expressed that as text::pos_t::undefined, which
+// -showDocument:andSelect: checked for before assigning.
+void test_position_string_of_nil_is_nil ()
+{
+	OAK_ASSERT([AppControllerSupport selectionStringForPositionString:nil] == nil);
+	OAK_ASSERT(text::range_t(text::pos_t::undefined) == text::range_t::undefined);
 }

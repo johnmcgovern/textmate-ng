@@ -1620,12 +1620,26 @@ The prep is done. `AppController.mm` is ~500 lines from 874, and
 | blocker | shape | size |
 | --- | --- | --- |
 | `AppController Commands.mm` | rule 37, C++-typed on both sides — stays ObjC++ forever | 58 lines |
-| `-[NSAlert addButtons:…, nil]` | rule 16 variadic; `NSAlert (Other)` declares nothing else | needs an array-taking sibling in OakAppKit |
+| ~~`-[NSAlert addButtons:…, nil]`~~ | **NOT a blocker — measured 2026-09-04.** Rule 16 holds, but the method is a loop over -addButtonWithTitle: and six ported files already inline that loop. Write the loop; do not add a seventh spelling | no framework work |
 | ~~`RegisterDefaults()`, `OakOpenDocuments()`, `DidHandleODBEditorEvent()`~~ | **NOT blockers — probed 2026-09-02, rule 61.** All three call and link from Swift, defaults included | no work |
 | `AppController.h` declares both the class and `OakOpenDocuments` | rule 11 split: the hand declaration must stay out of the bridging header (rule 43) while the free function must go in | do it before the flip |
-| `-[OakTextView scopeContext]` | returns `scope::context_t` | needs an ObjC-shaped `TMScopeContext*` property |
-| `-revealBundleItem:` | C++-typed | BundleEditor already has `-revealItem:(TMBundleItem*)`; expose it |
-| `bundles::query` in the menus | `semanticClass`, scoped query | two additions to `TMBundleItem` |
+| ~~`-[OakTextView scopeContext]`~~ | **DONE `ed6c57ab`** — and it needed no OakTextView change at all: the caller only ever had an `id` from targetForAction:, so the boundary went in AppControllerSupport | |
+| ~~`-revealBundleItem:`~~ | **DONE `919a44b9`** — the method existed; the obstacle was `#include <bundles/bundles.h>` at the top of BundleEditor.h (rule 11 split) | |
+| ~~`bundles::query` in the menus~~ | **DONE `5469285c`** — `semanticClass` and `itemsOfKinds:inScope:`. Found a live bug next door on the way (`cf83e310`) | |
+| ~~`scm::enable/disable`~~ | **DONE `09520295`** — two forwarders, by choice: Swift *can* call namespaced C++ free functions (rule 61), but `<scm/scm.h>` cannot reach a bridging header | |
+
+**All four blockers are cleared as of 2026-09-04**, and three of the four were
+smaller than the survey estimated. Two were not missing APIs at all but headers
+that could not reach a bridging header (rule 11), one needed no framework change
+whatsoever, and the NSAlert variadic turned out to be a non-problem with six
+existing precedents. The one thing the survey *under*-estimated was the value of
+writing tests around neighbouring claims: that is how `cf83e310` (Export Bundle
+dropping proxy items) surfaced.
+
+`AppController.mm` now has **five** C++ lines, all of them the find::options_t
+cases in -validateMenuItem:, already pinned by static_assert against the literals
+the Swift menu writes. Nothing in the file needs a boundary any more, and the
+flip is the next piece of work.
 
 **Probed 2026-09-02 and settled (rule 61):** the three free functions were the
 row most likely to need real work and turned out to need none — Swift calls and

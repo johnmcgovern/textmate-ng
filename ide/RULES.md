@@ -82,6 +82,15 @@ the one that actually shipped a broken feature.
 16. **ObjC variadic methods cannot be called from Swift at all.** `-addButtons:`
    and `+tmAlertWithMessageText:informativeText:buttons:` have no C++ in them and
    no survey looking for C++ will find them. Grep for `, ...)` in the headers.
+   **Confirmed by measurement 2026-09-04** (unlike rule 28's neighbouring claim,
+   which was not): `alert.addButtons("A", "B", nil)` fails with *value of type
+   'NSAlert' has no member 'addButtons'*.
+   **But it is not a blocker, and no sibling API was added.** Both of these are
+   loops over `-addButtonWithTitle:`, and six ported files already inline that
+   loop — DocumentWindowController, OakHTMLOutputView, HOWebViewDelegateHelper,
+   FileBrowserDiskOperations, TMPlugInController and command/runner.mm — each
+   with a comment saying why. Adding an array-taking method to OakAppKit would be
+   a seventh spelling competing with six working precedents. Write the loop.
 17. **"Dropped by the importer" is not uniform, so check the member.** Under
    `SWIFT_OBJC_INTEROP_MODE=objcxx` a `std::map` *return type* is dropped, but a
    `text::range_t const&` *parameter* imports fine. That decides whether a Swift
@@ -818,6 +827,16 @@ is wrong** — the harness, the oracle, and the app check.
     callers are ObjC++. And rule 19's corollary — that a default argument hides a
     function from a survey, because the call sites never mention the parameter —
     is about reading code, not importing it, and is untouched.
+
+    **Extended 2026-09-04: namespaces too.** `scm::disable()` and `scm::enable()`
+    are called from app Swift as `scm.disable()` / `scm.enable()`, and they link.
+    Same control discipline — a declared-but-nonexistent
+    `scm::enableThatDoesNotExist()` fails with the demangled namespaced signature.
+    So the barrier is never the *linkage*; it is only ever whether the
+    declaration can reach a bridging header. `<scm/scm.h>` cannot (std::shared_ptr
+    throughout), so that one still gets a two-line forwarder — but by choice,
+    to avoid a duplicate declaration nothing checks, not because Swift could not
+    call it.
 
     The practical consequence for the AppController port: `RegisterDefaults()`,
     `OakOpenDocuments()` and `DidHandleODBEditorEvent()` are **not** blockers and

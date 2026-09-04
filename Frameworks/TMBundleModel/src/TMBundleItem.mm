@@ -218,6 +218,11 @@ static std::mutex& InternMutex ()
 	return [TMBundleItem itemsWithCxxItems:_item->menu()];
 }
 
+- (NSString*)semanticClass
+{
+	return [NSString stringWithCxxString:_item->value_for_field(bundles::kFieldSemanticClass)];
+}
+
 - (NSString*)nameWithBundle
 {
 	return [NSString stringWithCxxString:_item->name_with_bundle()];
@@ -335,6 +340,14 @@ static std::mutex& InternMutex ()
 	// dropped its proxy items.
 	oak::uuid_t const bundleUUID = bundle ? bundle.cxxItem->uuid() : oak::uuid_t();
 	return [self itemsWithCxxItems:bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, (int)kinds, bundleUUID, false, true, false)];
+}
+
++ (NSArray<TMBundleItem*>*)itemsOfKinds:(TMBundleItemKind)kinds inScope:(TMScopeContext*)scope
+{
+	// Every trailing argument left at its default: bundle = any, filter = true,
+	// includeDisabledItems = false, resolveProxyItems = true. That is the exact
+	// call the menus in AppController Menus.mm make.
+	return [self itemsWithCxxItems:bundles::query(bundles::kFieldAny, NULL_STR, scope ? scope.cxxContext : scope::wildcard, (int)kinds)];
 }
 
 // Interning makes these redundant today. They are spelled out anyway because

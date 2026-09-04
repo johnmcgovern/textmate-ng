@@ -245,3 +245,72 @@ void test_editor_query_does_not_substitute_what_a_proxy_stands_for ()
 	OAK_ASSERT_EQ((size_t)items.count, (size_t)1);
 	OAK_ASSERT(![items containsObject:[TMBundleItem itemWithCxxItem:TestCommand]]);
 }
+
+// ======================================
+// = semanticClass and the menus' query =
+// ======================================
+//
+// Both arrived for AppController's menus (2026-09-03): -bundlesMenuNeedsUpdate:
+// and -themesMenuNeedsUpdate: are `bundles::query(kFieldAny, NULL_STR,
+// scope::wildcard, kind)` plus a semantic-class split, and neither was reachable
+// without C++ before.
+
+void test_semantic_class_is_the_field_verbatim ()
+{
+	// The C++ is the oracle: the wrapper has to agree with what it wraps, not
+	// merely return something plausible.
+	TMBundleItem* item = [TMBundleItem itemWithCxxItem:TestCommand];
+	OAK_ASSERT_EQ(to_s(item.semanticClass), TestCommand->value_for_field(bundles::kFieldSemanticClass));
+	OAK_ASSERT_EQ(to_s(item.semanticClass), std::string("callback.test.filter"));
+}
+
+// NULL_STR becomes nil at the boundary, once, so it can never reach a caller —
+// the contract -name and -tabTrigger already have. It matters here because
+// -themesMenuNeedsUpdate: splits this string to classify a theme as light or
+// dark, and a caller handed "(null)" or the sentinel would quietly classify
+// every theme as "unspecified" without anything failing.
+void test_semantic_class_is_nil_when_absent ()
+{
+	TMBundleItem* item = [TMBundleItem itemWithCxxItem:TestPlainCommand];
+	OAK_ASSERT(TestPlainCommand->value_for_field(bundles::kFieldSemanticClass) == NULL_STR);
+	OAK_ASSERT(item.semanticClass == nil);
+}
+
+// The menus' query: every trailing argument at its default. Asserted against the
+// C++ call it stands for rather than a hand-written expectation.
+void test_items_of_kinds_in_scope_matches_the_cxx_query ()
+{
+	NSArray* got = [TMBundleItem itemsOfKinds:TMBundleItemKindCommand inScope:nil];
+
+	std::vector<bundles::item_ptr> want = bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeCommand);
+	OAK_ASSERT_EQ((size_t)got.count, want.size());
+
+	std::string missing;
+	for(auto const& item : want)
+	{
+		if(![got containsObject:[TMBundleItem itemWithCxxItem:item]])
+			missing += item->name() + " ";
+	}
+	OAK_ASSERT_EQ(missing, std::string(""));
+}
+
+// It asks a different question from -itemsInBundle:ofKinds:, which is why they
+// are two methods rather than one with flags. That one answers "what exists" —
+// unfiltered, disabled items included, proxies left alone; this one answers
+// "what would apply here". A proxy separates them: the editor's query returns
+// the proxy itself, the menus' resolves it into what it stands for.
+void test_the_two_queries_answer_different_questions ()
+{
+	TMBundleItem* proxy = [TMBundleItem itemWithCxxItem:TestProxy];
+
+	OAK_ASSERT([[TMBundleItem itemsInBundle:nil ofKinds:TMBundleItemKindProxy] containsObject:proxy]);
+	OAK_ASSERT(![[TMBundleItem itemsOfKinds:TMBundleItemKindProxy inScope:nil] containsObject:proxy]);
+}
+
+// Bundles, which is exactly what -bundlesMenuNeedsUpdate: asks for.
+void test_items_of_kinds_finds_the_bundle ()
+{
+	NSArray* bundles = [TMBundleItem itemsOfKinds:TMBundleItemKindBundle inScope:nil];
+	OAK_ASSERT_GT((size_t)bundles.count, (size_t)0);
+	OAK_ASSERT([bundles containsObject:[TMBundleItem itemWithCxxItem:TestBundle]]);
+}

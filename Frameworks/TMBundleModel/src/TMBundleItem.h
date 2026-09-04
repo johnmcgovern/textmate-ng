@@ -84,6 +84,11 @@ typedef NS_ENUM(NSUInteger, TMBundleItemKind) {
 // the key equivalent a proxy item lends to its semantic class.
 @property (nonatomic, readonly, nullable) NSString* keyEquivalent;
 
+// value_for_field(kFieldSemanticClass) — the dotted class a theme or callback
+// declares, e.g. "theme.dark.monokai". nil when the item has none, rather than
+// the C++ NULL_STR. Split it yourself; the menus want its second component.
+@property (nonatomic, readonly, nullable) NSString* semanticClass;
+
 // The tmbundle this item belongs to; nil for an item that is itself a bundle.
 @property (nonatomic, readonly, nullable) TMBundleItem* bundle;
 
@@ -144,6 +149,15 @@ typedef NS_ENUM(NSUInteger, TMBundleItemKind) {
 // with proxies left unresolved — the Bundle Editor lists what is *there*, not
 // what would apply in some scope. Pass nil for every bundle.
 + (NSArray<TMBundleItem*>*)itemsInBundle:(nullable TMBundleItem*)bundle ofKinds:(TMBundleItemKind)kinds NS_SWIFT_NAME(items(inBundle:ofKinds:));
+
+// bundles::query with every default in place: filtered, proxies resolved,
+// disabled items excluded. This is the *menu* question — what would apply here —
+// as against -itemsInBundle:ofKinds: above, which is the editor's question of
+// what exists. The two differ for a disabled item, a hidden one, and a proxy,
+// so they are separate methods rather than one with flags.
+//
+// Pass nil for the wildcard scope, matching +items(forProxy:scope:).
++ (NSArray<TMBundleItem*>*)itemsOfKinds:(TMBundleItemKind)kinds inScope:(nullable TMScopeContext*)scope NS_SWIFT_NAME(items(ofKinds:inScope:));
 
 @end
 

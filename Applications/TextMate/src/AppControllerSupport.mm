@@ -3,6 +3,8 @@
 #import <network/tbz.h>
 #import <ns/ns.h>
 #import <settings/settings.h>
+#import <TMBundleModel/TMBundleModelCxx.h>
+#import <OakTextView/OakTextView.h>
 #import <oak/oak.h>
 
 // The marker path, computed the way the original did: once, into a local, from
@@ -86,6 +88,18 @@ static std::string const& session_restore_marker ()
 + (void)removeMarkerAtPath:(NSString*)path
 {
 	unlink(to_s(path).c_str());
+}
+
++ (TMScopeContext*)scopeContextForTarget:(id)target
+{
+	OakTextView* textView = target;
+	return textView ? [TMScopeContext scopeContextWithCxxContext:[textView scopeContext]] : TMScopeContext.wildcardScope;
+}
+
++ (BOOL)targetHasSelection:(id)target
+{
+	OakTextView* textView = target;
+	return [textView hasSelection];
 }
 
 @end

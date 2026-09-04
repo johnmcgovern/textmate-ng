@@ -6,6 +6,9 @@
 #import <objc/runtime.h>
 #import <io/path.h>
 #import <Find/FindTypes.h>
+#import <TMBundleModel/TMBundleModelCxx.h>
+#import <OakTextView/OakDocumentView.h>
+#import <scope/scope.h>
 #import <Cocoa/Cocoa.h>
 
 // A pin for AppController, written against the ObjC++ and before any port of it
@@ -742,4 +745,50 @@ void test_theme_menu_hands_back_both_appearance_submenus ()
 	OAK_ASSERT_EQ((bool)(refs.lightMenu == refs.darkMenu), false);
 	OAK_ASSERT_EQ(to_s(refs.lightMenu.title), std::string("Theme for Light Appearance"));
 	OAK_ASSERT_EQ(to_s(refs.darkMenu.title),  std::string("Theme for Dark Appearance"));
+}
+
+// MARK: - The key text view's scope
+
+// -showBundleItemChooser: asks whatever answers -scopeContext for its scope, and
+// falls back to the **wildcard** when nothing does. Which fallback is not a
+// detail: t_scope_context.mm records that the wildcard matches every selector
+// while the empty scope matches almost none, and that BundleMenuDelegate
+// deliberately falls back the other way. Conflating them here would silently
+// offer every bundle item in the index regardless of the current language.
+//
+// nil is the normal case, not an edge one — it is what targetForAction: returns
+// whenever no document window is key, and the ObjC++ relied on nil-messaging for
+// it (rule 33).
+void test_scope_for_no_text_view_is_the_wildcard ()
+{
+	scope::selector_t const selector("source.ruby");
+	TMScopeContext* scope = [AppControllerSupport scopeContextForTarget:nil];
+
+	OAK_ASSERT(selector.does_match(scope.cxxContext).has_value());          // wildcard matches
+	OAK_ASSERT(!selector.does_match(TMScopeContext.emptyScope.cxxContext).has_value()); // empty does not
+}
+
+// [nil hasSelection] answered NO, and the chooser reads it to decide whether to
+// offer selection-dependent items. A Swift port that force-unwrapped instead
+// would trap here on every invocation with no key window (rules 33 and 44).
+void test_no_text_view_has_no_selection ()
+{
+	OAK_ASSERT_EQ((bool)[AppControllerSupport targetHasSelection:nil], false);
+}
+
+// A real text view, to prove the non-nil branch is not merely the nil branch
+// spelled differently: an OakTextView with no document still answers
+// -scopeContext, and the answer is not the wildcard.
+void test_a_live_text_view_reports_its_own_scope ()
+{
+	OakDocumentView* documentView = [[OakDocumentView alloc] initWithFrame:NSMakeRect(0, 0, 200, 200)];
+	OakTextView* textView = documentView.textView;
+	OAK_ASSERT(textView != nil);
+
+	TMScopeContext* scope = [AppControllerSupport scopeContextForTarget:textView];
+	OAK_ASSERT(scope != nil);
+
+	// Whatever it is, it came from the view rather than from the fallback.
+	scope::selector_t const anything("source.ruby");
+	OAK_ASSERT(!anything.does_match(scope.cxxContext).has_value());
 }

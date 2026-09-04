@@ -25,6 +25,7 @@
 //     mangled C++ symbol under SWIFT_OBJC_INTEROP_MODE=objcxx; it needs a probe
 //     (rule 55) or a one-line shim.
 #import <Foundation/Foundation.h>
+#import <TMBundleModel/TMScopeContext.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -49,6 +50,32 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)markerExistsAtPath:(NSString*)path;
 + (void)createMarkerAtPath:(NSString*)path;
 + (void)removeMarkerAtPath:(NSString*)path;
+
+// MARK: - The key text view's scope
+//
+// -showBundleItemChooser: finds the text view with
+// `[NSApp targetForAction:@selector(scopeContext)]` and asks it two things. The
+// second, -hasSelection, is a plain BOOL; the first returns `scope::context_t`,
+// and the wrapper that converts it — +[TMScopeContext scopeContextWithCxxContext:]
+// — is itself C++-typed, so neither end of that line can be Swift.
+//
+// This is deliberately *not* an addition to OakTextView. The caller never needs
+// that class: `targetForAction:` hands back an `id`, and everything else it does
+// with the view (window, -convertRect:toView:, -visibleRect) is NSView API. So
+// the boundary belongs here, in the app's own support file, rather than in a
+// framework with many consumers.
+//
+// Both take the target verbatim, **including nil**, because the ObjC++ relied on
+// nil-messaging for it (rule 33): with no text view, -hasSelection answered NO
+// and the scope fell back to the wildcard. Passing nil is the normal case when
+// no document window is key.
+
+// +[TMScopeContext scopeContextWithCxxContext:[target scopeContext]], or the
+// wildcard scope when target is nil.
++ (TMScopeContext*)scopeContextForTarget:(nullable id)target;
+
+// [target hasSelection], or NO when target is nil.
++ (BOOL)targetHasSelection:(nullable id)target;
 
 @end
 

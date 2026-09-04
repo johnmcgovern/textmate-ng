@@ -415,9 +415,9 @@ BOOL HasDocumentWindow (NSArray* windows)
 	chooser.action     = @selector(bundleItemChooserDidSelectItems:);
 	chooser.editAction = @selector(editBundleItem:);
 
-	OakTextView* textView = [NSApp targetForAction:@selector(scopeContext)];
-	chooser.scope        = textView ? [TMScopeContext scopeContextWithCxxContext:[textView scopeContext]] : TMScopeContext.wildcardScope;
-	chooser.hasSelection = [textView hasSelection];
+	NSView* textView     = [NSApp targetForAction:@selector(scopeContext)];
+	chooser.scope        = [AppControllerSupport scopeContextForTarget:textView];
+	chooser.hasSelection = [AppControllerSupport targetHasSelection:textView];
 
 	if(DocumentWindowController* controller = [NSApp targetForAction:@selector(selectedDocument)])
 	{

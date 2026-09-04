@@ -96,6 +96,22 @@ NS_ASSUME_NONNULL_BEGIN
 // 0-based. This one takes a string already in pos_t notation.
 + (nullable NSString*)selectionStringForPositionString:(nullable NSString*)position;
 
+// MARK: - The SCM subsystem
+//
+// scm::disable() and scm::enable(), which -applicationWillResignActive: and
+// -applicationWillBecomeActive: call to stop the repository pollers while the
+// app is in the background.
+//
+// These are forwarders by *choice*, not necessity. A probe (2026-09-04) showed
+// Swift can call a namespaced C++ free function directly — `scm.disable()`
+// compiles and links, and rule 61 extends to namespaces. What it cannot do is
+// reach the declaration: <scm/scm.h> is std::shared_ptr all the way down and
+// cannot enter a bridging header, so the direct call needs the two functions
+// re-declared in a second header. Two forwarders here beat a duplicated
+// declaration that nothing checks against the original.
++ (void)disableSCM;
++ (void)enableSCM;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -6,6 +6,7 @@
 #import <TMBundleModel/TMBundleModelCxx.h>
 #import <OakTextView/OakTextView.h>
 #import <text/types.h>
+#import <scm/scm.h>
 #import <oak/oak.h>
 
 // The marker path, computed the way the original did: once, into a local, from
@@ -106,6 +107,16 @@ static std::string const& session_restore_marker ()
 + (NSString*)selectionStringForPositionString:(NSString*)position
 {
 	return position ? to_ns(text::range_t(text::pos_t(to_s(position)))) : nil;
+}
+
++ (void)disableSCM
+{
+	scm::disable();
+}
+
++ (void)enableSCM
+{
+	scm::enable();
 }
 
 @end

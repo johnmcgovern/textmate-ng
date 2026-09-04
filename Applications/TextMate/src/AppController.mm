@@ -27,7 +27,6 @@
 #import <ns/ns.h>
 #import <oak/debug.h>
 #import <oak/oak.h>
-#import <scm/scm.h>
 #import "TextMate-Swift.h"
 
 void OakOpenDocuments (NSArray* paths, BOOL treatFilePackageAsFolder)
@@ -281,12 +280,12 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 - (void)applicationWillResignActive:(NSNotification*)aNotification
 {
-	scm::disable();
+	[AppControllerSupport disableSCM];
 }
 
 - (void)applicationWillBecomeActive:(NSNotification*)aNotification
 {
-	scm::enable();
+	[AppControllerSupport enableSCM];
 }
 
 - (void)applicationDidResignActive:(NSNotification*)aNotification

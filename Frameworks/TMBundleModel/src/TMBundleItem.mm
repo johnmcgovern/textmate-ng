@@ -326,8 +326,15 @@ static std::mutex& InternMutex ()
 	// filter:false and includeDisabledItems:true — the Bundle Editor lists what
 	// is there, not what would apply in some scope, and a disabled item is
 	// precisely the thing a user opens the editor to re-enable.
+	//
+	// resolveProxyItems:false is the eighth argument and was **missing** until
+	// 2026-09-03, so it defaulted to true and this query silently expanded every
+	// proxy into the items it stands for — returning the targets and never the
+	// proxy. The header has always said "with proxies left unresolved"; the call
+	// did not do it. Its one caller is Export Bundle, so exporting a bundle
+	// dropped its proxy items.
 	oak::uuid_t const bundleUUID = bundle ? bundle.cxxItem->uuid() : oak::uuid_t();
-	return [self itemsWithCxxItems:bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, (int)kinds, bundleUUID, false, true)];
+	return [self itemsWithCxxItems:bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, (int)kinds, bundleUUID, false, true, false)];
 }
 
 // Interning makes these redundant today. They are spelled out anyway because

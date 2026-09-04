@@ -214,3 +214,34 @@ void test_sorted_by_name_is_case_insensitive ()
 	OAK_ASSERT_EQ(to_s(sorted[0].name), "apply Filter");
 	OAK_ASSERT_EQ(to_s(sorted[1].name), "Zebra");
 }
+
+// ==================================
+// = The editor's query and proxies =
+// ==================================
+
+// -itemsInBundle:ofKinds: says "with proxies left unresolved" and, until
+// 2026-09-03, did not do it: bundles::query's eighth argument was left at its
+// default of true, so the query expanded each proxy into what it stands for and
+// never returned the proxy itself.
+//
+// That is not a documentation nit. The method's one caller is the Bundle
+// Editor's **Export Bundle**, which asks for every kind except menu and
+// separator — proxies included — and saves each item to the export directory.
+// A bundle with proxy items exported without them.
+void test_editor_query_returns_proxies_unresolved ()
+{
+	NSArray* items = [TMBundleItem itemsInBundle:nil ofKinds:TMBundleItemKindProxy];
+	OAK_ASSERT([items containsObject:[TMBundleItem itemWithCxxItem:TestProxy]]);
+}
+
+// The other half, so the fix cannot be "return everything": an unresolved query
+// must still not hand back the items the proxy stands for in place of it.
+// TestProxy's content is 'callback.test.filter', which is TestCommand's semantic
+// class — that is what resolution would have substituted.
+void test_editor_query_does_not_substitute_what_a_proxy_stands_for ()
+{
+	NSArray* items = [TMBundleItem itemsInBundle:nil ofKinds:TMBundleItemKindProxy];
+
+	OAK_ASSERT_EQ((size_t)items.count, (size_t)1);
+	OAK_ASSERT(![items containsObject:[TMBundleItem itemWithCxxItem:TestCommand]]);
+}

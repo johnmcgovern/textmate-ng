@@ -1,7 +1,6 @@
 #import "AppController.h"
 #import "AppControllerSupport.h"
 #import <OakAppKit/NSMenuItem Additions.h>
-#import <OakAppKit/OakToolTip.h>
 #import <OakTextView/OakTextViewConstants.h>
 #import "TextMate-Swift.h"
 #import <BundleMenu/BundleMenu.h>

@@ -846,3 +846,54 @@ is wrong** — the harness, the oracle, and the app check.
     (rule 43) while the free function must go in — which means splitting the
     header first. That is rule 11, and it is now a step in the flip rather than a
     surprise during it.
+
+## Rule 62 — the probe's own flags (2026-09-05)
+
+62. **A probe that does not reproduce the build's own flags manufactures
+    findings. `-std` is the one that bites, because libc++ changes what its
+    headers include transitively between standards.**
+
+    Re-running the rule-61 header sweep at the start of the flip, I measured ten
+    failures among 34 candidates and diagnosed five framework headers as
+    blocking: `scope.h` missing `<atomic>`, `bundles/item.h` missing `<mutex>`,
+    `authorization.h` missing `<memory>`, and so on. Each diagnosis was
+    *correct as stated* — those headers really do use those types without
+    including them — and I patched all five.
+
+    They were not blockers. The project sets
+
+        bs["CLANG_CXX_LANGUAGE_STANDARD"] = "c++2a"     # ide/seed_xcodeproj.rb
+
+    and my probe passed `-std=c++2b`. Under C++23 libc++ stopped pulling
+    `<atomic>`, `<mutex>` and `<memory>` in through `<string>`, so eight headers
+    that parse fine in this project failed in the probe. Re-measured at the
+    project's own standard:
+
+        -std=c++2b (mine):     24/34 pass — 10 failures, 5 "blockers"
+        -std=c++2a (project):  32/34 pass —  2 failures, 0 blockers
+
+    All five header patches were reverted. They fixed nothing that was broken.
+
+    C++23's `basic_string(nullptr_t) = delete` produced the most convincing false
+    positive of the set: `text/types.h:119` `range_t(0)` fails to compile at
+    c++2b — *with the prelude too*, which is what made it look like a real latent
+    bug rather than a probe artifact. At c++2a the deleted constructor does not
+    exist and the call resolves to `pos_t` as intended.
+
+    **What the probe was still worth.** The two genuine failures were both
+    `oak/debug.h` needing `<map>`, reached only through `<OakAppKit/OakToolTip.h>`
+    — which turned out to be a dead import in the two files that named it
+    (rule 38). So the correct change was deleting two `#import` lines, not
+    patching five framework headers. The handoff's claim that every header the
+    class needs already reaches a bridging header was right; my alarm was not.
+
+    **The rule.** Before believing a probe, print the real target's flags and
+    diff them against the probe's. `-std`, `-D`, and the include order all
+    change the answer. Rule 55 says probe rather than infer; this says a probe
+    is itself a thing to be verified, and the cheapest verification is that its
+    failures reproduce in the actual build.
+
+    Related: rule 59 (a probe needs a control that must fail). Mine had three
+    controls and two of them failed, which is why I trusted it — but a control
+    only proves the probe *discriminates*, never that it discriminates on the
+    same axis the real build does.

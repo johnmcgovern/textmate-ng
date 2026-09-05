@@ -71,9 +71,22 @@ void setup ()
 // Building once also matches the app, which calls -mainMenu exactly once from
 // -applicationWillFinishLaunching:. If a test ever needs a second independent
 // build, the globals have to be saved and restored around it (rule 53).
+//
+// The -retain is not decoration. -mainMenu returns +0 — autoreleased — and this
+// file compiles with ARC off, so a bare `static NSMenu* menu = …` caches a
+// pointer it does not own and the menu dies at the next pool drain. That read as
+// a SIGSEGV in whichever test dumped the menu *after* the one that built it, and
+// only ever in that order: build-and-dump inside a single test passes.
+//
+// It survived before AppController became Swift, so something was incidentally
+// keeping the menu alive; I did not establish what, and it does not matter —
+// caching a +0 return in a static was wrong either way. The application is
+// unaffected, and for a reason worth writing down rather than assuming:
+// -applicationWillFinishLaunching: assigns the result to NSApp.mainMenu, and
+// NSApplication retains it.
 static NSMenu* shared_main_menu ()
 {
-	static NSMenu* menu = [[AppController new] mainMenu];
+	static NSMenu* menu = [[[AppController new] mainMenu] retain];
 	return menu;
 }
 

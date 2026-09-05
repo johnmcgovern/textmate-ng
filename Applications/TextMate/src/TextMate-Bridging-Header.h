@@ -34,3 +34,53 @@
 // MenuBuilder.h itself is `typedef std::vector<MBMenuItem> MBMenu` and cannot
 // come in here, which is the whole reason MainMenu.swift restates the builder.
 #import <MenuBuilder/MBMenuDelegate.h>
+
+// ============================================================================
+// = The AppController flip
+// ============================================================================
+//
+// AppController.swift and its two extensions call into these. Every one was
+// probed against this header, compiled standalone at the project's own
+// -std=c++2a, before being added (rule 55, rule 62) — several of them declare
+// C++-typed methods that the importer simply drops (rule 17), which is fine;
+// what matters is that the header parses.
+//
+// AppController.h itself is deliberately absent: it is the hand-written ObjC
+// declaration of a Swift class and would collide with the generated
+// TextMate-Swift.h (rule 23, rule 43).
+
+// The app's own extracted boundaries — Foundation-only by construction.
+#import "AppControllerSupport.h"
+#import "TxMtURLSupport.h"
+#import "OakMainMenu.h"
+#import "Favorites.h"
+
+// Two free-function headers. Rule 61 measured that both the calls and their
+// default arguments reach Swift under SWIFT_OBJC_INTEROP_MODE=objcxx.
+#import "RMateServer.h"      // setup_rmate_server
+#import "ODBEditorSuite.h"   // DidHandleODBEditorEvent
+
+#import <BundleEditor/BundleEditor.h>
+#import <BundlesManager/BundlesManager.h>
+#import <BundleMenu/BundleMenu.h>
+#import <CommitWindow/CommitWindow.h>
+#import <CrashReporter/CrashReporter.h>
+#import <DocumentWindow/DocumentWindowController.h>
+#import <Find/Find.h>
+#import <OakAppKit/NSAlert Additions.h>
+#import <OakAppKit/NSMenuItem Additions.h>
+#import <OakAppKit/NSSavePanel Additions.h>
+#import <OakAppKit/OakAppKit.h>
+#import <OakAppKit/OakPasteboard.h>
+#import <OakFilterList/BundleItemChooser.h>
+#import <OakFoundation/NSString Additions.h>
+#import <OakTextView/OakDocumentView.h>
+#import <OakTextView/OakTextViewConstants.h>
+#import <Preferences/Keys.h>
+#import <Preferences/Preferences.h>
+#import <Preferences/TerminalPreferences.h>
+#import <SoftwareUpdate/SoftwareUpdate.h>
+#import <TMBundleModel/TMBundleItem.h>
+#import <document/OakDocument.h>
+#import <document/OakDocumentController.h>
+#import <theme/ThemeUUIDs.h>

@@ -13,6 +13,6 @@
 // every one of them. `char const*` needs nothing, and a bridging header parses
 // this with Foundation already in scope.
 
-extern char const* kMacClassicThemeUUID;
-extern char const* kTwilightThemeUUID;
-extern char const* kSystemUIThemeUUID;
+extern char const* const kMacClassicThemeUUID;
+extern char const* const kTwilightThemeUUID;
+extern char const* const kSystemUIThemeUUID;

@@ -1,6 +1,6 @@
 target "${dirname}" {
 	require BundleMenu BundlesManager Find HTMLOutput MenuBuilder OakAppKit OakCommand OakFilterList OakFoundation OakSystem Preferences TMBundleModel buffer bundles cf command crash document editor file io layout ns settings text theme
-	headers src/OakDocumentView.h src/GutterView.h src/OakTextView.h
+	headers src/OakDocumentView.h src/GutterView.h src/OakTextView.h src/OakTextViewConstants.h
 
 	files resources/* "Resources"
 

@@ -23,7 +23,6 @@
 #import <SoftwareUpdate/SoftwareUpdate.h>
 #import <document/OakDocument.h>
 #import <document/OakDocumentController.h>
-#import <regexp/glob.h>
 #import <ns/ns.h>
 #import <oak/debug.h>
 #import <oak/oak.h>

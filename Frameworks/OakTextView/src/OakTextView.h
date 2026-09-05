@@ -1,12 +1,10 @@
 #import "GutterView.h"
+#import "OakTextViewConstants.h"
 #import <OakAppKit/OakView.h>
 #import <theme/theme.h>
 #import <command/parser.h>
 #import <oak/debug.h>
 
-extern int32_t const NSWrapColumnWindowWidth;
-extern int32_t const NSWrapColumnAskUser;
-extern NSString* const kUserDefaultsWrapColumnPresetsKey;
 
 @class OakDocument;
 

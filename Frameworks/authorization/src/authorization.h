@@ -4,6 +4,9 @@
 #include <oak/oak.h>
 #include <text/format.h>
 
+// For OS_LOG_DEFAULT, used below. Was arriving through the prelude.
+#include <os/log.h>
+
 namespace osx
 {
 	struct authorization_t

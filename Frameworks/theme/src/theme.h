@@ -1,12 +1,14 @@
 #ifndef THEME_H_T0VVCP8F
 #define THEME_H_T0VVCP8F
 
+#include "ThemeUUIDs.h"
+
+// For google::dense_hash_map, an ivar of theme_t below. Was arriving through the
+// prelude.
+#include <sparsehash/dense_hash_map>
 #include <bundles/bundles.h>
 #include <scope/scope.h>
 
-extern char const* kMacClassicThemeUUID;
-extern char const* kTwilightThemeUUID;
-extern char const* kSystemUIThemeUUID;
 
 typedef std::shared_ptr<std::remove_pointer<CTFontRef>::type> CTFontPtr;
 typedef std::shared_ptr<std::remove_pointer<CGColorRef>::type> CGColorPtr;

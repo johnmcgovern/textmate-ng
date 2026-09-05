@@ -4,6 +4,10 @@
 #include <oak/oak.h>
 #include <oak/debug.h>
 
+// For `passwd`, which -passwd_entry returns a pointer to. Was arriving through
+// the prelude, which left this header unparseable anywhere without one.
+#include <pwd.h>
+
 namespace path
 {
 	std::string normalize (std::string path);                // remove “./”, “../”, and “//” from path

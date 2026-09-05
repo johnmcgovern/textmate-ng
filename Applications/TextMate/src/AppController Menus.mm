@@ -2,15 +2,11 @@
 #import "AppControllerSupport.h"
 #import <OakAppKit/NSMenuItem Additions.h>
 #import <OakAppKit/OakToolTip.h>
-// Only for NSWrapColumnWindowWidth, NSWrapColumnAskUser and
-// kUserDefaultsWrapColumnPresetsKey — three extern constants at the top of a
-// header that is otherwise C++. Splitting them out is the last thing between
-// this file and Swift (rule 11, the same split BundleEditor.h just had).
-#import <OakTextView/OakTextView.h>
+#import <OakTextView/OakTextViewConstants.h>
 #import "TextMate-Swift.h"
 #import <BundleMenu/BundleMenu.h>
 #import <TMBundleModel/TMBundleItem.h>
-#import <theme/theme.h>
+#import <theme/ThemeUUIDs.h>
 
 static NSString* NameForLocaleIdentifier (NSString* languageCode)
 {

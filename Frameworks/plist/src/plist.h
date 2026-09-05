@@ -6,6 +6,13 @@
 #include <text/format.h>
 #include <oak/debug.h>
 
+// any_t is a boost recursive variant, so include it rather than relying on the
+// prelude. Without this the header cannot be parsed in any context that has no
+// prelude — which is the context a Swift bridging header compiles in, and it put
+// BundlesManager.h, DocumentWindowController.h and OakDocumentView.h out of
+// reach of one for the sake of a missing include.
+#include <boost/variant.hpp>
+
 namespace plist
 {
 	typedef boost::make_recursive_variant<

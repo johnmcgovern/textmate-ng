@@ -1,6 +1,18 @@
 #ifndef OAK_ALGORITHM_H_E3HYH9S3
 #define OAK_ALGORITHM_H_E3HYH9S3
 
+// Include what this header uses, rather than relying on the prelude to have done
+// it. That is correct on its own terms, and it is also what stops this file
+// being an obstacle: every consumer that reaches it transitively — Find.h,
+// OakPasteboard.h, OakDocument.h and more — failed to parse in any context
+// without the prelude, which is exactly the context a Swift bridging header
+// compiles in ("no type named 'mt19937' in namespace 'std'").
+#include <algorithm>
+#include <cmath>
+#include <iterator>
+#include <map>
+#include <random>
+
 namespace oak
 {
 	template <typename _InputIter, typename _ValueT>

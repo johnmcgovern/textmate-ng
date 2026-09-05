@@ -897,3 +897,55 @@ is wrong** — the harness, the oracle, and the app check.
     controls and two of them failed, which is why I trusted it — but a control
     only proves the probe *discriminates*, never that it discriminates on the
     same axis the real build does.
+
+## Rule 63 — the flip, and a static that owned nothing (2026-09-05)
+
+63. **A test bundle compiles with ARC off, and a ported method still returns +0.
+    Caching one in a `static` gives you a pointer you do not own — and it can
+    survive the port that exposes it for a long time before it stops.**
+
+    `t_app_controller.mm` caches the 248-item menu, deliberately, because
+    MBCreateMenu assigns process-global AppKit menus and a second build dumps
+    differently (rule 58):
+
+        static NSMenu* menu = [[AppController new] mainMenu];
+
+    `-mainMenu` returns +0 — autoreleased — under ARC *and* as an `@objc` Swift
+    method; the convention is the same either way. This file compiles with ARC
+    off (`ide/seed_xcodeproj.rb` sets `CLANG_ENABLE_OBJC_ARC = NO` for test
+    bundles), so nothing retains it and the menu dies at the next pool drain.
+
+    It passed for months. After AppController became Swift it was **signal segv**
+    — and only when an *earlier* test had already built the menu, because
+    build-and-dump inside one test happens before the drain. Running the file
+    alone reproduces it; running the one test alone does not. That is the shape
+    to recognise: a crash that depends on which other test ran first.
+
+    **What I could not establish.** The pre-flip pair still passes, so the flip
+    changed the object's lifetime — but the ownership contract is identical on
+    both sides, and I never found what had been keeping the menu alive. Do not
+    let that stop you: caching a +0 return in a static is wrong on its own terms,
+    and `[[…] retain]` is the fix regardless of which accident preceded it.
+
+    **The application was never at risk**, and that is the thing to check before
+    believing a crash like this is cosmetic: `-applicationWillFinishLaunching:`
+    assigns the menu to `NSApp.mainMenu`, and NSApplication retains it. Checked,
+    not assumed.
+
+    Two smaller things the same flip turned up, both likely to recur:
+
+      * **A mutable global cannot be read from Swift.** `theme`'s UUIDs were
+        `extern char const* k…` — pointer mutable — and Swift imports that as
+        `var`, then refuses it: "not concurrency-safe because it involves shared
+        mutable state". `char const* const` fixes it and was always correct.
+      * **`@MainActor` on the ported class is not a new constraint.** AppController
+        is instantiated by a nib on the main thread and every API it touches is
+        main-thread-only. Saying so is what lets Swift 6 accept `self` being
+        passed to `-showWindow:`; the alternative is a scattering of
+        `MainActor.assumeIsolated` at each call.
+
+    And one worth copying: adopt `NSApplicationDelegate` explicitly rather than
+    relying on `-respondsToSelector:` as the ObjC did. Same methods, but a
+    signature that drifts by one colon becomes a compile error instead of a
+    delegate callback that is silently never called — which is rule 18's failure
+    mode arriving somewhere rule 18's tests do not look.

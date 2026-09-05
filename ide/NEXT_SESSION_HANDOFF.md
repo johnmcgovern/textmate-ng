@@ -1754,6 +1754,80 @@ sides, and no amount of boundary work changes that.
 | Swift, non-test | 95 files, 27,704 lines |
 | C++ lines in the four AppController files | **80 → 12**, and 5 of the 12 are pinned literals |
 
+## Session 2026-09-05 — the flip
+
+Three commits (`d10574a2`, `9fa9e9c5`), pushed. Suite **989/989**, 0 restarts,
+0 `Fatal error:`, started == passed.
+
+**`AppController` is Swift.** The last large piece of the app shell.
+
+| was | is |
+| --- | --- |
+| `AppController.mm` 525 | `AppController.swift` 560 |
+| `AppController Menus.mm` 357 | `AppControllerMenus.swift` 353 |
+| `AppController Documents.mm` 196 | `AppControllerDocuments.swift` 177 |
+| `AppController Commands.mm` 63 | **unchanged, and permanently ObjC++** (rule 37) |
+
+App shell: `.mm` 2,841 → **1,761**, `.swift` 1,114 → **2,204**. Mostly Swift now.
+
+`AppController.h` remains the hand-written ObjC declaration (rule 23), out of the
+bridging header (rule 43), and lost eleven IBAction declarations that no ObjC
+consumer ever called.
+
+### I re-ran the header probe and got the wrong answer
+
+Worth reading before trusting any probe in this repo. I re-measured which headers
+reach a bridging header, got **ten failures**, and diagnosed five framework
+headers as blocking the flip — `scope.h` missing `<atomic>`, `bundles/item.h`
+missing `<mutex>`, and so on. Every diagnosis was true as stated. I patched all
+five.
+
+None was a blocker. The project builds at `c++2a`; my probe passed `-std=c++2b`,
+and under C++23 libc++ stopped pulling `<atomic>`, `<mutex>` and `<memory>` in
+through `<string>`.
+
+    -std=c++2b (mine):     24/34 pass — 10 failures, "5 blockers"
+    -std=c++2a (project):  32/34 pass —  2 failures, 0 blockers
+
+All five patches reverted. The two real failures were one cause — `oak/debug.h`
+needing `<map>`, reached only through a **dead** `<OakAppKit/OakToolTip.h>`
+import — so the correct change was deleting two lines. The previous handoff's
+claim that every header already reached a bridging header was right; my alarm
+was not. That is **rule 62**: print the real target's flags and diff them against
+the probe's before believing it. Rule 59 was satisfied the whole time — three
+controls, two failing — which is the part worth remembering: a control proves the
+probe discriminates, never that it discriminates on the same axis as the build.
+
+### A SIGSEGV that was not the port — rule 63
+
+`test_app_controller_main_menu_is_unchanged` crashed with signal segv, but only
+when an earlier test had already built the menu. The helper caches a `+0`
+autoreleased `-mainMenu` in a `static`, and test bundles compile with ARC off, so
+it never owned the menu.
+
+It passed for months and stopped at the flip. **I did not establish what had been
+keeping the menu alive** — the pre-flip pair still passes — and chose not to keep
+digging, because caching a +0 return in a static is wrong either way. The
+application was never affected: `NSApp.mainMenu` retains it, which I checked
+rather than assumed.
+
+Recognise the shape: *a crash that depends on which other test ran first.*
+
+### What is left in the app shell
+
+`AppController Commands.mm` (63 lines, 8 C++) is the only ObjC++ with C++ in it
+that belongs to the controller, and it stays. The two files the original survey
+flagged as poor ports are still untouched and still look that way:
+
+  * `RMateServer.mm` (639 lines) — a socket server over `std::map`/`std::string`
+    with C++ callbacks throughout. Its Swift-facing surface is one C function,
+    `setup_rmate_server`, which Swift already calls fine (rule 61). Porting it
+    buys nothing.
+  * `ODBEditorSuite.mm` (189 lines) — AppleEvent descriptors and a packed struct.
+    Also already callable (`DidHandleODBEditorEvent`).
+
+Say so plainly rather than porting them for symmetry.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

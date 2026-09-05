@@ -1628,6 +1628,9 @@ The prep is done. `AppController.mm` is ~500 lines from 874, and
 | ~~`bundles::query` in the menus~~ | **DONE `5469285c`** — `semanticClass` and `itemsOfKinds:inScope:`. Found a live bug next door on the way (`cf83e310`) | |
 | ~~`scm::enable/disable`~~ | **DONE `09520295`** — two forwarders, by choice: Swift *can* call namespaced C++ free functions (rule 61), but `<scm/scm.h>` cannot reach a bridging header | |
 
+**All four blockers are cleared, and the flip is unblocked as of 2026-09-05 —
+see "Session 2026-09-04/05" below, which supersedes the table above.**
+
 **All four blockers are cleared as of 2026-09-04**, and three of the four were
 smaller than the survey estimated. Two were not missing APIs at all but headers
 that could not reach a bridging header (rule 11), one needed no framework change
@@ -1653,6 +1656,103 @@ None of what is left is large; together they are a session. After them the flip
 is mechanical,
 and the expected shape is roughly **900 lines Swift with ~400 permanently ObjC++**
 (the Commands category and whatever the list above does not clear).
+
+## Session 2026-09-04/05 — the four blockers, and what they actually were
+
+Ten more commits (`dcae332c` … `5bc302bd`), all pushed, **CI green on every
+one**. Suite **986 → 989**. The prep for the AppController flip is finished and
+the flip is no longer gated on anything.
+
+### Three of the four blockers were headers, not missing APIs
+
+The survey listed four things to build. Only one turned out to be a real API
+addition; the rest were rule 11 — a C++ include at the top of a header, keeping
+an otherwise-fine class out of reach of a bridging header.
+
+| planned | what it actually was |
+| --- | --- |
+| "ObjC-shaped `scopeContext` on OakTextView" | **No framework change at all.** The caller only ever had an `id` from `targetForAction:`, and the geometry it does is `NSView` API. Two methods in `AppControllerSupport` (`ed6c57ab`). |
+| "expose BundleEditor's `-revealItem:`" | The method already existed. The obstacle was `#include <bundles/bundles.h>` at line 1 of `BundleEditor.h`, for the sake of one C++-typed selector. Split into `BundleEditorCxx.h` (`919a44b9`). |
+| "`semanticClass` + a scoped query on `TMBundleItem`" | A genuine API addition, and the only one (`5469285c`). |
+| "array-taking `-addButtons:` in OakAppKit" | **Cancelled.** Rule 16 holds — measured — but six ported files already inline the three-line `addButtonWithTitle:` loop, each with a comment. A seventh spelling would compete with six working precedents. |
+
+### The header probe, and an estimate I nearly published
+
+`AppController Menus.mm` was cleared of C++ (`ee9062fa`) and then the question
+was which of AppController's imports could reach a bridging header. **I was about
+to report "six framework header splits".** Instead I probed all 29 at once — each
+compiled against the app target's real flags with the prelude stripped, which is
+the context a bridging header is parsed in.
+
+Nineteen passed. The other ten were not ten problems. Nearly all failed inside
+*shared* headers that use the standard library without including it, and had
+simply never been parsed anywhere the prelude was absent:
+
+    oak/algorithm.h    no includes at all — std::mt19937, std::map, std::min
+    plist/plist.h      boost::make_recursive_variant
+    io/path.h          `passwd`, from <pwd.h>
+    theme/theme.h      google::dense_hash_map
+    authorization.h    OS_LOG_DEFAULT
+
+    19/29 → 23 → 26 → 28.  Five one-line fixes (`5bc302bd`).
+
+The twenty-ninth, `<regexp/glob.h>`, was an unused import. Two real rule 11
+splits were needed as well — `OakTextViewConstants.h` and `ThemeUUIDs.h`, both
+"three extern constants atop a C++ header".
+
+**The lesson is the method, not the answer.** Enumerating all 29 in one scripted
+pass cost minutes; discovering them one at a time during the flip would have cost
+a build each, and would have "taught" me six times that a framework needed a
+split when the real cause was one shared header missing `<random>`.
+
+`ThemeUUIDs.h` deliberately has no includes: `theme.h` is reached from pure C++
+translation units and `<Foundation/Foundation.h>` broke every one of them.
+
+### A live bug, found by testing a neighbour
+
+`cf83e310`. `-[TMBundleItem itemsInBundle:ofKinds:]` documented itself as
+returning items "with proxies left unresolved" and did not — `bundles::query`'s
+eighth argument was never passed. Its one caller is the Bundle Editor's **Export
+Bundle**, so exporting a bundle silently dropped its proxy items.
+
+It surfaced while writing a test that documented how the *new* query differs from
+that one. Worth generalising: the test that states a contrast is where a false
+claim shows up, not the test of the thing you are adding.
+
+### Where AppController stands
+
+| file | lines | C++ |
+| --- | --- | --- |
+| `AppController.mm` | 525 | **5** — the find::options_t cases, already pinned by static_assert |
+| `AppController Menus.mm` | 358 | **0** |
+| `AppController Documents.mm` | 196 | **0** |
+| `AppController Commands.mm` | 64 | 7 — rule 37, permanently ObjC++ |
+
+All 28 headers the class needs now reach a bridging header. Nothing is blocking.
+
+### The flip: what to watch
+
+It is mechanical now, but two things are not compile-time checks:
+
+  * **Rule 47.** Once the class is Swift, every `as?`/`as!` naming it — or naming
+    a protocol it adopts only in an ObjC category — silently stops matching.
+    Grep the whole app target for both before believing the suite.
+  * **Rule 49.** No `final`: AppController is instantiated by MainMenu.xib.
+
+The guardrails already exist: the 248-item menu golden, set equality on the 15
+menu selectors, the 33 reached by name, and `t_app_controller.mm`'s 30-odd tests.
+`AppController Commands.mm` stays ObjC++ — it is rule 37, C++-typed on both
+sides, and no amount of boundary work changes that.
+
+### Numbers, measured 2026-09-05
+
+| | |
+| --- | --- |
+| Full suite | **989 tests, 0 failures, 0 restarts, 0 traps** |
+| App shell `src/*.mm` | 2,841 lines across 15 files |
+| App shell `src/*.swift` | 1,114 lines across 4 files |
+| Swift, non-test | 95 files, 27,704 lines |
+| C++ lines in the four AppController files | **80 → 12**, and 5 of the 12 are pinned literals |
 
 ## Before cutting a release: the five-minute smoke pass
 

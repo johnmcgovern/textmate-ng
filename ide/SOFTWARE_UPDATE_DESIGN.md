@@ -39,7 +39,7 @@ GitHub, all checked against live endpoints on 2026-09-06 rather than assumed:
 
 | # | What the code requires | What GitHub does |
 | --- | --- | --- |
-| 1 | `contentType == "application/json"` — **exact** string compare | API, Pages *and* raw all return `application/json; charset=utf-8` or `text/plain; charset=utf-8` |
+| 1 | ~~`contentType == "application/json"` — **exact** string compare~~ **fixed, `7a06fffa`** | API, Pages *and* raw all return `application/json; charset=utf-8` or `text/plain; charset=utf-8` |
 | 2 | signature in `x-amz-meta-x-signee` / `x-amz-meta-x-signature` **response headers** | release assets redirect to `release-assets.githubusercontent.com` (Azure blob) — no such headers, and no way to set them |
 | 3 | archive unpacked with `tar -jxmkC` — a **bzip2 tar** | `bin/release` publishes a `ditto -c -k` **zip** |
 | 4 | public key looked up in `Info.plist` `TMSigningKeys` | the only key there is `org.textmate.duff` — MacroMates', **DSA**, verified through **SecTransform** (deprecated macOS 12/13) |
@@ -57,88 +57,133 @@ zip. Publishing both is cheap and leaves the human-facing download alone.
 
 (4) is the one worth thinking hardest about. See below.
 
-## Do not rebuild on DSA-1024 and SecTransform
+## What the current code actually does, and where it is weak
 
-The existing scheme is a ~1024-bit DSA key verified with `SecVerifyTransformCreate`,
-which Apple deprecated in macOS 12/13. It was ported **verbatim** and on purpose —
-changing signature verification during a translation is a security change wearing
-a translation's clothes — but that reasoning does not extend to *building a new
-channel on it*.
+Two things I confirmed by reading the ported code rather than assuming:
 
-A new J23 key has to be generated regardless. That is the moment to move to
-**Ed25519 via `SecKeyVerifySignature`**, which also retires the deprecated API.
+**`TMSigningKeys` is read in exactly one place** — `SUDownloadViewController.swift`,
+the updater. `BundlesManager` does *not* use it: its keys (`org.textmate.duff`,
+`org.textmate.msheets`) come from inside the downloaded bundle index. So the
+Info.plist key serves the update channel alone, and changing it cannot affect
+bundle installation.
 
-One property worth noticing, because it is load-bearing for the Team ID question
-below: **the update-signing key is independent of the codesigning identity.** They
-answer different questions — "did J23 publish this?" versus "will Gatekeeper run
-it?" — so a change of Developer ID does not invalidate an update channel, provided
-the update key persists.
+**The archive is extracted before it is verified.** `-URLSession:dataTask:
+didReceiveData:` streams each chunk straight into `tar`'s stdin as it arrives;
+the signature is checked in `-didCompleteWithError:`, after the whole download.
+The signature therefore gates *installation*, not *extraction* — `tar` has
+already run on unverified bytes by the time anything is checked. That is
+pre-existing, not something the Swift port introduced, and it is the single
+biggest thing to fix here.
 
-## The Team ID change
+## How Chrome does it, and what transfers
 
-Enrollment is individual (`R22V2H7QF4`); a move to a J23 organisation Team ID has
-been anticipated for a while. For an updater this is mostly benign — the whole
-bundle is replaced, so there is no partial-signature state — but two things follow:
+Worth looking at, because it is the most-attacked updater on the platform.
+Chrome used Keystone on macOS; Google has now moved to **Omaha 4** (the
+"Chromium Updater", in the Chromium tree), which is cross-platform and current on
+macOS and Windows as of September 2026.
 
-* Old builds must be able to verify *new* ones. They can, because the update key
-  is independent of the Developer ID (above). Do not key the update channel to the
-  Team ID.
-* Anything scoped to a Team ID (keychain access groups, app groups) would not
-  survive. Worth a grep before the change, not before the updater.
+Its transport security is **CUP-ECDSA** (Client Update Protocol): ECDSA with
+SHA-256, the *server's public key hardcoded in the client binary*, and the server
+signs request/response **pairs** — returned in an `X-Cup-Server-Proof` header or
+an `ETag`. The point is that authenticity does not depend on TLS: a hostile or
+compromised CDN cannot substitute a response.
+
+The payload is not signed separately. The **CUP-signed response carries the
+payload's `hash_sha256`**, and integrity is verified during download, before
+installation.
+
+    <package name="…" hash_sha256="…" size="…" required="true"/>
+
+Two things I could *not* confirm from the public specification and so will not
+claim: whether the updater independently verifies macOS code signatures or
+notarization, and what anti-rollback protection exists.
+
+**The transferable idea is the shape, not the protocol.** Sign the *manifest*,
+and pin the payload by hash inside it. That is strictly better than this
+project's current design in two ways:
+
+* it fixes the ordering problem for free — a SHA-256 can be checked on the
+  complete downloaded bytes *before* they are handed to `tar`, whereas a
+  signature arriving in a response header cannot be checked until the transfer
+  is finished, by which point the streaming extractor has consumed it;
+* the signature covers *what you should receive* (version, URL, hash), not just
+  the bytes, so an attacker who controls the transport cannot serve an older
+  signed release in place of a newer one.
+
+Also worth taking from CUP: **TLS is not the security boundary.** GitHub is a CDN
+you do not control. The manifest signature is what makes that acceptable.
+
+## Recommended verification, in order
+
+1. **Manifest signature** — Ed25519 or ECDSA P-256, public key in `Info.plist`
+   under a J23 signee, verified with `SecKeyVerifySignature`. Not DSA-1024, and
+   not `SecTransform`, which Apple deprecated in macOS 12/13. The existing DSA
+   path was ported verbatim on purpose and stays for the bundle index; nothing
+   new should be built on it.
+2. **Payload hash** — SHA-256 from the signed manifest, checked against the
+   downloaded bytes **before extraction**. This is the ordering fix.
+3. **Code signature of the unpacked bundle** — `SecStaticCodeCheckValidity`
+   against a Developer ID requirement, before the bundle is swapped in. This is
+   what stops the updater installing something Gatekeeper will then refuse to
+   run.
+
+Steps 1 and 3 answer different questions and both are worth having. (1) is "did
+J23 publish this?"; (3) is "will this actually launch?".
+
+### On the Team ID, and a correction
+
+An earlier draft of this note said "do not key the update channel to the Team ID",
+and then a later suggestion — verify by code signature alone and skip the custom
+key — would have done exactly that. Both halves cannot be right.
+
+The resolution is that they are different checks. **Step 1 must not depend on the
+Team ID**: the update-signing key is independent of the Developer ID, and that
+independence is what lets a build signed under `R22V2H7QF4` verify and install a
+build signed under a future J23 organisation Team ID. **Step 3 necessarily does**
+depend on it, and so its requirement must accept the old *or* the new identity for
+at least one release either side of the transition. A user who skips that window
+is otherwise stranded on an old build that refuses every update.
+
+Verifying by code signature *alone* — no manifest key — is the option to reject,
+for that reason.
 
 ## Two paths
 
 ### A. Finish the homegrown updater
 
-Roughly a day or two of code, plus a signing step in `bin/release`:
+Roughly a day or two of code plus a signing step in `bin/release`:
 
-1. relax the Content-Type match to compare the media type only, with a pin;
-2. add an explicit-signature path to `OakDownloadManager`, keeping the header path
-   for `BundlesManager`, pinned both ways;
-3. generate an Ed25519 keypair; public key into `TMSigningKeys` under a J23
-   signee; move verification to `SecKeyVerifySignature`;
-4. `bin/release` gains: publish a `.tbz` asset, sign it, and write a manifest
-   (`{url, version, signee, signature}`) — published to GitHub Pages, or as a
-   release asset with a stable "latest" URL;
-5. set `channels` in `AppController`.
-
-**For:** the UI is already built, ported, and tested; `bin/release` already has
-the verification discipline this needs; no new dependency; the panel matches the
-rest of the app.
-
-**Against:** it is a bespoke code-execution channel maintained by one person.
+1. ~~relax the Content-Type match~~ — **done**, `7a06fffa`;
+2. generate an Ed25519 keypair; public key into `TMSigningKeys` under a J23
+   signee; verification via `SecKeyVerifySignature`;
+3. teach `OakDownloadManager` a manifest-driven path: explicit signature and an
+   expected SHA-256, checked before extraction — keeping the header path for
+   `BundlesManager`, pinned both ways;
+4. add the code-signature check before the bundle swap;
+5. `bin/release` gains: a `.tbz` asset, a signed manifest with the hash,
+   published at a stable URL;
+6. set `channels` in `AppController`.
 
 ### B. Adopt Sparkle 2
 
-Sparkle does appcast-over-GitHub-releases with EdDSA signatures natively, and has
-had far more security review than anything written here will get.
-
-**For:** the security-critical part stops being ours.
+Sparkle does appcast-over-GitHub-releases with EdDSA signatures natively and has
+had far more security review than anything written here will get. Its model is
+essentially the recommendation above.
 
 **Against:** it discards a Swift port finished the same week, adds a dependency
 and its own UI, and duplicates release-pipeline work that already exists and is
-carefully checked. The case was stronger when I believed there was no release
-pipeline; there is one, and it is good.
+carefully checked.
 
 ## Recommendation
 
-**Path A**, and the calculus genuinely changed once `bin/release` was on the
-table. The remaining work is small, the pieces it touches are freshly ported and
-pinned, and the one thing that would have argued for Sparkle — not having to
-build release/notarization infrastructure — is already built.
+**Path A**, with the verification order above. The calculus changed once
+`bin/release` was on the table: the one thing that would have argued for Sparkle —
+not having to build release and notarization infrastructure — is already built,
+and Sparkle's actual security design is reproducible here in a few hundred lines
+against APIs the app already links.
 
-Sequence, each step shippable on its own:
-
-1. Content-Type fix + pin. Correct regardless of path.
-2. Ed25519 verification alongside the existing DSA path, with the DSA path kept
-   for `BundlesManager`'s MacroMates-signed bundle index. Pin both.
-3. Explicit-signature download path + pin.
-4. `bin/release`: `.tbz` asset, signature, manifest. Dry-run first — it has a
-   `--dry-run` already.
-5. Wire `channels`. Ship it to one machine before anyone else.
-
-**Do not skip the last part.** The first real test of an updater is a build that
-updates itself, and the failure mode is an app that no longer launches.
+Ship it to one machine before anyone else. The first real test of an updater is a
+build that updates itself.
 
 ## What no test can cover
 
@@ -147,3 +192,13 @@ user-initiated — so the update panel is unreachable from any automated run
 (rule 64). It is on the pre-release smoke list for that reason. An update channel
 makes that worse, not better: the install-and-relaunch path cannot be exercised
 by a test at all, because its last act is to replace the running application.
+
+## Sources
+
+* [Client Update Protocol (CUP) — Chromium docs](https://chromium.googlesource.com/chromium/src.git/+/master/docs/updater/cup.md)
+* [Chromium Updater functional specification](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/updater/functional_spec.md)
+* [`components/client_update_protocol/ecdsa.h`](https://github.com/chromium/chromium/blob/master/components/client_update_protocol/ecdsa.h)
+
+GitHub's response headers were measured directly on 2026-09-06 with `curl -sI`
+against `api.github.com`, a `github.io` Pages host, `raw.githubusercontent.com`,
+and a release asset download; see the table above.

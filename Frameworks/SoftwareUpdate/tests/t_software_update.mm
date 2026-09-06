@@ -1,0 +1,223 @@
+#import "../src/SoftwareUpdate.h"
+#import "../src/OakDownloadManager.h"
+#import <Cocoa/Cocoa.h>
+
+// A pin for SoftwareUpdate and OakDownloadManager, written against the ObjC++ and
+// before any port of them (rule 18, rule 5, rule 40).
+//
+// Both files are 1,177 lines of ObjC++ with **no C++ in them at all** — the
+// framework's only C++ is OakCompareVersionStrings.mm, which stays ObjC++ because
+// its export is a free function that ObjC++ callers use (rule 19). So there is no
+// extraction step here; what is left is the translation, and what that can break
+// silently is what this file pins.
+//
+// The important one is the binding. `SoftwareUpdatePreferences` (Swift, in the
+// Preferences framework) does
+//
+//     checkNowButton.bind(.enabled, to: softwareUpdateController,
+//                         withKeyPath: "checking", …negate)
+//
+// and declares keyPathsForValuesAffecting… over "softwareUpdateController.checking"
+// and ".errorString". If the port leaves those two properties without the
+// @objc dynamic that KVO needs, **nothing fails**: the compiler is happy, every
+// other test is happy, and the Check Now button simply stops greying out. That is
+// rule 18's silent failure in its purest form, so it is pinned here through Cocoa
+// Bindings rather than through a hand-rolled observer — the mechanism under test
+// is the one the app actually uses.
+//
+// Bindings rather than -addObserver:forKeyPath: for a second reason: a test file
+// cannot declare an ObjC class. ide/gen_xctest.rb wraps each body in
+// `namespace <basename>`, and an @interface cannot appear inside one. AppKit's own
+// observer needs no such declaration.
+//
+// Not pinned here, deliberately: anything requiring a network round trip.
+// -checkForTestBuild: only sets `checking` once a channel URL resolves, and
+// pointing it at a file:// URL walks into `((NSHTTPURLResponse*)response)
+// .allHeaderFields` on a non-HTTP response. The threading contract that path does
+// have is already pinned by t_software_update_threading.mm.
+
+void setup ()
+{
+	NSApplicationLoad();
+}
+
+// MARK: - Selector surface (rule 18)
+
+// Everything a consumer reaches. AppController calls -checkForUpdate:, Preferences
+// binds `checking` and reads `errorString`, BundlesManager uses the download
+// manager's two entry points, and SoftwareUpdate.mm sets `channels`.
+void test_software_update_answers_its_public_selectors ()
+{
+	NSArray<NSString*>* const required = @[
+		@"checkForUpdate:",
+		@"checkForTestBuild:completionHandler:",
+		@"channels",
+		@"setChannels:",
+		@"isChecking",
+		@"errorString",
+	];
+
+	NSMutableArray* missing = [NSMutableArray array];
+	for(NSString* name in required)
+	{
+		if(![SoftwareUpdate instancesRespondToSelector:NSSelectorFromString(name)])
+			[missing addObject:name];
+	}
+	OAK_ASSERT_EQ(std::string([missing componentsJoinedByString:@", "].UTF8String), std::string(""));
+
+	OAK_ASSERT((bool)[SoftwareUpdate respondsToSelector:@selector(sharedInstance)]);
+}
+
+void test_download_manager_answers_its_public_selectors ()
+{
+	NSArray<NSString*>* const required = @[
+		@"userAgentString",
+		@"setUserAgentString:",
+		@"downloadFileAtURL:replacingFileAtURL:publicKeys:completionHandler:",
+		@"downloadArchiveAtURL:forReplacingURL:publicKeys:completionHandler:",
+	];
+
+	NSMutableArray* missing = [NSMutableArray array];
+	for(NSString* name in required)
+	{
+		if(![OakDownloadManager instancesRespondToSelector:NSSelectorFromString(name)])
+			[missing addObject:name];
+	}
+	OAK_ASSERT_EQ(std::string([missing componentsJoinedByString:@", "].UTF8String), std::string(""));
+
+	OAK_ASSERT((bool)[OakDownloadManager respondsToSelector:@selector(sharedInstance)]);
+}
+
+// Both are `static X* sharedInstance = [self new];` today. A port that returns a
+// fresh instance would give Preferences a different object than the one the menu
+// action drives, and the binding would observe something nothing ever updates.
+void test_shared_instances_are_singletons ()
+{
+	OAK_ASSERT(SoftwareUpdate.sharedInstance == SoftwareUpdate.sharedInstance);
+	OAK_ASSERT(OakDownloadManager.sharedInstance == OakDownloadManager.sharedInstance);
+	OAK_ASSERT(SoftwareUpdate.sharedInstance != nil);
+	OAK_ASSERT(OakDownloadManager.sharedInstance != nil);
+}
+
+// MARK: - The constants
+
+// These are user-defaults keys and on-the-wire channel names. Renaming one does
+// not fail to compile — it silently reads a different preference, so a user's
+// configured channel reverts and "disable polling" turns itself back on.
+void test_defaults_keys_are_unchanged ()
+{
+	OAK_ASSERT_EQ(std::string(kUserDefaultsLastSoftwareUpdateCheckKey.UTF8String), std::string("SoftwareUpdateLastPoll"));
+	OAK_ASSERT_EQ(std::string(kUserDefaultsDisableSoftwareUpdateKey.UTF8String),   std::string("SoftwareUpdateDisablePolling"));
+	OAK_ASSERT_EQ(std::string(kUserDefaultsAskBeforeUpdatingKey.UTF8String),       std::string("SoftwareUpdateAskBeforeUpdating"));
+	OAK_ASSERT_EQ(std::string(kUserDefaultsSoftwareUpdateChannelKey.UTF8String),   std::string("SoftwareUpdateChannel"));
+}
+
+void test_channel_names_are_unchanged ()
+{
+	OAK_ASSERT_EQ(std::string(kSoftwareUpdateChannelRelease.UTF8String),    std::string("release"));
+	OAK_ASSERT_EQ(std::string(kSoftwareUpdateChannelPrerelease.UTF8String), std::string("beta"));
+	OAK_ASSERT_EQ(std::string(kSoftwareUpdateChannelCanary.UTF8String),     std::string("nightly"));
+}
+
+// MARK: - What +initialize does (rule 24)
+
+// SoftwareUpdate still has a +initialize, and a Swift class cannot provide one, so
+// it has to become explicit registration before the port — the same move
+// AppController's theme defaults made.
+//
+// This asserts the *effect* rather than the mechanism: the registration domain
+// carries the default. It reads that domain directly instead of -stringForKey: so
+// it cannot be fooled by whatever the running user has actually chosen, and so it
+// writes nothing (rule 53).
+//
+// When the conversion happens this test gains the explicit call and keeps the same
+// assertion. If it ever fails, the default channel is gone and every user without
+// an explicit choice stops receiving updates.
+void test_release_is_the_registered_default_channel ()
+{
+	[SoftwareUpdate class]; // trigger +initialize; becomes an explicit call after rule 24
+
+	NSDictionary* registered = [NSUserDefaults.standardUserDefaults volatileDomainForName:NSRegistrationDomain];
+	NSString* channel = registered[kUserDefaultsSoftwareUpdateChannelKey];
+
+	// Asserted separately, and not for tidiness: -UTF8String on nil is NULL and
+	// std::string(NULL) is undefined behaviour, so folding these into one
+	// comparison makes the test *crash* rather than fail when the registration is
+	// missing — which is the exact regression it exists to catch, reported as zero
+	// failures (rule 54). Found by mutating +initialize to register nothing.
+	OAK_ASSERT(channel != nil);
+	OAK_ASSERT_EQ(std::string(channel.UTF8String), std::string(kSoftwareUpdateChannelRelease.UTF8String));
+}
+
+// MARK: - The binding Preferences depends on
+
+// `checking` must stay KVO-compliant. This is the exact binding
+// SoftwareUpdatePreferences installs on its Check Now button, negate transformer
+// and all.
+void test_checking_drives_a_cocoa_binding ()
+{
+	SoftwareUpdate* softwareUpdate = SoftwareUpdate.sharedInstance;
+	id saved = [softwareUpdate valueForKey:@"checking"];
+
+	NSButton* button = [NSButton buttonWithTitle:@"Check Now" target:nil action:NULL];
+	[button bind:NSEnabledBinding toObject:softwareUpdate withKeyPath:@"checking" options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
+
+	[softwareUpdate setValue:@YES forKey:@"checking"];
+	OAK_ASSERT_EQ((bool)button.enabled, false);
+
+	[softwareUpdate setValue:@NO forKey:@"checking"];
+	OAK_ASSERT_EQ((bool)button.enabled, true);
+
+	[button unbind:NSEnabledBinding];
+	[softwareUpdate setValue:saved forKey:@"checking"];
+}
+
+// `errorString` is the other half — the pane's status line reads it through
+// keyPathsForValuesAffectingLastCheckDescription.
+void test_error_string_drives_a_cocoa_binding ()
+{
+	SoftwareUpdate* softwareUpdate = SoftwareUpdate.sharedInstance;
+	id saved = [softwareUpdate valueForKey:@"errorString"];
+
+	NSTextField* textField = [NSTextField labelWithString:@""];
+	[textField bind:NSValueBinding toObject:softwareUpdate withKeyPath:@"errorString" options:nil];
+
+	[softwareUpdate setValue:@"Error: no such channel" forKey:@"errorString"];
+	OAK_ASSERT_EQ(std::string(textField.stringValue.UTF8String), std::string("Error: no such channel"));
+
+	[softwareUpdate setValue:nil forKey:@"errorString"];
+	OAK_ASSERT_EQ(std::string(textField.stringValue.UTF8String), std::string(""));
+
+	[textField unbind:NSValueBinding];
+	[softwareUpdate setValue:saved forKey:@"errorString"];
+}
+
+// MARK: - channels
+
+// AppController deliberately leaves this unset (Phase 2.5), which is why
+// -checkForTestBuild: reports "No channel named …" rather than checking against
+// MacroMates' server. A port that dropped the setter would be silent about it.
+void test_channels_round_trips ()
+{
+	SoftwareUpdate* softwareUpdate = SoftwareUpdate.sharedInstance;
+	NSDictionary* saved = softwareUpdate.channels;
+
+	NSDictionary<NSString*, NSURL*>* channels = @{ kSoftwareUpdateChannelRelease: [NSURL URLWithString:@"https://example.invalid/releases"] };
+	softwareUpdate.channels = channels;
+	NSURL* url = softwareUpdate.channels[kSoftwareUpdateChannelRelease];
+	OAK_ASSERT(url != nil); // same nil-UTF8String hazard as above
+	OAK_ASSERT_EQ(std::string(url.absoluteString.UTF8String), std::string("https://example.invalid/releases"));
+
+	softwareUpdate.channels = saved;
+	OAK_ASSERT(softwareUpdate.channels == saved);
+}
+
+// The user agent is sent on every check and every bundle download; BundlesManager
+// relies on the same instance carrying it. Not its exact text — just that the port
+// does not leave it empty, which would be invisible until a server rejected it.
+void test_user_agent_is_not_empty ()
+{
+	NSString* userAgent = OakDownloadManager.sharedInstance.userAgentString;
+	OAK_ASSERT(userAgent != nil);
+	OAK_ASSERT((bool)(userAgent.length > 0));
+}

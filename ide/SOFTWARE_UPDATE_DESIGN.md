@@ -75,6 +75,16 @@ already run on unverified bytes by the time anything is checked. That is
 pre-existing, not something the Swift port introduced, and it is the single
 biggest thing to fix here.
 
+**The updater runs in a process anything can hook.** `Entitlements.plist` sets
+`com.apple.security.cs.disable-library-validation` — necessarily, because
+`TMPlugInController` loads third-party `.tmplugin` bundles into the TextMate
+process via `Bundle.principalClass`. So the hardened runtime does not restrict
+what code runs alongside the verifier. This is the concrete basis for Tier 2
+below; it is not hypothetical. (`allow-dyld-environment-variables` is *not* set,
+so `DYLD_INSERT_LIBRARIES` is still blocked; the door is plug-ins, not the
+environment.) CI, for what it is worth, never holds a signing key — builds there
+are ad-hoc, and `bin/notarize` runs on the release Mac.
+
 ## How Chrome does it, and what transfers
 
 Worth looking at, because it is the most-attacked updater on the platform.
@@ -113,39 +123,109 @@ project's current design in two ways:
 Also worth taking from CUP: **TLS is not the security boundary.** GitHub is a CDN
 you do not control. The manifest signature is what makes that acceptable.
 
+## Threat model
+
+The question that motivates all of this: *how does my code-signing identity get
+burned?* Answering it properly means listing who the attacker is, because the
+controls differ.
+
+| Attacker | Can do | Stopped by |
+| --- | --- | --- |
+| **Network MITM** (hostile Wi-Fi, corporate proxy with a trusted root) | substitute the manifest or the archive | manifest signature; payload hash |
+| **Hostile or compromised CDN** (GitHub, its Azure asset host, any redirect target) | same, plus **freeze** you on a stale-but-valid manifest so you never get a security fix | manifest signature; payload hash; manifest expiry |
+| **Compromised GitHub account** | publish a release, rewrite a tag | cannot sign a manifest or codesign a bundle → updater rejects it. **This is the scenario the manifest signature exists for.** |
+| **Rollback** | serve an older, validly-signed, vulnerable release | background checks never install below the running version |
+| **In-process hook** — a malicious `.tmplugin`, which runs inside TextMate with library validation off | swizzle the verifier, replace the embedded key in memory, lie about the result | only a **separate verifying process** with library validation on. See below. |
+| **Local same-user attacker** | replace the app bundle directly, no updater needed | nothing here — they already own the account. Out of scope, and any design claiming otherwise is wrong. |
+| **Compromised release Mac** | sign anything | nothing in the updater. This is the machine to protect; see key hygiene. |
+
+**The Developer ID private key is never touched by the updater.** It is used once,
+at release time, by `bin/notarize` on the release Mac. Hooking the update process
+cannot burn it. It gets burned by theft from that Mac, or by Apple revoking it
+because malware was signed with it — and the updater's job is to make sure the
+*only* thing carrying your signature that ever gets installed is something you
+built.
+
 ## Recommended verification, in order
 
-1. **Manifest signature** — Ed25519 or ECDSA P-256, public key in `Info.plist`
-   under a J23 signee, verified with `SecKeyVerifySignature`. Not DSA-1024, and
-   not `SecTransform`, which Apple deprecated in macOS 12/13. The existing DSA
-   path was ported verbatim on purpose and stays for the bundle index; nothing
-   new should be built on it.
-2. **Payload hash** — SHA-256 from the signed manifest, checked against the
-   downloaded bytes **before extraction**. This is the ordering fix.
-3. **Code signature of the unpacked bundle** — `SecStaticCodeCheckValidity`
-   against a Developer ID requirement, before the bundle is swapped in. This is
-   what stops the updater installing something Gatekeeper will then refuse to
-   run.
+### Tier 1 — closes every remote vector. Do all of it.
 
-Steps 1 and 3 answer different questions and both are worth having. (1) is "did
-J23 publish this?"; (3) is "will this actually launch?".
+1. **Manifest signature: ECDSA P-256, private key in the Secure Enclave of the
+   release Mac.** Not Ed25519, and not a key file. The Secure Enclave only does
+   P-256, and it makes the key **non-exportable**: signing a release requires
+   physical presence at that Mac, and a stolen disk image contains nothing.
+   Create with `SecKeyCreateRandomKey` + `kSecAttrTokenIDSecureEnclave`; clients
+   verify with `SecKeyVerifySignature` and
+   `kSecKeyAlgorithmECDSASignatureMessageX962SHA256`. This is what Ed25519-in-a-
+   file cannot give you, and it is the modern, Apple-native answer to the
+   "burned key" worry.
+2. **Manifest contents**, signed as canonical bytes:
+   `version`, `url`, `sha256`, `size`, `issued`, `expires`, `keyID`,
+   `minimumSystemVersion`. Everything the client will act on is inside the
+   signature; the URL is just where to fetch bytes that must hash correctly.
+3. **Freshness.** Reject a manifest past `expires`. A CDN that can only replay
+   what you signed can still replay it *forever*; expiry is what turns "stale"
+   into "rejected". Re-sign on a schedule shorter than the expiry — `bin/release`
+   already has the discipline for this.
+4. **Anti-rollback.** A background check never installs a version below the
+   running one. The existing user-initiated "Downgrade to X" stays; it is
+   explicit and that is the difference.
+5. **Hash before extraction.** Download to a file, verify `size` (a bound
+   against decompression bombs), verify `sha256`, and only then run `tar`. This
+   is the fix for the ordering weakness above, and it is the single most
+   important code change in the whole plan.
+6. **Code-signature check of the unpacked bundle**, before the swap:
+   `SecStaticCodeCheckValidityWithErrors` with `kSecCSStrictValidate`, against a
+   designated requirement of the form
+   `anchor apple generic and identifier "com.j23software.TextMate-NG" and
+   certificate leaf[subject.OU] = "R22V2H7QF4"` — with the new Team ID accepted
+   as well for one release either side of the transition. Then confirm the
+   bundle's `CFBundleShortVersionString` and identifier match the manifest, so a
+   mismatched payload fails loudly. Do **not** instantiate `NSBundle` on it or
+   load anything from it before this check passes; read `Info.plist` as a file.
+7. **Two embedded public keys** — current and next — with the manifest naming
+   which one signed it. Rotation is then a normal release; revocation is a
+   release that drops a key. Users who never update are stranded either way,
+   under every scheme ever built.
+8. **HTTPS only, no certificate pinning.** Pinning GitHub's certificates is
+   fragile and buys nothing the manifest signature does not already provide. This
+   is precisely CUP's reasoning: TLS is transport, not trust.
 
-### On the Team ID, and a correction
+### Tier 2 — closes the in-process hook. Do it if plug-ins keep you up at night.
 
-An earlier draft of this note said "do not key the update channel to the Team ID",
-and then a later suggestion — verify by code signature alone and skip the custom
-key — would have done exactly that. Both halves cannot be right.
+Because library validation is off, a malicious `.tmplugin` runs inside TextMate
+and can hook `OakDownloadManager` at will. Every Tier 1 check runs in that same
+process and can be lied to.
 
-The resolution is that they are different checks. **Step 1 must not depend on the
-Team ID**: the update-signing key is independent of the Developer ID, and that
-independence is what lets a build signed under `R22V2H7QF4` verify and install a
-build signed under a future J23 organisation Team ID. **Step 3 necessarily does**
-depend on it, and so its requirement must accept the old *or* the new identity for
-at least one release either side of the transition. A user who skips that window
-is otherwise stranded on an old build that refuses every update.
+9. **Do the fetch, verify and swap in a separate helper** — an XPC service or a
+   bundled tool in the mould of `CommitWindowTool` — built **with library
+   validation on** and **no plug-in loading**. The app shows UI and asks; the
+   helper decides. This is Chrome's architecture, and this is the reason for it.
+10. In that helper, **re-check the code signature at the moment of the swap**,
+    from a directory the helper itself created (TOCTOU).
 
-Verifying by code signature *alone* — no manifest key — is the option to reject,
-for that reason.
+**Be honest about what Tier 2 buys.** A malicious plug-in already runs as the
+user and can replace the app directly, so this does not protect the account. It
+protects the *integrity of the update decision*: the updater cannot be turned
+into a channel that installs something and then vouches for it. That is a real
+property, and a bounded one.
+
+### Key hygiene — the actual answer to "burned"
+
+* **Developer ID key**: never in CI (true today — keep it so); ideally
+  hardware-backed. The updater never uses it.
+* **Update-signing key**: Secure Enclave, non-exportable, on the release Mac.
+* **Separation is the point.** A GitHub account compromise cannot produce a
+  valid manifest signature *or* a valid code signature; the updater rejects the
+  release. The one machine whose compromise burns everything is the release Mac,
+  and that is a much smaller thing to defend than "GitHub, Azure, every network
+  a user is on, and every plug-in they install."
+
+### What this does not do, stated plainly
+
+It does not defend against a same-user local attacker, a compromised release Mac,
+or Apple. No client-side design can. Anyone selling you one is selling you
+something else.
 
 ## Two paths
 
@@ -154,15 +234,17 @@ for that reason.
 Roughly a day or two of code plus a signing step in `bin/release`:
 
 1. ~~relax the Content-Type match~~ — **done**, `7a06fffa`;
-2. generate an Ed25519 keypair; public key into `TMSigningKeys` under a J23
-   signee; verification via `SecKeyVerifySignature`;
-3. teach `OakDownloadManager` a manifest-driven path: explicit signature and an
-   expected SHA-256, checked before extraction — keeping the header path for
+2. generate a P-256 key **in the Secure Enclave** of the release Mac; public
+   key(s) into `TMSigningKeys` under a J23 signee, with a key ID;
+3. teach `OakDownloadManager` a manifest-driven path — download to a file,
+   check `size` and `sha256`, *then* extract — keeping the header path for
    `BundlesManager`, pinned both ways;
-4. add the code-signature check before the bundle swap;
-5. `bin/release` gains: a `.tbz` asset, a signed manifest with the hash,
+4. code-signature check of the unpacked bundle before the swap, plus the
+   version/identifier consistency check;
+5. `bin/release` gains: a `.tbz` asset and a signed manifest with `expires`,
    published at a stable URL;
-6. set `channels` in `AppController`.
+6. anti-rollback in the background path; set `channels` in `AppController`;
+7. *(Tier 2, optional)* move 3–4 into a library-validated helper.
 
 ### B. Adopt Sparkle 2
 

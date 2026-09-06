@@ -1,0 +1,436 @@
+# Software update — the execution plan
+
+_Written 2026-09-06, immediately after porting the SoftwareUpdate framework to
+Swift and writing `ide/SOFTWARE_UPDATE_DESIGN.md`. This is the design turned into
+commits. Everything here about the current code was read from it that day, not
+remembered; everything about GitHub was measured with `curl`. Where it says
+"probe", nobody has checked yet, and you should before building on it._
+
+**Read first, in this order:**
+
+1. `ide/RULES.md` — all 64. Rules 8, 18, 40, 54, 55, 59, 62, 64 are load-bearing
+   for this work specifically.
+2. `ide/SOFTWARE_UPDATE_DESIGN.md` — the *why*. This file is the *how*. Do not
+   re-derive the threat model; if you disagree with it, change the design note
+   first and say so in the commit.
+3. The two Swift files you will be changing: `Frameworks/SoftwareUpdate/src/
+   OakDownloadManager.swift` and `SoftwareUpdate.swift`, and their pins in
+   `Frameworks/SoftwareUpdate/tests/t_software_update.mm`.
+
+## Standing rules, restated so they are in the same file as the work
+
+- **Pin → extract → translate**, one commit each. Here there is no translate
+  step — it is already Swift — so it is **pin → change**, and the pin still goes
+  in first, written against the code as it is, with a mutation check that fails
+  it (rule 40). Pins have caught a real defect on most of the files they were
+  written for; write them expecting to find one.
+- **Rule 8**: exercise every change in the running app, not just the suite.
+  Where that is impossible, say so in the commit and put the surface on the
+  smoke list in `ide/NEXT_SESSION_HANDOFF.md`. This plan has one step that is
+  *structurally* impossible to test automatically — the self-replacing install —
+  and it is marked.
+- **Rule 54, all three greps** on every full suite run:
+  `grep -c "Restarting after unexpected exit"`, `grep -c "Fatal error:"`, and
+  started-vs-passed. A crashed test process reports zero failures.
+- **Re-seed after every test-file or spec change**:
+  `ruby ide/extract_specs.rb > ide/gen/specs.json && ruby ide/seed_xcodeproj.rb`.
+- The remote is **`GH-johnmcgovern`**, not `origin`. Stage explicit paths.
+  Re-check `HEAD` before committing. **Do not push while CI is running on the
+  previous push** — the workflow cancels in-progress runs.
+- **Check CI** (`gh run list -L 1`) after every push.
+- **Do not improve things during a security change.** The temptation here is
+  real: the code is fresh Swift and easy to tidy. Every commit in this plan
+  changes one property and pins it. Tidying goes in its own commit or not at all.
+
+## Where this starts
+
+| step | state | commit |
+| --- | --- | --- |
+| Content-Type media-type match | **done** | `7a06fffa` |
+| SoftwareUpdate framework in Swift, pinned | **done** | `bfa64512`…`999a1795` |
+| design note + threat model | **done** | `0a568adf`, `44dcf12e` |
+| everything below | not started | |
+
+Suite is **1015/1015** at `44dcf12e`. `bin/notarize` and `bin/release` exist and
+work; the app is Developer ID-signed (`R22V2H7QF4`), notarized and stapled;
+releases are published to GitHub Releases as a `ditto` zip plus a dSYM zip.
+Bundle identifier is `com.j23software.TextMate-NG`.
+
+## What only John can do
+
+Three things. Everything else in this plan can proceed around them, and the
+plan says at each step what to do while waiting.
+
+- **J1. Generate the manifest-signing key in the Secure Enclave of the release
+  Mac**, using the tool from step 2. Once. The public key that tool prints goes
+  into `Info.plist`. Nobody else can do this and the private key must never
+  leave that machine — that is the point.
+- **J2. Decide Tier 2** (the separate verifying helper, step 7). The design note
+  is honest that it protects the update *decision*, not the account. It is
+  real work and a real property; it is a judgement call.
+- **J3. The first self-update, on one machine, before anyone else.** Step 8. The
+  install path replaces the running application and cannot be tested by a test.
+
+## The steps
+
+Each step is one commit unless it says otherwise. Each has: what changes, what is
+pinned, how the pin is mutation-checked, how rule 8 is satisfied, and what "done"
+means.
+
+### Step 1 — hash-before-extract (the ordering fix)
+
+**Why first.** It is the single most important security change in the plan, it
+is independent of every design decision still open (key type, hosting, Tier 2),
+and it is a strict improvement even if nothing else here ever ships.
+
+**What.** `OakDownloadArchiveTask` (private, in `OakDownloadManager.swift`) today
+streams each `didReceive data:` chunk into `tar`'s stdin and verifies the
+signature in `didCompleteWithError:`. Change it to:
+
+1. write the download to a temporary **file** (in the same `NSItemReplacement-
+   Directory` it already creates), accumulating nothing in memory beyond what
+   `NSProgress` needs;
+2. on completion, verify — signature today, hash once step 4 lands — against the
+   **complete file**;
+3. only then launch `tar` with that file as stdin, wait for it, and proceed as
+   before.
+
+Keep the `NSProgress` estimation code exactly as it is; it reads
+`countOfBytesReceived` from the task, not from the pipe.
+
+**Behaviour that must not change**, and is pinned: the completion handler's
+contract (URL on success, error otherwise), the error strings, the retry-on-next-
+chunk oddity described in the file's comment (it becomes moot once nothing is
+extracted mid-download, but do not *remove* the comment — replace it with one
+saying why it is moot), and the `deinit` cleanup of `temporaryFileURL`.
+
+**Pin (before the change).** `t_software_update.mm` cannot drive a real download.
+Pin the *ordering* through the seam that exists: extract
+`OakDownloadArchiveTask`'s "extract this verified file into this directory" into
+an internal function on `OakDownloadManager` —
+`func extractArchive(at fileURL: URL, into directory: URL) throws` — declared in
+`SoftwareUpdateTesting.h` under `(Testing)`, and pin it with a real `.tbz` built
+in the test with `tar -cjf` from a temp dir. Then pin that
+**a file whose hash does not match is never extracted**: this needs step 4's
+expected-hash parameter, so in this step pin the extraction function alone and
+add the ordering pin in step 4. Say so in the commit.
+
+**Mutation.** Make `extractArchive` a no-op; the extraction pin must fail.
+
+**Rule 8.** `BundlesManager` uses the *file* download path, not the archive path,
+so the bundle-index check does not exercise this. Installing a bundle from
+Preferences ▸ Bundles does — it calls `downloadArchiveAtURL:`. If the
+environment can open Preferences, install one small bundle and check the log. If
+it cannot, say so and rely on the pin.
+
+**Done when**: suite green with the three greps; the file's top comment says
+the archive is now verified before extraction and why that matters (link the
+design note).
+
+### Step 2 — the signing tool, and the key
+
+**What.** A new tool, `bin/update-sign`, that does three things:
+
+    bin/update-sign create-key   [--label j23-update-signing]
+    bin/update-sign public-key   [--label …]      # prints DER base64, for Info.plist
+    bin/update-sign sign <file>  [--label …]      # prints DER ECDSA signature, base64
+
+`create-key` uses `SecKeyCreateRandomKey` with `kSecAttrKeyTypeECSECPrimeRandom`,
+256 bits, `kSecAttrTokenIDSecureEnclave`, and an access control of
+`kSecAccessControlPrivateKeyUsage` (require the device be unlocked; do **not**
+require biometrics — `bin/release` runs unattended once started). `sign` uses
+`SecKeyCreateSignature` with `kSecKeyAlgorithmECDSASignatureMessageX962SHA256`.
+
+**Probe first (rule 55), because this is the step most likely to surprise:**
+a process using Secure Enclave keys must be code-signed. A `swift` script or an
+ad-hoc-signed binary may get `errSecMissingEntitlement` or a keychain prompt loop.
+Build the tool as a small Swift executable target (the project already knows how
+to build tools — `CommitWindowTool` is the model), sign it with the same
+`TM_CODE_SIGN_IDENTITY` the app uses, and try `create-key` **with a throwaway
+label** before believing any of the above. Record what happened in the commit.
+If Secure Enclave access turns out to need an entitlement the tool cannot have,
+fall back to a **non-exportable keychain key** (`kSecAttrIsExtractable = false`,
+no token ID) and say plainly in the design note that the key is software-backed.
+Do not silently downgrade.
+
+**What this commit does *not* do:** create the real key. That is **J1**. The
+commit lands the tool and a `bin/update-sign self-test` that creates a throwaway
+key, signs a fixed string, verifies it with `SecKeyVerifySignature`, and deletes
+the key. That self-test is the pin, and it runs on the release Mac, not in CI.
+
+**Done when**: `bin/update-sign self-test` passes on the release Mac; the design
+note records whether the key is Enclave-backed or keychain-backed.
+
+**While waiting for J1:** steps 3 and 4 do not need a real key — their pins use
+a test keypair generated in the test itself.
+
+### Step 3 — `SecKeyVerifySignature` alongside `SecTransform`
+
+**What.** Add to `OakDownloadManager`:
+
+    func data(_ data: Data, hasValidECDSASignature signature: Data,
+              usingPublicKey publicKey: SecKey) -> Bool
+
+using `SecKeyVerifySignature` with
+`kSecKeyAlgorithmECDSASignatureMessageX962SHA256`. Add a companion that builds a
+`SecKey` from the DER-base64 string the Info.plist will carry
+(`SecKeyCreateWithData`, `kSecAttrKeyTypeECSECPrimeRandom`, `kSecAttrKeyClassPublic`).
+
+**Leave the existing DSA/SecTransform path exactly as it is.** `BundlesManager`
+verifies MacroMates' bundle index with it, using keys that come from *inside*
+that index, and that is not ours to change. The two verifiers coexist; the
+signee name chooses. Put both facts in a comment above the new function.
+
+**Pin.** In `t_software_update.mm`, through `SoftwareUpdateTesting.h`:
+generate a P-256 keypair *in the test* (`SecKeyCreateRandomKey`, no token —
+software key, fine for a test), sign a known string, and assert:
+valid signature verifies; one flipped bit in the data fails; one flipped bit in
+the signature fails; a signature by a different key fails. The DER round trip of
+the public key through the string form is pinned too.
+
+**Mutation.** Make the verifier return `true`; three of four assertions must
+fail. (The "valid verifies" one must keep passing — that is the guard.)
+
+**Rule 8.** Nothing in the app reaches this yet. Say so.
+
+### Step 4 — the manifest, and a download path that takes one
+
+**The manifest format**, so nobody has to canonicalise JSON:
+
+    {
+      "manifest":  "<base64 of the exact UTF-8 bytes of the inner document>",
+      "keyID":     "j23-2026",
+      "signature": "<base64 DER ECDSA over those exact bytes>"
+    }
+
+The inner document is JSON:
+
+    {
+      "version": "2026.9-alpha.22",
+      "url":     "https://github.com/johnmcgovern/textmate-ng/releases/download/v2026.9-alpha.22/TextMate-NG-2026.9-alpha.22.tbz",
+      "sha256":  "<hex>",
+      "size":    12345678,
+      "issued":  "2026-09-06T12:00:00Z",
+      "expires": "2026-10-06T12:00:00Z",
+      "minimumSystemVersion": "15.0"
+    }
+
+Signing the *bytes* and shipping them base64-encoded inside the wrapper means
+the client verifies first and parses second, and never has to agree with the
+signer about whitespace or key order. One file, atomic.
+
+**What changes.**
+
+*`SoftwareUpdate.checkForTestBuild`* gains a manifest branch. Today it expects
+`{url, version}` from the channel URL. Add: if the response parses as the wrapper
+above, (a) look up `keyID` in `Info.plist` `TMSigningKeys` — which becomes a
+dictionary of `signee → {algorithm, publicKey}` so the DSA entry and the new
+P-256 entries can coexist; (b) verify the signature over the decoded bytes
+with step 3's verifier; (c) reject if `expires` is past; (d) parse the inner
+document and hand `url`, `version`, `sha256`, `size` onward. Every rejection
+is a distinct error string; they are pinned.
+
+*`OakDownloadManager`* gains:
+
+    @objc(downloadArchiveAtURL:forReplacingURL:expectedSHA256:expectedSize:completionHandler:)
+    func downloadArchive(at:, forReplacing:, expectedSHA256: String,
+                         expectedSize: Int64, completionHandler:) -> ProgressReporting
+
+which uses step 1's file-then-verify path with a **hash and size** check instead
+of a header signature. The old header-signature entry point stays for
+`BundlesManager` and is *also* pinned as still working — that is rule 18 applied
+to the thing you did not mean to change. **Reject on size before hashing**: a
+`size` mismatch is checked as bytes arrive (cancel the task past `expectedSize`),
+and the hash is checked on the complete file. Order matters; pin it.
+
+*`SUDownloadViewController`* passes the hash and size through.
+
+**Pin.** The manifest parser, with a test keypair: valid manifest parses;
+bad signature rejected; expired rejected; unknown `keyID` rejected; each with
+its own error string. The download path: build a real `.tbz` in the test, serve
+it from a `file://` URL — **probe whether `URLSession` data tasks accept
+`file://` in a test bundle before relying on it**; if not, use a local
+`NSURLProtocol` subclass registered for a fake scheme, which is the standard
+trick — and assert: correct hash extracts; wrong hash does not extract and
+reports the hash error; oversize is cancelled. This is where the step-1 ordering
+pin lands: **assert that on a hash mismatch, the extraction directory does not
+exist.**
+
+**Mutation.** Swap the hash comparison for `true`; the wrong-hash test must fail.
+Move the extraction before the hash check; the directory-does-not-exist test
+must fail.
+
+**Rule 8.** Still nothing in the app reaches this — `channels` is nil. Say so.
+
+### Step 5 — code signature of the unpacked bundle, and consistency
+
+**What.** Before `SUDownloadViewController.takeURLToInstallFrom` calls
+`replaceItem(at:withItemAt:…)`, and *in place of* the executable-bit check in
+`isInstallableApplication(at:)`:
+
+1. `SecStaticCodeCreateWithPath` on the unpacked `.app`;
+2. `SecRequirementCreateWithString` with
+   `anchor apple generic and identifier "com.j23software.TextMate-NG" and
+   (certificate leaf[subject.OU] = "R22V2H7QF4" or certificate leaf[subject.OU]
+   = "<NEW TEAM ID>")` — the second clause is a placeholder until J23's
+   organisation Team ID exists; leave it as a single OU until then, with a
+   comment saying where the second one goes;
+3. `SecStaticCodeCheckValidityWithErrors` with `kSecCSStrictValidate |
+   kSecCSCheckAllArchitectures`;
+4. read the unpacked bundle's `Info.plist` **as a file** (`PropertyListSerial-
+   ization`, not `Bundle(path:)` — do not give the runtime a chance to load
+   anything from it) and assert `CFBundleIdentifier` and
+   `CFBundleShortVersionString` match the manifest.
+
+Any failure presents the existing "Integrity Check Failed" alert path.
+
+**Pin.** The requirement string is pinned as a literal (a typo in a requirement
+is a silent "nothing ever installs"). The consistency check is pinned with a
+fake bundle directory built in the test: matching Info.plist passes the
+consistency part, mismatched identifier fails, mismatched version fails. The
+codesign check itself can be pinned against the *test bundle's own host* or
+against `/System/Applications/TextEdit.app` with an `anchor apple` requirement
+as a "the API works" control, and with a wrong-OU requirement as the control
+that must fail (rule 59).
+
+**Mutation.** Return `true` from the codesign check; the wrong-OU control must
+fail.
+
+**Rule 8.** Not reachable yet.
+
+### Step 6 — `bin/release`, and wiring `channels`
+
+**Two commits**, because one is shell and one is Swift, and because the second
+is the one that turns everything on.
+
+**6a — `bin/release`.** After the zip is built and re-verified (it already
+unpacks to `$WORK/unpacked` and checks it), add:
+
+1. `tar -cjf "$ROOT/build/TextMate-NG-$VERSION.tbz" -C "$WORK/unpacked" TextMate-NG.app`
+   — from the *verified* unpacked copy, not from `build/`;
+2. `shasum -a 256` and `stat -f %z` of the tbz;
+3. write the inner manifest document; `bin/update-sign sign` it; write the
+   wrapper;
+4. add the tbz to the `gh release create` line at line 263, alongside the zip
+   and the dSYM zip;
+5. publish the wrapper at a **stable URL**. Recommended: a `gh-pages` branch
+   holding `update/release.json`, which `bin/release` commits and pushes.
+   GitHub Pages returns `application/json; charset=utf-8`, which step 0 already
+   made acceptable. (Alternative: a rolling GitHub Release named `updates`
+   whose single asset is overwritten; the URL is stable but the API is the
+   only way to find it. Pages is simpler. Decide once and write it down.)
+6. **`--dry-run` must exercise all of the above except the push**, printing the
+   manifest it would sign. Run it before and after; paste the output in the
+   commit.
+
+The `expires` value: 35 days from `issued`. `bin/release` re-signs the manifest
+every release; if a month passes without a release, run
+`bin/release --resign-manifest` (add it) to refresh the expiry without publishing
+anything. Put that in the handoff's release checklist.
+
+**6b — `channels`.** In `AppController.applicationWillFinishLaunching`, replace
+the Phase 2.5 comment block with:
+
+    SoftwareUpdate.sharedInstance.channels = [
+        kSoftwareUpdateChannelRelease: URL(string: "https://johnmcgovern.github.io/textmate-ng/update/release.json")!,
+    ]
+
+(one channel; `beta` and `nightly` can be added when they mean something), and
+add the **anti-rollback** guard to `SoftwareUpdate`'s scheduler path: if the
+manifest's `version` is not greater than the running one by
+`OakCompareVersionStrings`, log and finish without presenting. The
+user-initiated path keeps its existing "Up To Date" / "Downgrade to" behaviour.
+
+**Pin for 6b.** Anti-rollback: with a manifest naming an older version, the
+background path's completion is called with no UI. (Reach it through
+`checkForTestBuild` with a stubbed manifest URL via the `NSURLProtocol` trick
+from step 4.)
+
+**Rule 8 for 6b — this is the first time it is reachable.** Build Release, launch,
+**open Preferences ▸ Software Update and click Check Now**. With `--dry-run`
+output published nowhere, it should report the manifest fetch failure cleanly.
+This is the step where the environment's inability to bring the app frontmost
+bites; if you are in that environment, say so, and J3 covers it.
+
+### Step 7 — Tier 2, if J2 says yes
+
+**What.** A new tool target, `TextMateUpdateHelper`, built like `CommitWindowTool`
+but with library validation **on** (do *not* copy the app's
+`disable-library-validation` entitlement) and no plug-in loading. It takes the
+manifest URL and the channel on stdin, does steps 4–5 and the swap, and reports
+progress and result as JSON lines on stdout. `SUDownloadViewController` launches
+it with `Process`, parses the stream into its existing `NSProgress`, and shows
+the same UI. The helper re-runs the codesign check **immediately before**
+`replaceItem`, from a directory it created itself.
+
+**Probe first**: whether a helper *inside* the app bundle can replace the bundle
+it is running from. `bin/release`'s own model (the app replaces itself, then a
+shell script relaunches it) suggests yes — the `open "$0"` relaunch dance in
+`takeURLToInstallFrom` is the thing to keep.
+
+**Pin.** The JSON-lines protocol, both directions, with a fake helper script.
+
+**Rule 8.** Same as 6b, and J3.
+
+### Step 8 — J3, the first self-update
+
+Not a commit. On one machine that is *not* the release Mac:
+
+1. install the last published release the normal way, from the zip;
+2. cut a new release with `bin/release` (a real one, with a `Changes.md` entry);
+3. on the test machine, Check for Updates → Download → Install & Relaunch;
+4. confirm the relaunched app reports the new version, is Developer ID-signed
+   (`codesign -dvv`), stapled (`stapler validate`), and passes
+   `spctl -a -t exec -vv`;
+5. confirm the *old* bundle is gone and no `NSItemReplacementDirectory` leftovers
+   remain in `~/Library/…/TemporaryItems`.
+
+Then, deliberately: publish a manifest with a **wrong hash**, check for updates,
+and confirm the app refuses with the hash error and **extracts nothing**. That is
+step 1 and step 4 proving themselves against the real pipeline. Revert the
+manifest.
+
+Write what happened into the handoff. If anything in this list did not happen,
+the feature is not done.
+
+## Hazards, specific to this work
+
+- **Rule 64 — custom getters.** `checking` is already handled (`isChecking`
+  computed alongside). Any *new* `@objc` Bool property you add: grep the header
+  for `getter =` and list the *selector* in the pin, not the Swift name.
+- **Rule 56 — do not subclass across a module boundary.** Nothing in this plan
+  needs to, and `SoftwareUpdate` is observed from Preferences across that
+  boundary already, which is fine (observing, not subclassing).
+- **`OakDownloadManager` is shared with `BundlesManager`.** Every step that
+  touches it pins the old path too. The bundle index fetch is the rule-8 check
+  for that: shorten `bundleUpdateFrequency` to 60, relaunch, watch for
+  `GET https://api.textmate.org/bundles using entity tag`, restore it. Exactly
+  as `97ffa70f` did.
+- **`default.rave` globs.** If you add a `.swift` to a framework that has none,
+  `sources src/*.mm` silently compiles nothing and the symptom is an undefined
+  ObjC class symbol in an *unrelated* target. `SoftwareUpdate` is already
+  `src/*.{mm,swift}`; a new tool target will need its own line.
+- **`nonisolated(unsafe)` is the established form** for non-MainActor singletons
+  and for the explicit queue crossings in `checkForTestBuild`. Do not "fix" them
+  into `@MainActor` — that class is deliberately not.
+- **Two logging conventions.** `Logger()` where the ObjC++ had `OS_LOG_DEFAULT`;
+  a named subsystem only where the ObjC++ had one. New code in this framework
+  follows the file it lives in.
+- **The probe's own flags (rule 62).** Any header you add to
+  `SoftwareUpdate-Bridging-Header.h`, probe at `-std=c++2a` with a control that
+  fails. The script shape is in the session notes for 2026-09-05.
+- **Do not touch the DSA path.** It is deprecated, it is MacroMates', and it is
+  how bundles get verified. It goes when the bundle index goes, which is not
+  this plan.
+
+## Done means
+
+- Every step's pin exists, was mutation-checked, and the mutation is recorded in
+  the commit message.
+- Suite green with all three rule-54 greps on every commit; CI green on every
+  push.
+- The design note's "four mismatches" table shows all four struck through.
+- Step 8 happened, on a real machine, including the wrong-hash refusal, and is
+  written up in the handoff.
+- The smoke list's Software Update row is updated to say what the release
+  process now checks automatically and what it still does not.

@@ -8,14 +8,21 @@
 #import <OakAppKit/OakScopeBarView.h>
 #import <OakAppKit/OakSound.h>
 #import <OakFoundation/NSString Additions.h>
-#import <OakSystem/application.h>
-#import <text/ranker.h>
-#import <io/entries.h>
-#import <text/case.h>
-#import <text/ctype.h>
-#import <io/path.h>
-#import <ns/ns.h>
 #import <kvdb/kvdb.h>
+
+// **This class stays ObjC++, and not for want of C++ — there is none left.**
+//
+// FavoriteChooser subclasses OakChooser, which is Swift (OakChooser.swift) in
+// OakFilterList and reaches the app only through a hand-written ObjC header. A
+// Swift subclass of that, in this module, cannot be KVO-swizzled: registering an
+// observation traps in swift_objc_classCopyFixupHandler — SIGTRAP, not an
+// exception. That is rule 56, measured with three throwaway probes, and this
+// class is the shape that found it. `-init` binds the scope bar to `sourceIndex`
+// on self, so it is observed from the moment it exists.
+//
+// The exits are to move the class into OakFilterList, or to export real Swift
+// modules to the app — a build-system project, not a refactor (see rule 56).
+// Until one of those happens, porting this file produces a crash, not a port.
 
 static NSString* const kUserDefaultsOpenProjectSourceIndex = @"openProjectSourceIndex";
 

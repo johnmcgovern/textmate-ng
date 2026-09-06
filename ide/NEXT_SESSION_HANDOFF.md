@@ -1828,6 +1828,84 @@ flagged as poor ports are still untouched and still look that way:
 
 Say so plainly rather than porting them for symmetry.
 
+## The app shell is finished (2026-09-05)
+
+With AppController flipped, **every remaining `.mm` under `Applications/TextMate/src`
+is one that should not move**, and each for a reason already on the books. This
+table exists so the next session does not re-derive it — I started to, and got
+most of the way into `Favorites.mm` before the rules stopped me.
+
+| file | lines | why it stays |
+| --- | --- | --- |
+| `RMateServer.mm` | 639 | Socket server over `std::map`/`std::string` with C++ callbacks. Its whole Swift-facing surface is `setup_rmate_server`, which Swift already calls (rule 61). |
+| `Favorites.mm` | 303 | **Rule 56** — see below. Zero C++ left in it and still unportable. |
+| `ODBEditorSuite.mm` | 189 | AppleEvent descriptors and a `#pragma pack(2)` struct. `DidHandleODBEditorEvent` is already callable from Swift. |
+| `AppControllerSupport.mm` | 143 | The C++ boundary itself (rule 25). Its whole job is to be ObjC++. |
+| `FavoritesSupport.mm` | 106 | ditto |
+| `main.mm` | 83 | `main()`. |
+| `OakMainMenu.mm` | 81 | Rule 37 — `bundles::query` and `OakShowMenuForBundleItems` are C++ on both sides. `BundleMenuSupport.mm` already records that it stays. |
+| `TxMtURLSupport.mm` | 75 | boundary |
+| `AppController Commands.mm` | 63 | Rule 37 — `-performBundleItem:` takes a `bundles::item_ptr` and is called with one. |
+| `TMPlugInSupport.mm` | 31 | boundary |
+| `AboutBundlesSupport.mm` | 28 | boundary |
+| `GetURLScriptCommand.mm` | 13 | Portable, zero C++ — and worth nothing. 13 lines, instantiated by name from the sdef. |
+
+### Favorites.mm looked like the obvious next port. It is not.
+
+310 lines, and my first measurement said **one** C++ line. Seven of its imports
+were C++ headers that the `FavoritesSupport` extraction had made dead long ago;
+deleting them (this commit) leaves a file with no C++ at all, an extracted
+boundary, and ten existing tests. Everything about it says "port me".
+
+`FavoriteChooser` subclasses `OakChooser`, which is **Swift**, in OakFilterList,
+seen from the app only through a hand-written ObjC header. A Swift subclass of
+that, in the app module, cannot be KVO-swizzled — registering an observation
+traps in `swift_objc_classCopyFixupHandler`. That is **rule 56**, and this exact
+class is the shape that was used to measure it. `-init` binds the scope bar to
+`sourceIndex` on `self`, so it is observed from the moment it exists.
+
+The note is now at the top of `Favorites.mm` as well, because that is where
+somebody will be looking when they get the same idea.
+
+**Generalise it:** in the app target, "no C++ left" is necessary and not
+sufficient. The second question is always *what does this class subclass, and
+which module is that class in.*
+
+### Where the port stands, tree-wide
+
+    HTMLOutputWindow 100%   OakTabBarView 98%   BundleMenu/TMFileReference 93%
+    FileBrowser 86%   HTMLOutput 85%   CommitWindow 82%   CrashReporter 81%
+    Preferences 80%   DocumentWindow 76%   BundleEditor 74%   OakAppKit 71%
+    Find 70%   OakFilterList 65%   OakTextView 23%
+
+    0% Swift: document 3,250 · SoftwareUpdate 1,273 · BundlesManager 995
+              OakCommand 672 · TMBundleModel 467 · MenuBuilder 403 · ns 692 …
+
+Most of the 0% list is the C++ core (`ns`, `io`, `text`, `theme`, `command`) or a
+deliberate boundary (`TMBundleModel`), and `MenuBuilder` is already declared
+permanent. Two are real ObjC++ bodies nobody has touched.
+
+### The measured next target: SoftwareUpdate
+
+C++ lines per 100 lines of ObjC++, across the plausible candidates:
+
+    SoftwareUpdate   1,273 mm      15 C++    1%
+    OakTextView      5,649 mm     374 C++    6%
+    Find             1,107 mm      73 C++    6%
+    OakCommand         672 mm      53 C++    7%
+    BundlesManager     995 mm      90 C++    9%
+    document         3,250 mm     342 C++   10%
+    OakFilterList      976 mm     156 C++   15%
+
+**SoftwareUpdate is the outlier**: 1,273 lines at 0% Swift and 1% C++, and it is
+self-contained — a version check, a download, an installer. Nothing else depends
+on its internals. Before starting it, do the two checks this session's near-miss
+argues for: what its classes subclass and in which module (rule 56), and whether
+anything KVOs them.
+
+Do not start `document` or `OakTextView` on a whim. They are the C++ core's
+closest neighbours and the density numbers understate them.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

@@ -53,6 +53,22 @@ private func GetHardwareInfo(_ field: Int32, isInteger: Bool = false) -> String 
 // same way too: NSURLSession retains its delegate until the session invalidates,
 // and -finishTasksAndInvalidate is called immediately so that happens once the
 // single task completes.
+// Private to this file, exactly as it was to the .mm. It keeps itself alive the
+// same way too: NSURLSession retains its delegate until the session invalidates,
+// and -finishTasksAndInvalidate is called immediately so that happens once the
+// single task completes.
+//
+// **The archive is written to disk, verified, and only then extracted.** The
+// ObjC++ this was ported from streamed each chunk straight into tar's stdin as it
+// arrived and checked the signature at the end, so tar ran on unverified bytes —
+// the signature gated *installation*, not *extraction*. Nothing about that was
+// introduced by the Swift port and nothing about it was safe. See
+// ide/SOFTWARE_UPDATE_DESIGN.md; this is Tier 1 step 5 of
+// ide/SOFTWARE_UPDATE_PLAN.md.
+//
+// The payload is no longer accumulated in memory either. It is written straight
+// to a scratch file and memory-mapped for verification, which drops peak usage
+// by the size of the download — around 50 MB for the application.
 private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSessionDataDelegate {
 	private let publicKeys: [String: String]
 	private var signee: String?
@@ -60,21 +76,23 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 
 	private let completionHandler: (URL?, Error?) -> Void
 
-	private var data = Data()
-
 	private let fileURLToReplace: URL?
-	private var temporaryFileURL: URL?
 
-	private var extractorTask: Process?
-	private var extractorFileHandleStorage: FileHandle?
-	private let extractorDispatchGroup = DispatchGroup()
-	private var extractorError: Error?
+	// The downloaded .tbz. Deliberately *not* inside the replacement directory
+	// below: that directory becomes the unpacked application itself (tar strips
+	// one component into it), so a stray archive there would end up inside the
+	// bundle handed to -replaceItemAtURL:.
+	private var downloadFileURL: URL?
+	private var downloadHandle: FileHandle?
+	private var writeError: Error?
+
+	// NSItemReplacementDirectory, created only once the signature checks out, and
+	// handed to the completion handler on success — at which point ownership
+	// passes to the caller and this stops cleaning it up.
+	private var replacementDirectoryURL: URL?
 
 	private var sampleStartDate: Date?
 	private var sampleCountOfBytesReceived: Int64 = 0
-
-	private var extractorTaskOutputData: Data?
-	private var extractorTaskErrorData: Data?
 
 	let progress: Progress
 
@@ -99,89 +117,54 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 	}
 
 	deinit {
-		if let temporaryFileURL {
+		removeScratchFile()
+		if let replacementDirectoryURL {
 			do {
-				try FileManager.default.removeItem(at: temporaryFileURL)
+				try FileManager.default.removeItem(at: replacementDirectoryURL)
 			} catch {
-				log.error("Unable to remove \(temporaryFileURL.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+				log.error("Unable to remove \(replacementDirectoryURL.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
 			}
 		}
 	}
 
-	// Lazily launches tar and returns the pipe to write the archive into. Returns
-	// nil — having recorded `extractorError` — if either the replacement directory
-	// or the launch fails, and -URLSession:dataTask:didReceiveData: then cancels.
-	private var extractorFileHandle: FileHandle? {
-		if let extractorFileHandleStorage {
-			return extractorFileHandleStorage
-		}
-
-		// No "already tried and failed" guard, deliberately. The ObjC++ tested only
-		// `if(!_extractorFileHandle)`, so a failed attempt left the ivar nil and the
-		// *next* -didReceiveData: retried the whole thing — reachable, because
-		// -cancel is asynchronous and more data can arrive after it. Retrying also
-		// overwrites _temporaryFileURL and so leaks the previous replacement
-		// directory. Both are preserved: this is a translation, and the leak is a
-		// pre-existing bug to be fixed on its own terms, not silently during a port.
-		let temporaryDirectory: URL
+	private func removeScratchFile() {
+		guard let downloadFileURL else { return }
+		self.downloadFileURL = nil
 		do {
-			temporaryDirectory = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: fileURLToReplace, create: true)
+			try FileManager.default.removeItem(at: downloadFileURL)
+		} catch CocoaError.fileNoSuchFile {
+			// never created, or already gone
 		} catch {
-			log.error("Failed to obtain NSItemReplacementDirectory: \(error.localizedDescription, privacy: .public)")
-			extractorError = error
-			return nil
+			log.error("Unable to remove \(downloadFileURL.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
 		}
-		temporaryFileURL = temporaryDirectory
+	}
 
-		let inputPipe  = Pipe()
-		let outputPipe = Pipe()
-		let errorPipe  = Pipe()
-
-		let task = Process()
-		task.launchPath     = "/usr/bin/tar"
-		task.arguments      = [ "-jxmkC", temporaryDirectory.path, "--strip-components", "1", "--disable-copyfile", "--exclude", "._*" ]
-		task.standardInput  = inputPipe
-		task.standardOutput = outputPipe
-		task.standardError  = errorPipe
-
-		extractorDispatchGroup.enter()
-		DispatchQueue.global().async {
-			self.extractorTaskOutputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-			outputPipe.fileHandleForReading.closeFile()
-			self.extractorDispatchGroup.leave()
+	// Opened on the first chunk rather than in -init, so a download that fails
+	// before any byte arrives leaves nothing behind.
+	private var fileHandleForWriting: FileHandle? {
+		if let downloadHandle {
+			return downloadHandle
 		}
 
-		extractorDispatchGroup.enter()
-		DispatchQueue.global().async {
-			self.extractorTaskErrorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-			errorPipe.fileHandleForReading.closeFile()
-			self.extractorDispatchGroup.leave()
-		}
-
-		let group = extractorDispatchGroup // Avoid capturing ‘self’ in terminationHandler
-		group.enter()
-		task.terminationHandler = { _ in
-			group.leave()
-		}
-
-		do {
-			try task.run()
-		} catch {
-			log.error("Failed to launch tar: \(error.localizedDescription, privacy: .public)")
-
-			extractorDispatchGroup.leave() // Termination handler will never be called
-			outputPipe.fileHandleForWriting.closeFile()
-			errorPipe.fileHandleForWriting.closeFile()
-
-			extractorTask  = nil
-			extractorError = error
-
+		let url = FileManager.default.temporaryDirectory.appendingPathComponent("TextMate-NG-update-\(UUID().uuidString).tbz")
+		guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
+			let error = CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path])
+			log.error("Unable to create \(url.path, privacy: .public)")
+			writeError = error
 			return nil
 		}
 
-		extractorTask = task
-		extractorFileHandleStorage = inputPipe.fileHandleForWriting
-		return extractorFileHandleStorage
+		do {
+			downloadHandle = try FileHandle(forWritingTo: url)
+		} catch {
+			log.error("Unable to open \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+			writeError = error
+			try? FileManager.default.removeItem(at: url)
+			return nil
+		}
+
+		downloadFileURL = url
+		return downloadHandle
 	}
 
 	func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
@@ -198,13 +181,19 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 	}
 
 	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-		guard let fileHandle = extractorFileHandle, !progress.isCancelled else {
+		guard let handle = fileHandleForWriting, !progress.isCancelled else {
 			dataTask.cancel()
 			return
 		}
 
-		fileHandle.write(data)
-		self.data.append(data)
+		do {
+			try handle.write(contentsOf: data)
+		} catch {
+			log.error("Unable to write update payload: \(error.localizedDescription, privacy: .public)")
+			writeError = error
+			dataTask.cancel()
+			return
+		}
 
 		if dataTask.countOfBytesExpectedToReceive != NSURLSessionTransferSizeUnknown {
 			if sampleStartDate == nil {
@@ -231,42 +220,54 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 	}
 
 	func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError downloadError: Error?) {
-		extractorFileHandleStorage?.closeFile()
+		try? downloadHandle?.close()
+		downloadHandle = nil
 		progress.totalUnitCount = task.countOfBytesReceived
 
-		// `_extractorError ?: (_extractorTask ? downloadError : «unable to launch»)`.
-		// The third branch is the case where no byte ever arrived, so the extractor
-		// was never asked for and never recorded an error of its own.
-		let error = extractorError ?? (extractorTask != nil ? downloadError : NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unable to launch tar."]))
-
-		if let error {
+		if let error = downloadError ?? writeError {
 			log.error("Failed to download \(task.originalRequest?.url?.absoluteString ?? "", privacy: .public): \(error.localizedDescription, privacy: .public)")
+			removeScratchFile()
 			completionHandler(nil, error)
-		} else if !OakDownloadManager.sharedInstance.data(data, hasValidBase64EncodedSignature: signature, usingPublicKeyString: signee.flatMap { publicKeys[$0] }) {
-			log.error("Unable to verify signature")
-			completionHandler(nil, NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unable to verify signature."]))
-		} else {
-			extractorDispatchGroup.notify(queue: .main) {
-				let status = self.extractorTask?.terminationStatus ?? -1
-				if status == 0 {
-					let url = self.temporaryFileURL
-					self.temporaryFileURL = nil
-					self.completionHandler(url, nil)
-				} else {
-					let errorString  = (self.extractorTaskErrorData?.isEmpty  == false) ? String(data: self.extractorTaskErrorData!,  encoding: .utf8) : nil
-					let outputString = (self.extractorTaskOutputData?.isEmpty == false) ? String(data: self.extractorTaskOutputData!, encoding: .utf8) : nil
-
-					log.error("Abnormal exit from tar: \(status)")
-					if let errorString  { log.error("\(errorString, privacy: .public)") }
-					if let outputString { log.error("\(outputString, privacy: .public)") }
-
-					var description = errorString ?? outputString ?? "Abnormal exit from tar: \(status)"
-					description = description.trimmingCharacters(in: .whitespacesAndNewlines)
-					description = description.replacingOccurrences(of: "\n", with: " ")
-					self.completionHandler(nil, NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: description]))
-				}
-			}
+			return
 		}
+
+		// Memory-mapped rather than read: the verifier only needs to hash it once.
+		// A download that produced no file at all lands here with `payload` nil and
+		// fails verification, which is the same refusal by a more accurate name than
+		// the "Unable to launch tar." the streaming version reported for that case.
+		let payload = downloadFileURL.flatMap { try? Data(contentsOf: $0, options: .mappedIfSafe) }
+
+		guard OakDownloadManager.sharedInstance.data(payload, hasValidBase64EncodedSignature: signature, usingPublicKeyString: signee.flatMap { publicKeys[$0] }) else {
+			log.error("Unable to verify signature")
+			removeScratchFile()
+			completionHandler(nil, NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unable to verify signature."]))
+			return
+		}
+
+		// Only now is a replacement directory created. Nothing is written next to
+		// the application until the bytes have been vouched for.
+		let directory: URL
+		do {
+			directory = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: fileURLToReplace, create: true)
+		} catch {
+			log.error("Failed to obtain NSItemReplacementDirectory: \(error.localizedDescription, privacy: .public)")
+			removeScratchFile()
+			completionHandler(nil, error)
+			return
+		}
+		replacementDirectoryURL = directory
+
+		do {
+			try OakDownloadManager.sharedInstance.extractArchive(at: downloadFileURL!, into: directory)
+		} catch {
+			removeScratchFile()
+			completionHandler(nil, error)
+			return
+		}
+
+		removeScratchFile()
+		replacementDirectoryURL = nil // ownership passes to the caller
+		completionHandler(directory, nil)
 	}
 }
 
@@ -369,6 +370,80 @@ class OakDownloadManager: NSObject {
 	@objc(downloadArchiveAtURL:forReplacingURL:publicKeys:completionHandler:)
 	func downloadArchive(at serverURL: URL, forReplacing localURL: URL?, publicKeys: [String: String], completionHandler: @escaping (URL?, Error?) -> Void) -> ProgressReporting {
 		return OakDownloadArchiveTask(url: serverURL, forReplacing: localURL, publicKeys: publicKeys, completionHandler: completionHandler)
+	}
+
+	// MARK: - Archive extraction
+
+	// Unpacks a **verified** archive. Separated from the download so the ordering
+	// is structural rather than a matter of reading the delegate callbacks in the
+	// right order — and so it can be pinned, which it is, in t_software_update.mm
+	// through SoftwareUpdateTesting.h.
+	//
+	// tar's arguments are unchanged from the ObjC++, `--strip-components 1`
+	// included: the archive holds a single top-level TextMate-NG.app whose
+	// *contents* land directly in `directory`, so `directory` is itself the
+	// unpacked application. -takeURLToInstallFrom: relies on that.
+	//
+	// Both pipes are drained concurrently. Reading them in sequence deadlocks if
+	// tar fills the one not being read, which is the reason the ObjC++ used a
+	// dispatch group here and the reason this still does.
+	@objc(extractArchiveAtURL:intoDirectory:error:)
+	func extractArchive(at fileURL: URL, into directory: URL) throws {
+		let inputHandle = try FileHandle(forReadingFrom: fileURL)
+		defer { try? inputHandle.close() }
+
+		let outputPipe = Pipe()
+		let errorPipe  = Pipe()
+
+		let task = Process()
+		task.launchPath     = "/usr/bin/tar"
+		task.arguments      = [ "-jxmkC", directory.path, "--strip-components", "1", "--disable-copyfile", "--exclude", "._*" ]
+		task.standardInput  = inputHandle
+		task.standardOutput = outputPipe
+		task.standardError  = errorPipe
+
+		var outputData = Data()
+		var errorData  = Data()
+		let group = DispatchGroup()
+
+		group.enter()
+		DispatchQueue.global().async {
+			outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+			group.leave()
+		}
+
+		group.enter()
+		DispatchQueue.global().async {
+			errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+			group.leave()
+		}
+
+		do {
+			try task.run()
+		} catch {
+			log.error("Failed to launch tar: \(error.localizedDescription, privacy: .public)")
+			outputPipe.fileHandleForWriting.closeFile()
+			errorPipe.fileHandleForWriting.closeFile()
+			group.wait()
+			throw NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unable to launch tar."])
+		}
+
+		task.waitUntilExit()
+		group.wait()
+
+		guard task.terminationStatus == 0 else {
+			let errorString  = errorData.isEmpty  ? nil : String(data: errorData,  encoding: .utf8)
+			let outputString = outputData.isEmpty ? nil : String(data: outputData, encoding: .utf8)
+
+			log.error("Abnormal exit from tar: \(task.terminationStatus)")
+			if let errorString  { log.error("\(errorString, privacy: .public)") }
+			if let outputString { log.error("\(outputString, privacy: .public)") }
+
+			var description = errorString ?? outputString ?? "Abnormal exit from tar: \(task.terminationStatus)"
+			description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+			description = description.replacingOccurrences(of: "\n", with: " ")
+			throw NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: description])
+		}
 	}
 
 	// MARK: - Extended attributes

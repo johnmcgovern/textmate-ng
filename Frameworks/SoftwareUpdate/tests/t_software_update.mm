@@ -1,5 +1,5 @@
 #import "SoftwareUpdateTesting.h"
-#import "../src/OakDownloadManager.h"
+
 #import <Cocoa/Cocoa.h>
 #import <objc/runtime.h>
 
@@ -287,4 +287,88 @@ void test_media_type_of_nothing_is_nil ()
 	OAK_ASSERT([SoftwareUpdate mediaTypeFromContentType:nil] == nil);
 	OAK_ASSERT([SoftwareUpdate mediaTypeFromContentType:@""] == nil);
 	OAK_ASSERT([SoftwareUpdate mediaTypeFromContentType:@"  ; charset=utf-8"] == nil);
+}
+
+// MARK: - Archive extraction (rule 8 cannot reach this; the pin is the coverage)
+
+// -extractArchiveAtURL:intoDirectory: exists as a separate method so that
+// extraction provably happens *after* verification. The ObjC++ this was ported
+// from streamed each downloaded chunk straight into tar's stdin and checked the
+// signature only when the transfer finished, so tar ran on unverified bytes —
+// the signature gated installation, not extraction. See
+// ide/SOFTWARE_UPDATE_DESIGN.md.
+//
+// A real download needs a server, so what is pinned here is the seam: that the
+// method unpacks a genuine bzip2 tar the way tar's arguments say it will, and
+// that it reports failure rather than half-succeeding.
+
+static NSURL* MakeScratchDirectory ()
+{
+	NSURL* url = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"su-test-%@", NSUUID.UUID.UUIDString]]];
+	[NSFileManager.defaultManager createDirectoryAtURL:url withIntermediateDirectories:YES attributes:nil error:nil];
+	return url;
+}
+
+// Builds a .tbz whose single top-level directory is `Payload.app`, containing
+// Contents/MacOS/tool — the shape `--strip-components 1` expects.
+static NSURL* MakeArchive (NSURL* scratch)
+{
+	NSURL* stage = [scratch URLByAppendingPathComponent:@"stage"];
+	NSURL* inner = [stage URLByAppendingPathComponent:@"Payload.app/Contents/MacOS"];
+	[NSFileManager.defaultManager createDirectoryAtURL:inner withIntermediateDirectories:YES attributes:nil error:nil];
+	[@"binary" writeToURL:[inner URLByAppendingPathComponent:@"tool"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+
+	NSURL* archive = [scratch URLByAppendingPathComponent:@"payload.tbz"];
+
+	NSTask* task = [[NSTask alloc] init];
+	task.launchPath = @"/usr/bin/tar";
+	task.arguments  = @[ @"-cjf", archive.path, @"-C", stage.path, @"Payload.app" ];
+	task.standardOutput = NSFileHandle.fileHandleWithNullDevice;
+	task.standardError  = NSFileHandle.fileHandleWithNullDevice;
+	[task launch];
+	[task waitUntilExit];
+
+	return task.terminationStatus == 0 ? archive : nil;
+}
+
+void test_extracting_an_archive_strips_the_top_level_component ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* archive = MakeArchive(scratch);
+	OAK_ASSERT(archive != nil);
+
+	NSURL* destination = [scratch URLByAppendingPathComponent:@"out"];
+	[NSFileManager.defaultManager createDirectoryAtURL:destination withIntermediateDirectories:YES attributes:nil error:nil];
+
+	NSError* error = nil;
+	BOOL ok = [OakDownloadManager.sharedInstance extractArchiveAtURL:archive intoDirectory:destination error:&error];
+	OAK_ASSERT_EQ((bool)ok, true);
+
+	// --strip-components 1 means the destination *is* the unpacked bundle, which
+	// is what -takeURLToInstallFrom: relies on: it appends Contents/MacOS/<name>
+	// to whatever URL the download hands back.
+	NSString* tool = [destination URLByAppendingPathComponent:@"Contents/MacOS/tool"].path;
+	OAK_ASSERT_EQ((bool)[NSFileManager.defaultManager fileExistsAtPath:tool], true);
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// Garbage in, error out — and specifically not a silent success, because the
+// caller treats success as "this directory is now an application".
+void test_extracting_a_non_archive_fails ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+
+	NSURL* notAnArchive = [scratch URLByAppendingPathComponent:@"payload.tbz"];
+	[@"this is not a bzip2 tar" writeToURL:notAnArchive atomically:YES encoding:NSUTF8StringEncoding error:nil];
+
+	NSURL* destination = [scratch URLByAppendingPathComponent:@"out"];
+	[NSFileManager.defaultManager createDirectoryAtURL:destination withIntermediateDirectories:YES attributes:nil error:nil];
+
+	NSError* error = nil;
+	BOOL ok = [OakDownloadManager.sharedInstance extractArchiveAtURL:notAnArchive intoDirectory:destination error:&error];
+	OAK_ASSERT_EQ((bool)ok, false);
+	OAK_ASSERT(error != nil);
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
 }

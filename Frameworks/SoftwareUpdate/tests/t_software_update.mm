@@ -26,10 +26,14 @@
 // Bindings rather than through a hand-rolled observer — the mechanism under test
 // is the one the app actually uses.
 //
-// Bindings rather than -addObserver:forKeyPath: for a second reason: a test file
-// cannot declare an ObjC class. ide/gen_xctest.rb wraps each body in
-// `namespace <basename>`, and an @interface cannot appear inside one. AppKit's own
-// observer needs no such declaration.
+// Bindings rather than -addObserver:forKeyPath: for a second reason, though a
+// weaker one than I first wrote here: a test file's *body* cannot declare an ObjC
+// class, because ide/gen_xctest.rb wraps it in `namespace <basename>` and an
+// @interface may only appear at global scope. It can still declare one in a
+// header, which gen_xctest hoists — Find/tests/FFKVORecorder.h does exactly that
+// and is the pattern to copy if a pin ever needs a real observer. Here AppKit's
+// own observer is still the better choice, because it is the mechanism
+// SoftwareUpdatePreferences actually uses.
 //
 // Not pinned here, deliberately: anything requiring a network round trip.
 // -checkForTestBuild: only sets `checking` once a channel URL resolves, and

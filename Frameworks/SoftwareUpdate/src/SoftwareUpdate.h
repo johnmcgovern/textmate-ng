@@ -1,11 +1,7 @@
-extern NSString* const kUserDefaultsDisableSoftwareUpdateKey;
-extern NSString* const kUserDefaultsSoftwareUpdateChannelKey;
-extern NSString* const kUserDefaultsAskBeforeUpdatingKey;
-extern NSString* const kUserDefaultsLastSoftwareUpdateCheckKey;
-
-extern NSString* const kSoftwareUpdateChannelRelease;
-extern NSString* const kSoftwareUpdateChannelPrerelease;
-extern NSString* const kSoftwareUpdateChannelCanary;
+// The keys and channel names live in their own header now (rule 11) and are
+// imported here, so every existing `#import <SoftwareUpdate/SoftwareUpdate.h>`
+// is unchanged.
+#import "SoftwareUpdateConstants.h"
 
 @interface SoftwareUpdate : NSObject
 @property (class, readonly) SoftwareUpdate* sharedInstance;

@@ -1906,6 +1906,66 @@ anything KVOs them.
 Do not start `document` or `OakTextView` on a whim. They are the C++ core's
 closest neighbours and the density numbers understate them.
 
+## Session 2026-09-06 — SoftwareUpdate is Swift
+
+Five commits (`bfa64512` … `999a1795`), pushed. Suite **989 → 1000**.
+
+The framework went from 1,273 lines of ObjC++ at 0% Swift to 1,209 Swift across
+three files. What is left is ObjC++ **on purpose** and will stay: the constants,
+`OakCompareVersionStrings`, and a seven-line activity shim — all of them because
+Swift can call a global but never export one (rule 19).
+
+    bfa64512  pin (10 tests, rule 18)
+    ed21a2fc  +initialize -> +registerDefaults (rule 24)
+    97ffa70f  OakDownloadManager.mm  446 -> 450 Swift
+    da2c506a  constants split (rule 11)
+    999a1795  SoftwareUpdate.mm      741 -> 759 Swift, two files
+
+### The pin caught the thing pins exist for
+
+`@property (readonly, getter = isChecking) BOOL checking` is three facts in one
+line, and Swift can only express two of them per property. My first version lost
+the `isChecking` selector; `SoftwareUpdatePreferences` calls exactly that through
+the hand-written header, from another module. Nothing failed to compile. It
+would have been an unrecognized selector the first time a user opened the pane.
+
+That is **rule 64**, and the generalisation matters more than the fix: *list ObjC
+selectors in a pin, never Swift spellings*, and grep the header for `getter =`
+before porting. `document` and `OakTextView` are full of `getter = isX`.
+
+### Rule 8 could not be done here, and that is a finding
+
+Nothing touches `SoftwareUpdate.sharedInstance` at launch — both entry points are
+user-initiated. So `-init` never runs and the background scheduler is never
+created. I launched twice, once with the interval instrumented down to 30s,
+before working that out. The update panel is not reachable by any automated
+check in this environment, so it is now on the smoke list below.
+
+By contrast the OakDownloadManager port *was* exercised end to end, by shortening
+`bundleUpdateFrequency` so BundlesManager's index check ran:
+
+    GET https://api.textmate.org/bundles using entity tag "2066e0b1…"
+    Newer bundle index retrieved: NO
+
+### Where the port stands, and what is actually finishable
+
+    OakFilterList  976 mm / 65% — **FINISHED.** Every remaining .mm is a
+                                  deliberate *Support boundary (rule 25).
+                                  Do not try to "finish" it.
+    Find         1,107 mm / 70% — four files, ~516 lines, ~0 C++, no rule-56
+                                  trap (checked). Genuinely finishable.
+    BundlesManager 995 / 0%     |
+    OakCommand     672 / 0%     |  the real frontier: 7-10% C++ woven through,
+    document     3,250 / 0%     |  needing boundary extraction before any
+    OakTextView  5,649 / 23%    |  translation. A different kind of work.
+
+**Next: the four Find files** — `FFTextFieldViewController.mm` (216, 0 C++),
+`FFStatusBarViewController.mm` (156, 2), `FFFolderMenu.mm` (108, 3),
+`CommonAncestor.mm` (36, 0). All subclass real AppKit classes. Note
+`FFTextFieldViewController` has three KVO/bind sites — rule 64 territory.
+
+Do not start `document` or `OakTextView` on momentum. They want a survey first.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**
@@ -1929,6 +1989,7 @@ frame and takes two seconds to find:
 | Bundle Editor | Bundles ▸ Edit Bundles | Window appears, list populates |
 | Go to File | ⌘T | Panel appears, filtering responds |
 | Commit window | Bundles ▸ … ▸ Commit | Window appears (needs a dirty repo) |
+| Software Update | Check for Updates | Panel appears with a version verdict — **no test covers this**; nothing touches SoftwareUpdate at launch, so it is unreachable from any automated run (rule 64) |
 | HTML output | run any bundle command with HTML output | Window appears |
 | A document | open a source file | Text draws, **gutter has line numbers** |
 

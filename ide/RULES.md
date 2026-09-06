@@ -949,3 +949,61 @@ is wrong** — the harness, the oracle, and the app check.
     signature that drifts by one colon becomes a compile error instead of a
     delegate callback that is silently never called — which is rule 18's failure
     mode arriving somewhere rule 18's tests do not look.
+
+## Rule 64 — the SoftwareUpdate port (2026-09-06)
+
+64. **An ObjC property with a custom getter cannot be expressed as one Swift
+    property once KVO is involved. Splitting it is the fix, and only a pin will
+    tell you it needs fixing.**
+
+        @property (nonatomic, readonly, getter = isChecking) BOOL checking;
+
+    That one line means three separate things: the ObjC getter selector is
+    `isChecking`, the setter is `setChecking:`, and the KVC/KVO key is
+    `"checking"`. Swift gives you two of the three at a time:
+
+    | Swift | getter | setter | KVO key |
+    | --- | --- | --- | --- |
+    | `@objc dynamic var checking: Bool` | `checking` | `setChecking:` | ✅ `"checking"` |
+    | `@objc(isChecking) dynamic var checking: Bool` | ✅ `isChecking` | `setIsChecking:` | ✗ breaks automatic KVO |
+
+    So keep the stored property as `checking` — which is what KVO needs — and add
+    a computed `@objc var isChecking: Bool { checking }` to restore the getter
+    selector the hand-written header promises.
+
+    **Neither compiler sees the problem.** The Swift compiles; the hand
+    declaration still says `getter = isChecking`; the consumer
+    (`SoftwareUpdatePreferences`, in another module, writing
+    `softwareUpdateController.isChecking`) compiles against that header. It is an
+    unrecognized selector the first time a user opens the pane. Rule 18's failure
+    mode exactly, and `t_software_update.mm` caught it because the pin listed
+    `isChecking` — the *selector*, not the Swift name.
+
+    Generalise before touching `document` or `OakTextView`: both are full of
+    `getter = isX` properties. When porting, list the ObjC **selectors** in the
+    pin, never the Swift spellings, and grep the header for `getter =`.
+
+    **A macro is not portable, and dropping it is a silent change.**
+    `os_activity_initiate()` is a C macro (SDK `os/activity.h:205`), so Swift
+    cannot call it — measured: `cannot find 'os_activity_initiate' in scope`.
+    Losing it would quietly ungroup a subsystem's log messages in Console.
+    Seven-line ObjC++ shim, same as any other boundary file. The same standard
+    applies to logging destinations: `os_log(OS_LOG_DEFAULT, …)` ports to a
+    default-initialised `Logger()`, *not* to a named subsystem, however much
+    easier that would be to filter. A port does not get to improve diagnostics.
+
+    **`default.rave` globs `sources src/*.mm`.** Adding the first `.swift` to a
+    framework compiles nothing at all, and the symptom is not a missing file — it
+    is an undefined `_OBJC_CLASS_$_…` while linking some *other* target that
+    happens to pull the archive. Change it to `src/*.{mm,swift}`. Read a sudden
+    unrelated link failure as "a source never compiled", and check the archive:
+    `ar -t build/Release/libFoo.a`.
+
+    **What the port could not verify, which is the part worth writing down.**
+    Nothing touches `SoftwareUpdate.sharedInstance` at launch — both entry points
+    are user-initiated (the menu item, the Preferences pane) — so `-init` never
+    runs, the background scheduler is never created, and rule 8 has nothing to
+    observe no matter how long you wait or how far you wind the interval down. I
+    tried twice before working that out. When a framework's only entry points are
+    user-initiated, say so in the commit and put the surface on the pre-release
+    smoke list instead of implying the app run covered it.

@@ -139,6 +139,29 @@ class SoftwareUpdate: NSObject {
 		}
 	}
 
+	// The media type of a Content-Type header, without its parameters.
+	//
+	// The original compared the *whole* header against "application/json", which
+	// is wrong for any server that sends a charset — and a media type with
+	// parameters is perfectly legal (RFC 9110 §8.3). Against MacroMates' bucket it
+	// never mattered, because that returns a bare `application/json`. It matters
+	// for anywhere else: every GitHub surface returns
+	// `application/json; charset=utf-8` (or `text/plain; charset=utf-8` for raw),
+	// measured 2026-09-06, so a GitHub-hosted manifest would fall through to the
+	// property-list parser and be reported as "Malformed server response."
+	//
+	// Exposed to the tests through SoftwareUpdateTesting.h rather than left
+	// private: it has enough edge cases — parameters, case, whitespace — to be
+	// worth pinning on its own, and it cannot be reached through
+	// -checkForTestBuild: without a server.
+	@objc(mediaTypeFromContentType:)
+	static func mediaType(fromContentType contentType: String?) -> String? {
+		guard let contentType else { return nil }
+		let head = contentType.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+		let trimmed = head.trimmingCharacters(in: .whitespaces).lowercased()
+		return trimmed.isEmpty ? nil : trimmed
+	}
+
 	// Runs on the main thread, and calls its completion handler there, always.
 	//
 	// This used to be true only of the success path — the URL session's completion
@@ -203,7 +226,7 @@ class SoftwareUpdate: NSObject {
 				if error == nil {
 					if let contentType = (response as? HTTPURLResponse)?.allHeaderFields["Content-Type"] as? String {
 						var plist: [String: Any]?
-						if contentType == "application/json" {
+						if SoftwareUpdate.mediaType(fromContentType: contentType) == "application/json" {
 							plist = data.flatMap { try? JSONSerialization.jsonObject(with: $0, options: []) } as? [String: Any]
 						} else {
 							plist = data.flatMap { try? PropertyListSerialization.propertyList(from: $0, options: 0, format: nil) } as? [String: Any]

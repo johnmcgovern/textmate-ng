@@ -1,4 +1,4 @@
-#import "../src/SoftwareUpdate.h"
+#import "SoftwareUpdateTesting.h"
 #import "../src/OakDownloadManager.h"
 #import <Cocoa/Cocoa.h>
 #import <objc/runtime.h>
@@ -245,4 +245,46 @@ void test_software_update_declares_no_class_initialize ()
 
 	OAK_ASSERT_EQ((bool)[names containsObject:@"initialize"], false);
 	OAK_ASSERT_EQ((bool)[names containsObject:@"registerDefaults"], true);
+}
+
+// MARK: - Content-Type parsing
+
+// -checkForTestBuild: chooses its parser from the response's media type, and the
+// original compared the entire Content-Type header against "application/json".
+// That is wrong for any server sending a charset, which is legal and which every
+// GitHub surface does — measured 2026-09-06:
+//
+//     api.github.com          application/json; charset=utf-8
+//     <user>.github.io        application/json; charset=utf-8
+//     raw.githubusercontent   text/plain; charset=utf-8
+//
+// A manifest served from any of those would have gone to the property-list
+// parser and been reported as "Malformed server response". See
+// ide/SOFTWARE_UPDATE_DESIGN.md.
+void test_media_type_ignores_parameters ()
+{
+	OAK_ASSERT_EQ(std::string([SoftwareUpdate mediaTypeFromContentType:@"application/json; charset=utf-8"].UTF8String), std::string("application/json"));
+	OAK_ASSERT_EQ(std::string([SoftwareUpdate mediaTypeFromContentType:@"text/plain; charset=utf-8"].UTF8String),       std::string("text/plain"));
+}
+
+void test_media_type_passes_a_bare_type_through ()
+{
+	// What MacroMates' bucket returns, and the case that must not regress.
+	OAK_ASSERT_EQ(std::string([SoftwareUpdate mediaTypeFromContentType:@"application/json"].UTF8String), std::string("application/json"));
+}
+
+void test_media_type_is_case_and_whitespace_insensitive ()
+{
+	OAK_ASSERT_EQ(std::string([SoftwareUpdate mediaTypeFromContentType:@"APPLICATION/JSON"].UTF8String),        std::string("application/json"));
+	OAK_ASSERT_EQ(std::string([SoftwareUpdate mediaTypeFromContentType:@"  application/json  ; x=1"].UTF8String), std::string("application/json"));
+}
+
+// nil rather than an empty string, so the caller's `== "application/json"` is
+// false and the property-list branch runs — which is what a missing or malformed
+// header did before.
+void test_media_type_of_nothing_is_nil ()
+{
+	OAK_ASSERT([SoftwareUpdate mediaTypeFromContentType:nil] == nil);
+	OAK_ASSERT([SoftwareUpdate mediaTypeFromContentType:@""] == nil);
+	OAK_ASSERT([SoftwareUpdate mediaTypeFromContentType:@"  ; charset=utf-8"] == nil);
 }

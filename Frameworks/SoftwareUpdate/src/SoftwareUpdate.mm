@@ -41,17 +41,38 @@ NSString* const kSoftwareUpdateChannelCanary                                   =
 @end
 
 @implementation SoftwareUpdate
-+ (instancetype)sharedInstance
+// Was +initialize, converted to explicit registration (rule 24).
+//
+// A Swift class cannot provide +initialize, so this has to move before the class
+// can be ported — and it is behaviour-preserving on its own, which is why it is
+// its own commit.
+//
+// +sharedInstance is where it goes, rather than an app-startup call like
+// AppController's theme defaults, because everything that can read this key
+// reaches it through the shared instance first: -checkForTestBuild: is an
+// instance method, and Preferences' channel pop-up binds to the key only after
+// SoftwareUpdatePreferences has already used `softwareUpdateController` for the
+// Check Now button's target. Nothing else in the tree reads
+// SoftwareUpdateChannel — checked, not assumed.
+//
+// dispatch_once rather than relying on the static below, so the registration is
+// still exactly-once if this is ever called from somewhere other than the
+// singleton's initialiser.
++ (void)registerDefaults
 {
-	static SoftwareUpdate* sharedInstance = [self new];
-	return sharedInstance;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		[NSUserDefaults.standardUserDefaults registerDefaults:@{
+			kUserDefaultsSoftwareUpdateChannelKey: kSoftwareUpdateChannelRelease
+		}];
+	});
 }
 
-+ (void)initialize
++ (instancetype)sharedInstance
 {
-	[NSUserDefaults.standardUserDefaults registerDefaults:@{
-		kUserDefaultsSoftwareUpdateChannelKey: kSoftwareUpdateChannelRelease
-	}];
+	[self registerDefaults];
+	static SoftwareUpdate* sharedInstance = [self new];
+	return sharedInstance;
 }
 
 - (instancetype)init

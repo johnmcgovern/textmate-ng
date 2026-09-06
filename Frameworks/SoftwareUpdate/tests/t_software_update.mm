@@ -1,6 +1,7 @@
 #import "../src/SoftwareUpdate.h"
 #import "../src/OakDownloadManager.h"
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 
 // A pin for SoftwareUpdate and OakDownloadManager, written against the ObjC++ and
 // before any port of them (rule 18, rule 5, rule 40).
@@ -130,12 +131,14 @@ void test_channel_names_are_unchanged ()
 // it cannot be fooled by whatever the running user has actually chosen, and so it
 // writes nothing (rule 53).
 //
-// When the conversion happens this test gains the explicit call and keeps the same
-// assertion. If it ever fails, the default channel is gone and every user without
-// an explicit choice stops receiving updates.
+// The conversion has happened: +registerDefaults now does this, from
+// +sharedInstance. The assertion is unchanged from when +initialize did it, which
+// is the point of writing it against the effect. If it ever fails, the default
+// channel is gone and every user without an explicit choice stops receiving
+// updates.
 void test_release_is_the_registered_default_channel ()
 {
-	[SoftwareUpdate class]; // trigger +initialize; becomes an explicit call after rule 24
+	(void)SoftwareUpdate.sharedInstance; // +registerDefaults runs here (rule 24)
 
 	NSDictionary* registered = [NSUserDefaults.standardUserDefaults volatileDomainForName:NSRegistrationDomain];
 	NSString* channel = registered[kUserDefaultsSoftwareUpdateChannelKey];
@@ -220,4 +223,22 @@ void test_user_agent_is_not_empty ()
 	NSString* userAgent = OakDownloadManager.sharedInstance.userAgentString;
 	OAK_ASSERT(userAgent != nil);
 	OAK_ASSERT((bool)(userAgent.length > 0));
+}
+
+// A Swift class cannot provide +initialize, so having converted it (rule 24) this
+// class must not regain one. Checked against SoftwareUpdate's *own* metaclass
+// rather than +respondsToSelector:, which answers YES for NSObject's
+// implementation and would pass no matter what.
+void test_software_update_declares_no_class_initialize ()
+{
+	unsigned int count = 0;
+	Method* methods = class_copyMethodList(object_getClass([SoftwareUpdate class]), &count);
+
+	NSMutableArray<NSString*>* names = [NSMutableArray array];
+	for(unsigned int i = 0; i < count; ++i)
+		[names addObject:NSStringFromSelector(method_getName(methods[i]))];
+	free(methods);
+
+	OAK_ASSERT_EQ((bool)[names containsObject:@"initialize"], false);
+	OAK_ASSERT_EQ((bool)[names containsObject:@"registerDefaults"], true);
 }

@@ -214,3 +214,46 @@ void test_flags_round_trip ()
 	controller.hasFocus = YES;
 	OAK_ASSERT_EQ((bool)controller.hasFocus, true);
 }
+
+// MARK: - The bindings Find installs on the text field controller
+
+// Find.swift binds its results controller to *both* of these:
+//
+//     resultsViewController.bind("replaceString",           to: replaceTextFieldViewController, withKeyPath: "stringValue")
+//     resultsViewController.bind("showReplacementPreviews", to: replaceTextFieldViewController, withKeyPath: "hasFocus")
+//
+// so both have to stay KVO-compliant. If a port leaves them without the `dynamic`
+// KVO needs, nothing fails to compile and no other test notices — the replace
+// preview simply stops following the field. That is rule 64's failure mode, and
+// it is why these are pinned through Cocoa Bindings rather than as round trips.
+
+void test_has_focus_drives_a_cocoa_binding ()
+{
+	FFTextFieldViewController* controller = [[FFTextFieldViewController alloc] initWithPasteboard:nil grammarName:@"text.plain"];
+	(void)controller.view;
+
+	NSButton* button = [NSButton buttonWithTitle:@"x" target:nil action:NULL];
+	[button bind:NSEnabledBinding toObject:controller withKeyPath:@"hasFocus" options:nil];
+
+	controller.hasFocus = YES;
+	OAK_ASSERT_EQ((bool)button.enabled, true);
+
+	controller.hasFocus = NO;
+	OAK_ASSERT_EQ((bool)button.enabled, false);
+
+	[button unbind:NSEnabledBinding];
+}
+
+void test_string_value_drives_a_cocoa_binding ()
+{
+	FFTextFieldViewController* controller = [[FFTextFieldViewController alloc] initWithPasteboard:nil grammarName:@"text.plain"];
+	(void)controller.view;
+
+	NSTextField* mirror = [NSTextField labelWithString:@""];
+	[mirror bind:NSValueBinding toObject:controller withKeyPath:@"stringValue" options:nil];
+
+	controller.stringValue = @"needle";
+	OAK_ASSERT_EQ(std::string(mirror.stringValue.UTF8String), std::string("needle"));
+
+	[mirror unbind:NSValueBinding];
+}

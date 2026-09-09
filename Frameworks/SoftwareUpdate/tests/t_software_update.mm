@@ -979,3 +979,145 @@ void test_a_manifest_from_the_signing_tool_expires ()
 	OAK_ASSERT([TMUpdateManifest manifestFromData:wrapper keys:keys now:longAfter error:&error] == nil);
 	OAK_ASSERT(error != nil);
 }
+
+// MARK: - The checks before the swap (step 5)
+
+// The manifest's signature says J23 published this. These say macOS will run it,
+// and that it is the build the manifest described. Both matter and they fail
+// differently — a payload can be perfectly signed by us and still be something
+// Gatekeeper refuses.
+
+// The requirement is pinned as a literal because a typo in it is an updater that
+// **never installs anything**, and the symptom is an integrity-check alert that
+// looks like a corrupt download rather than a bad string.
+//
+// If this test fails because the Team ID changed, the fix is a disjunction that
+// accepts old *and* new for at least one release either side — not a
+// substitution. See ide/SOFTWARE_UPDATE_DESIGN.md.
+void test_the_designated_requirement_is_unchanged ()
+{
+	OAK_ASSERT_EQ(std::string(TMUpdateVerification.designatedRequirement.UTF8String),
+	              std::string("anchor apple generic and identifier \"com.j23software.TextMate-NG\" and certificate leaf[subject.OU] = \"R22V2H7QF4\""));
+}
+
+// The mechanism works: a genuinely Apple-signed bundle satisfies `anchor apple`.
+// This is the control that must *pass* — without it, a verifier that refused
+// everything would look identical to one that worked.
+void test_code_signature_check_accepts_a_validly_signed_bundle ()
+{
+	NSURL* textEdit = [NSURL fileURLWithPath:@"/System/Applications/TextEdit.app"];
+	if(![NSFileManager.defaultManager fileExistsAtPath:textEdit.path])
+		return; // not present on this machine; nothing to assert
+
+	NSError* error = nil;
+	BOOL ok = [TMUpdateVerification checkCodeSignatureOfBundleAtURL:textEdit requirement:@"anchor apple" error:&error];
+	if(!ok) OAK_FAIL(std::string("expected TextEdit to satisfy `anchor apple`: ") + error.localizedDescription.UTF8String);
+}
+
+// And the control that must *fail*: the same bundle against a requirement naming
+// a Team ID it does not carry. This is the one that proves the check is checking.
+void test_code_signature_check_rejects_the_wrong_team_id ()
+{
+	NSURL* textEdit = [NSURL fileURLWithPath:@"/System/Applications/TextEdit.app"];
+	if(![NSFileManager.defaultManager fileExistsAtPath:textEdit.path])
+		return;
+
+	NSError* error = nil;
+	BOOL ok = [TMUpdateVerification checkCodeSignatureOfBundleAtURL:textEdit requirement:@"anchor apple generic and certificate leaf[subject.OU] = \"R22V2H7QF4\"" error:&error];
+	OAK_ASSERT_EQ((bool)ok, false);
+	OAK_ASSERT(error != nil);
+}
+
+// An unsigned directory is not an application, whatever it is shaped like.
+void test_code_signature_check_rejects_an_unsigned_directory ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* fake = [scratch URLByAppendingPathComponent:@"Fake.app"];
+	[NSFileManager.defaultManager createDirectoryAtURL:[fake URLByAppendingPathComponent:@"Contents/MacOS"] withIntermediateDirectories:YES attributes:nil error:nil];
+
+	NSError* error = nil;
+	OAK_ASSERT_EQ((bool)[TMUpdateVerification checkCodeSignatureOfBundleAtURL:fake requirement:@"anchor apple" error:&error], false);
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// MARK: - …and that it is the build the manifest described
+
+// Builds a bundle directory carrying nothing but an Info.plist, which is all the
+// consistency check reads — deliberately, since it reads it as a *file* rather
+// than through NSBundle so nothing in an untrusted tree reaches the loader.
+static NSURL* MakeBundleWithInfoPlist (NSURL* scratch, NSString* identifier, NSString* version)
+{
+	NSURL* bundle = [scratch URLByAppendingPathComponent:@"Payload.app"];
+	NSURL* contents = [bundle URLByAppendingPathComponent:@"Contents"];
+	[NSFileManager.defaultManager createDirectoryAtURL:contents withIntermediateDirectories:YES attributes:nil error:nil];
+
+	NSDictionary* info = @{ @"CFBundleIdentifier": identifier, @"CFBundleShortVersionString": version };
+	NSData* data = [NSPropertyListSerialization dataWithPropertyList:info format:NSPropertyListXMLFormat_v1_0 options:0 error:nil];
+	[data writeToURL:[contents URLByAppendingPathComponent:@"Info.plist"] atomically:YES];
+
+	return bundle;
+}
+
+static TMUpdateManifest* ManifestForVersion (NSString* version)
+{
+	SecKeyRef key = MakeTestPrivateKey();
+	NSDictionary* keys = @{ @"test-key": Base64X963PublicKey(key) };
+	NSString* inner = [NSString stringWithFormat:
+		@"{\"version\":\"%@\",\"url\":\"https://example.invalid/x.tbz\",\"sha256\":\"ab\",\"size\":1,\"expires\":\"2126-09-01T00:00:00Z\"}", version];
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:MakeManifest(key, @"test-key", inner) keys:keys now:[NSDate date] error:nil];
+	CFRelease(key);
+	return manifest;
+}
+
+void test_bundle_matching_its_manifest_is_accepted ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* bundle = MakeBundleWithInfoPlist(scratch, @"com.j23software.TextMate-NG", @"2026.9-alpha.22");
+
+	NSError* error = nil;
+	BOOL ok = [TMUpdateVerification checkBundleAtURL:bundle matchesManifest:ManifestForVersion(@"2026.9-alpha.22") error:&error];
+	if(!ok) OAK_FAIL(std::string("unexpected: ") + error.localizedDescription.UTF8String);
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// A validly-signed *different* J23 application must not be installed over this
+// one. The signature would be fine; the identifier is what catches it.
+void test_bundle_with_a_different_identifier_is_rejected ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* bundle = MakeBundleWithInfoPlist(scratch, @"com.j23software.SomethingElse", @"2026.9-alpha.22");
+
+	NSError* error = nil;
+	OAK_ASSERT_EQ((bool)[TMUpdateVerification checkBundleAtURL:bundle matchesManifest:ManifestForVersion(@"2026.9-alpha.22") error:&error], false);
+	OAK_ASSERT(error != nil);
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// The archive hashed correctly and contained a different build than advertised —
+// which is how an older, still-signed release gets served under a newer manifest.
+void test_bundle_with_the_wrong_version_is_rejected ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* bundle = MakeBundleWithInfoPlist(scratch, @"com.j23software.TextMate-NG", @"2026.8-alpha.19");
+
+	NSError* error = nil;
+	OAK_ASSERT_EQ((bool)[TMUpdateVerification checkBundleAtURL:bundle matchesManifest:ManifestForVersion(@"2026.9-alpha.22") error:&error], false);
+	OAK_ASSERT(error != nil);
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+void test_bundle_without_an_info_plist_is_rejected ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* bundle = [scratch URLByAppendingPathComponent:@"Empty.app"];
+	[NSFileManager.defaultManager createDirectoryAtURL:bundle withIntermediateDirectories:YES attributes:nil error:nil];
+
+	NSError* error = nil;
+	OAK_ASSERT_EQ((bool)[TMUpdateVerification checkBundleAtURL:bundle matchesManifest:ManifestForVersion(@"2026.9-alpha.22") error:&error], false);
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}

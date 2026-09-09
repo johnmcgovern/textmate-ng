@@ -51,3 +51,12 @@
 
 + (TMUpdateManifest*)manifestFromData:(NSData*)data keys:(NSDictionary<NSString*, NSString*>*)keys now:(NSDate*)now error:(NSError**)error;
 @end
+
+// The last two checks before the running application is replaced (step 5).
+// `requirement` is a parameter so the mechanism can be pinned against a bundle
+// that exists on the test machine, with a control that must fail (rule 59).
+@interface TMUpdateVerification : NSObject
+@property (class, readonly) NSString* designatedRequirement;
++ (BOOL)checkCodeSignatureOfBundleAtURL:(NSURL*)url requirement:(NSString*)requirement error:(NSError**)error;
++ (BOOL)checkBundleAtURL:(NSURL*)url matchesManifest:(TMUpdateManifest*)manifest error:(NSError**)error;
+@end

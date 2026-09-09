@@ -451,14 +451,26 @@ final class SUDownloadViewController: NSViewController {
 		buttons[1].keyEquivalent = "\u{1b}"
 	}
 
+	// Was an executable-bit check on Contents/MacOS/<name>, which answered "is this
+	// shaped like an app" and nothing about whether it should be installed. Now it
+	// answers the two questions that matter: will macOS run it, and is it the build
+	// the manifest described (step 5).
+	//
+	// The old check is not kept alongside: a valid signature over a bundle that has
+	// no executable is not a thing that happens, and two overlapping checks would
+	// mean two error paths for one failure.
 	private func isInstallableApplication(at applicationURL: URL) -> Bool {
-		let appName = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? ""
-		let executableURL = applicationURL.appendingPathComponent("Contents/MacOS/\(appName)", isDirectory: false)
+		guard let manifest else {
+			log.error("No manifest for the downloaded update; refusing to install it")
+			return false
+		}
+
 		do {
-			let values = try executableURL.resourceValues(forKeys: [.isExecutableKey])
-			return values.isExecutable ?? false
+			try UpdateVerification.checkCodeSignature(ofBundleAt: applicationURL, requirement: UpdateVerification.designatedRequirement)
+			try UpdateVerification.checkBundle(at: applicationURL, matches: manifest)
+			return true
 		} catch {
-			log.error("Failed checking if \(applicationURL.path, privacy: .public) has an executable: \(error.localizedDescription, privacy: .public)")
+			log.error("Refusing to install \(applicationURL.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
 			return false
 		}
 	}

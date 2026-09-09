@@ -929,3 +929,53 @@ void test_download_accepts_an_uppercase_checksum ()
 	[NSFileManager.defaultManager removeItemAtURL:extracted error:nil];
 	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
 }
+
+// MARK: - A manifest the signing tool actually produced
+
+// The end-to-end check that neither side's own tests can make: bytes written and
+// signed by **bin/update-sign**, parsed and verified by TMUpdateManifest. The
+// signature pin earlier in this file covers the primitive; this covers the whole
+// document — base64 wrapper, key ID lookup, signature over the inner bytes,
+// expiry, and the fields the downloader then acts on.
+//
+// Generated 2026-09-08 with a throwaway key, deleted immediately:
+//
+//     bin/update-sign create-key --label <uuid>
+//     bin/update-sign sign inner.json --label <uuid>
+//     bin/update-sign delete-key --label <uuid>
+//
+// The inner document is exactly the shape bin/release will write. Only the public
+// half of the key is here.
+
+static NSString* const kToolManifestPublicKey = @"BOUWVhqSvXDgfg/QSJH89pZ8fOpB9r+sKHeYhxABg2W2lpJxz5YWIpiTDV60bUn65smNMZcnIH0yUEBZI5kAJgQ=";
+static NSString* const kToolManifestWrapper   = @"{\"manifest\":\"eyJ2ZXJzaW9uIjoiMjAyNi45LWFscGhhLjIyIiwidXJsIjoiaHR0cHM6Ly9naXRodWIuY29tL2pvaG5tY2dvdmVybi90ZXh0bWF0ZS1uZy9yZWxlYXNlcy9kb3dubG9hZC92MjAyNi45LWFscGhhLjIyL1RleHRNYXRlLU5HLnRieiIsInNoYTI1NiI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJzaXplIjo1MjQyODgwMCwiaXNzdWVkIjoiMjAyNi0wOS0wOFQwMDowMDowMFoiLCJleHBpcmVzIjoiMjEyNi0xMC0xM1QwMDowMDowMFoiLCJtaW5pbXVtU3lzdGVtVmVyc2lvbiI6IjE1LjAifQ==\",\"keyID\":\"j23-fixture\",\"signature\":\"MEUCICa3N9vhVSwcrtlorZ5vTK9utQF9ltrLtfQ0ZB0ZChg/AiEA1tUoxMsPtQSiPdq2myb6+YJBZfvasgkD9zCbPvdJLSY=\"}";
+
+void test_a_manifest_from_the_signing_tool_parses_and_verifies ()
+{
+	NSDictionary* keys = @{ @"j23-fixture": kToolManifestPublicKey };
+	NSData* wrapper    = [kToolManifestWrapper dataUsingEncoding:NSUTF8StringEncoding];
+
+	NSError* error = nil;
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:wrapper keys:keys now:[NSDate date] error:&error];
+
+	if(error) OAK_FAIL(std::string("unexpected error: ") + error.localizedDescription.UTF8String);
+	OAK_ASSERT(manifest != nil);
+	OAK_ASSERT_EQ(std::string(manifest.version.UTF8String), std::string("2026.9-alpha.22"));
+	OAK_ASSERT_EQ(std::string(manifest.sha256.UTF8String), std::string("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"));
+	OAK_ASSERT_EQ((long long)manifest.size, (long long)52428800);
+	OAK_ASSERT_EQ(std::string(manifest.minimumSystemVersion.UTF8String), std::string("15.0"));
+}
+
+// The same real manifest, refused once its expiry has passed. Uses the tool's own
+// bytes rather than a hand-built document, so the date handling is pinned against
+// what bin/release will actually emit.
+void test_a_manifest_from_the_signing_tool_expires ()
+{
+	NSDictionary* keys = @{ @"j23-fixture": kToolManifestPublicKey };
+	NSData* wrapper    = [kToolManifestWrapper dataUsingEncoding:NSUTF8StringEncoding];
+
+	NSDate* longAfter = [NSDate dateWithTimeIntervalSince1970:5000000000]; // 2128
+	NSError* error = nil;
+	OAK_ASSERT([TMUpdateManifest manifestFromData:wrapper keys:keys now:longAfter error:&error] == nil);
+	OAK_ASSERT(error != nil);
+}

@@ -101,7 +101,7 @@ class SoftwareUpdate: NSObject {
 					UserDefaults.standard.removeObject(forKey: kUserDefaultsSoftwareUpdateSuspendUntilKey)
 				}
 
-				self.checkForTestBuild(false) { remoteURL, remoteVersion, error in
+				self.checkForTestBuild(false) { manifest, error in
 					self.errorString = error.map { "Error: \($0.localizedDescription)" }
 					if let error {
 						log.log("Failed to check for update: \(error.localizedDescription, privacy: .public)")
@@ -114,7 +114,7 @@ class SoftwareUpdate: NSObject {
 							let alertViewController = SUDownloadViewController(completionHandler: {
 								completionHandler(.finished)
 							})
-							alertViewController.presentUI(forBackgroundCheck: true, remoteURL: remoteURL, remoteVersion: remoteVersion, redownloadEnabled: false)
+							alertViewController.presentUI(forBackgroundCheck: true, manifest: manifest, redownloadEnabled: false)
 						}
 					}
 				}
@@ -127,13 +127,13 @@ class SoftwareUpdate: NSObject {
 		let isOptionDown = OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.option.rawValue)
 		let isShiftDown  = OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.shift.rawValue)
 
-		checkForTestBuild(isOptionDown) { remoteURL, remoteVersion, error in
+		checkForTestBuild(isOptionDown) { manifest, error in
 			MainActor.assumeIsolated {
 				let alertViewController = SUDownloadViewController()
 				if let error {
 					alertViewController.presentError(error)
 				} else {
-					alertViewController.presentUI(forBackgroundCheck: false, remoteURL: remoteURL, remoteVersion: remoteVersion, redownloadEnabled: isShiftDown)
+					alertViewController.presentUI(forBackgroundCheck: false, manifest: manifest, redownloadEnabled: isShiftDown)
 				}
 			}
 		}
@@ -189,8 +189,12 @@ class SoftwareUpdate: NSObject {
 	// needs anyway, since callers present UI from it.
 	//
 	// t_software_update_threading.mm pins this both ways round.
+	// The completion carries a **verified manifest**, not a URL and a version. That
+	// is the point of step 4: everything the updater then acts on — which version,
+	// where, and what those bytes must hash to — arrived inside one signature, so
+	// there is no window in which a URL is trusted and its checksum is not.
 	@objc(checkForTestBuild:completionHandler:)
-	func checkForTestBuild(_ testBuild: Bool, completionHandler: @escaping (URL?, String?, Error?) -> Void) {
+	func checkForTestBuild(_ testBuild: Bool, completionHandler: @escaping (UpdateManifest?, Error?) -> Void) {
 		guard Thread.isMainThread else {
 			// nonisolated(unsafe) states the crossing the ObjC++ made implicitly with
 			// dispatch_async: neither SoftwareUpdate nor the handler is Sendable, and
@@ -205,11 +209,11 @@ class SoftwareUpdate: NSObject {
 
 		let updateChannel = testBuild ? kSoftwareUpdateChannelCanary : UserDefaults.standard.string(forKey: kUserDefaultsSoftwareUpdateChannelKey)
 		guard let updateChannel else {
-			return completionHandler(nil, nil, NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "No channel configured."]))
+			return completionHandler(nil, NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "No channel configured."]))
 		}
 
 		guard let url = channels?[updateChannel] else {
-			return completionHandler(nil, nil, NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "No channel named ‘\(updateChannel)’."]))
+			return completionHandler(nil, NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "No channel named ‘\(updateChannel)’."]))
 		}
 
 		SURunInSoftwareUpdateCheckActivity {
@@ -220,29 +224,24 @@ class SoftwareUpdate: NSObject {
 
 			let dataTask = URLSession.shared.dataTask(with: request) { data, response, error in
 				var error = error
-				var remoteURL: URL?
-				var remoteVersion: String?
+				var manifest: UpdateManifest?
 
 				if error == nil {
-					if let contentType = (response as? HTTPURLResponse)?.allHeaderFields["Content-Type"] as? String {
-						var plist: [String: Any]?
-						if SoftwareUpdate.mediaType(fromContentType: contentType) == "application/json" {
-							plist = data.flatMap { try? JSONSerialization.jsonObject(with: $0, options: []) } as? [String: Any]
-						} else {
-							plist = data.flatMap { try? PropertyListSerialization.propertyList(from: $0, options: 0, format: nil) } as? [String: Any]
-						}
-
-						if let plist {
-							remoteURL     = (plist["url"] as? String).flatMap { URL(string: $0) }
-							remoteVersion = plist["version"] as? String
-							if remoteURL == nil || remoteVersion == nil {
-								error = NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "Incomplete server response."])
-							}
-						} else {
-							error = NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "Malformed server response."])
+					// The manifest is JSON and nothing else. The property-list branch
+					// that used to be here served MacroMates' feed, which this fork
+					// does not use; a signed manifest has one format by design, and
+					// accepting a second one is a second parser to get wrong.
+					if let contentType = (response as? HTTPURLResponse)?.allHeaderFields["Content-Type"] as? String,
+					   SoftwareUpdate.mediaType(fromContentType: contentType) != "application/json" {
+						error = NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "Update manifest is not JSON (server sent “\(contentType)”)."])
+					} else if let data {
+						do {
+							manifest = try UpdateManifest.manifest(from: data, keys: UpdateManifest.embeddedKeys(), now: Date())
+						} catch let manifestError {
+							error = manifestError
 						}
 					} else {
-						error = NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "Missing Content-Type in server response."])
+						error = NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "Empty server response."])
 					}
 				}
 
@@ -251,12 +250,12 @@ class SoftwareUpdate: NSObject {
 				// Cocoa Bindings, so setting it off the main thread traps (see above).
 				nonisolated(unsafe) let unsafeSelf = self
 				nonisolated(unsafe) let unsafeHandler = completionHandler
-				nonisolated(unsafe) let unsafeRemoteURL = remoteURL
+				nonisolated(unsafe) let unsafeManifest = manifest
 				nonisolated(unsafe) let unsafeError = error
 				DispatchQueue.main.async {
 					UserDefaults.standard.set(Date(), forKey: kUserDefaultsLastSoftwareUpdateCheckKey)
 					unsafeSelf.checking = false
-					unsafeHandler(unsafeRemoteURL, remoteVersion, unsafeError)
+					unsafeHandler(unsafeManifest, unsafeError)
 				}
 			}
 			dataTask.resume()

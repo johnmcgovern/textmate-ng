@@ -1,4 +1,8 @@
-#import "../src/SoftwareUpdate.h"
+// SoftwareUpdateTesting.h for the TMUpdateManifest declaration: the completion
+// handler carries a verified manifest now rather than a URL and a version
+// (step 4c). What this file asserts — that the handler runs on the main thread
+// however the check was entered — is unchanged; only the block's shape moved.
+#import "SoftwareUpdateTesting.h"
 
 // Regression test for the alpha.13 crash: "Settings ▸ Software Update crashes".
 //
@@ -45,7 +49,7 @@ void test_check_calls_back_on_the_main_thread_when_entered_from_a_background_que
 	__block NSError* reportedError = nil;
 
 	dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-		[SoftwareUpdate.sharedInstance checkForTestBuild:NO completionHandler:^(NSURL* remoteURL, NSString* remoteVersion, NSError* error){
+		[SoftwareUpdate.sharedInstance checkForTestBuild:NO completionHandler:^(TMUpdateManifest* manifest, NSError* error){
 			onMainThread  = NSThread.isMainThread;
 			reportedError = error;
 			called        = YES;
@@ -72,7 +76,7 @@ void test_check_still_calls_back_when_entered_from_the_main_thread ()
 	__block BOOL called = NO;
 	__block BOOL onMainThread = NO;
 
-	[SoftwareUpdate.sharedInstance checkForTestBuild:NO completionHandler:^(NSURL* remoteURL, NSString* remoteVersion, NSError* error){
+	[SoftwareUpdate.sharedInstance checkForTestBuild:NO completionHandler:^(TMUpdateManifest* manifest, NSError* error){
 		onMainThread = NSThread.isMainThread;
 		called       = YES;
 	}];

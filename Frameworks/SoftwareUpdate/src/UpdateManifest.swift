@@ -60,8 +60,12 @@ enum UpdateManifestError: Int, Error, CustomNSError {
 	}
 }
 
+// @unchecked Sendable, and it is not a paper-over: every stored property below is
+// a `let` holding an immutable value, the class is final, and nothing mutates one
+// after -manifestFromData: returns it. The "unchecked" is only because NSObject
+// is not Sendable, which it has to be to cross into ObjC.
 @objc(TMUpdateManifest)
-class UpdateManifest: NSObject {
+final class UpdateManifest: NSObject, @unchecked Sendable {
 	@objc let version: String
 	@objc let url: URL
 	@objc let sha256: String

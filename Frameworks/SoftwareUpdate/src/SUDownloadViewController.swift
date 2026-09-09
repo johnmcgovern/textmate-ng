@@ -138,12 +138,23 @@ final class SUDownloadViewController: NSViewController {
 	private var runModalCompletionHandler: ((NSApplication.ModalResponse) -> Bool)?
 
 	private var downloadedArchiveURL: URL?
-	private var remoteURL: URL?
+	// The verified manifest for the update being offered. Held rather than passed
+	// around so the Retry button has the checksum too — retrying a download that
+	// then skipped its verification would be the obvious way to reintroduce the
+	// hole step 4 closes.
+	private var manifest: UpdateManifest?
 
 	private var _buttonStackView: NSStackView?
 
 	private var updateBadgeVisible = false
-	private let publicKeys: [String: String]
+
+	// No `publicKeys` any more. The archive used to be vouched for by a signature
+	// in its response headers, checked against Info.plist's TMSigningKeys; it is
+	// now vouched for by the checksum inside the signed manifest, so this
+	// controller needs no keys at all. **TMSigningKeys is consequently unreferenced
+	// by the application** — BundlesManager takes its keys from inside the
+	// downloaded bundle index, not from Info.plist — but removing it is a separate
+	// change and does not belong in a commit about verification.
 
 	private let contentViewController: OakTransitionViewController
 	private let infoViewController: SUInfoViewController
@@ -151,7 +162,6 @@ final class SUDownloadViewController: NSViewController {
 
 	init(completionHandler: (() -> Void)? = nil) {
 		self.completionHandler      = completionHandler
-		self.publicKeys             = (Bundle.main.infoDictionary?["TMSigningKeys"] as? [String: String]) ?? [:]
 
 		self.contentViewController  = OakTransitionViewController()
 		self.infoViewController     = SUInfoViewController()
@@ -326,8 +336,11 @@ final class SUDownloadViewController: NSViewController {
 		}
 	}
 
-	func presentUI(forBackgroundCheck backgroundCheck: Bool, remoteURL: URL?, remoteVersion: String?, redownloadEnabled allowRedownload: Bool) {
-		let localVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+	func presentUI(forBackgroundCheck backgroundCheck: Bool, manifest: UpdateManifest?, redownloadEnabled allowRedownload: Bool) {
+		self.manifest = manifest
+
+		let localVersion  = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+		let remoteVersion = manifest?.version
 		let ordering = OakCompareVersionStrings(localVersion, remoteVersion)
 
 		if backgroundCheck && ordering != .orderedAscending {
@@ -370,8 +383,8 @@ final class SUDownloadViewController: NSViewController {
 					self.presentAlert(message: "Read-only File System", informativeText: informativeText, buttonTitles: ["OK"]) { _ in
 						return true // Close window
 					}
-				} else if let remoteURL {
-					self.downloadSoftwareUpdate(at: remoteURL)
+				} else if let manifest {
+					self.downloadSoftwareUpdate(manifest)
 				}
 				return false // Keep window open
 			} else {
@@ -387,16 +400,19 @@ final class SUDownloadViewController: NSViewController {
 		view.window?.close()
 	}
 
+	// Retry. Reads the stored manifest rather than a URL off the button, so the
+	// checksum comes along with it.
 	@objc private func takeURLToDownloadFrom(_ sender: NSButton) {
-		if let url = sender.cell?.representedObject as? URL {
-			downloadSoftwareUpdate(at: url)
+		if let manifest {
+			downloadSoftwareUpdate(manifest)
 		}
 	}
 
-	private func downloadSoftwareUpdate(at downloadURL: URL) {
-		remoteURL = downloadURL
+	private func downloadSoftwareUpdate(_ manifest: UpdateManifest) {
+		self.manifest = manifest
+		let downloadURL = manifest.url
 
-		let progressReporting = OakDownloadManager.sharedInstance.downloadArchive(at: downloadURL, forReplacing: Bundle.main.bundleURL, publicKeys: publicKeys) { extractedArchiveURL, error in
+		let progressReporting = OakDownloadManager.sharedInstance.downloadArchive(at: downloadURL, forReplacing: Bundle.main.bundleURL, expectedSHA256: manifest.sha256, expectedSize: manifest.size) { extractedArchiveURL, error in
 			MainActor.assumeIsolated {
 				self.progressViewController.progress = nil
 
@@ -419,7 +435,6 @@ final class SUDownloadViewController: NSViewController {
 
 					self.buttons[0].title                  = "Retry"
 					self.buttons[0].isEnabled              = true
-					self.buttons[0].cell?.representedObject = downloadURL
 					self.buttons[0].action                 = #selector(self.takeURLToDownloadFrom(_:))
 				}
 			}
@@ -456,8 +471,8 @@ final class SUDownloadViewController: NSViewController {
 		guard isInstallableApplication(at: applicationURL) else {
 			presentAlert(message: "Integrity Check Failed", informativeText: "The download is incomplete. This can happen if the system has been deleting temporary files.\n\nWould you like to redownload the update?", buttonTitles: ["Redownload", "Cancel"]) { returnCode in
 				if returnCode == .alertFirstButtonReturn {
-					if let remoteURL = self.remoteURL {
-						self.downloadSoftwareUpdate(at: remoteURL)
+					if let manifest = self.manifest {
+						self.downloadSoftwareUpdate(manifest)
 					}
 
 					do {

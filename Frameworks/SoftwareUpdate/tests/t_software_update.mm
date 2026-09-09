@@ -1158,3 +1158,35 @@ void test_the_shipped_info_plist_carries_a_usable_signing_key ()
 		OAK_ASSERT_EQ((size_t)raw.length, (size_t)65);   // X9.63 P-256
 	}
 }
+
+// MARK: - The shipped key and the release Mac's key are the same pair
+
+// A manifest signed by the **real** j23-update-signing private key, verified
+// against the public key in the **shipped** Info.plist. Nothing else pins that
+// those two are halves of one pair.
+//
+// The way they come apart is mundane: someone recreates the key (delete-key,
+// create-key) and forgets to update Info.plist. Everything still builds, every
+// other test passes, bin/release happily signs — and every user's update check
+// fails with "unknown key" or a bad signature, at which point the release is
+// already published.
+//
+// Generated 2026-09-09 with `bin/update-sign sign`, expiry set far out so the
+// fixture does not rot. Public material only.
+static NSString* const kLiveSignedManifest = @"{\"manifest\":\"eyJ2ZXJzaW9uIjoiMjAyNi45LWFscGhhLjIyIiwidXJsIjoiaHR0cHM6Ly9leGFtcGxlLmludmFsaWQvVGV4dE1hdGUtTkcudGJ6Iiwic2hhMjU2IjoiMWI3YWZjNzFmYTY5MTg3NzljMjhkYWFiYTUxYmViNjE3ODQ5NTQ4YzdhYTkxYTljODA4YmRlNjYwMGEyNWNhMiIsInNpemUiOjI1MCwiaXNzdWVkIjoiMjAyNi0wOS0wOVQwMDowMDowMFoiLCJleHBpcmVzIjoiMjEyNi0xMC0xNFQwMDowMDowMFoiLCJtaW5pbXVtU3lzdGVtVmVyc2lvbiI6IjE1LjAifQ==\",\"keyID\":\"j23-2026\",\"signature\":\"MEYCIQCiXO7O8irSeu4e/u6+tgyJfeo+DeuJr1q1jmiSJs0c6wIhAMmkmiZv7alFRcp37bYYvW5aaiyRdnlXJkYSLkMuVb4U\"}";
+
+void test_the_shipped_key_verifies_a_manifest_signed_by_the_real_key ()
+{
+	NSDictionary* keys = ShippedUpdateManifestKeys();
+	OAK_ASSERT(keys != nil);
+
+	NSError* error = nil;
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:[kLiveSignedManifest dataUsingEncoding:NSUTF8StringEncoding]
+	                                                           keys:keys
+	                                                            now:[NSDate date]
+	                                                          error:&error];
+
+	if(error) OAK_FAIL(std::string("the shipped key did not verify a manifest the real key signed: ") + error.localizedDescription.UTF8String);
+	OAK_ASSERT(manifest != nil);
+	OAK_ASSERT_EQ(std::string(manifest.version.UTF8String), std::string("2026.9-alpha.22"));
+}

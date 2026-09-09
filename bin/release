@@ -4,6 +4,8 @@
 # Usage: bin/release [path/to/TextMate-NG.app]
 #   Defaults to build/Release/TextMate-NG.app.
 #
+#   --resign-manifest  republish the current manifest with a fresh expiry, and
+#               nothing else — no build, no tag. Needs TM_CODE_SIGN_IDENTITY.
 #   --dry-run   do everything except create the release (still builds and
 #               verifies the zip, and prints the notes it would publish)
 #
@@ -34,19 +36,83 @@ set -e
 
 APP="build/Release/TextMate-NG.app"
 DRY_RUN=NO
+RESIGN_ONLY=NO
 for arg in "$@"; do
   case "$arg" in
-    --dry-run) DRY_RUN=YES ;;
-    *)         APP="$arg"  ;;
+    --dry-run)         DRY_RUN=YES     ;;
+    --resign-manifest) RESIGN_ONLY=YES ;;
+    *)                 APP="$arg"      ;;
   esac
 done
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CHANGES="$ROOT/Applications/TextMate/about/Changes.md"
 
-[ -d "$APP" ] || { echo "error: $APP not found (build Release first)" >&2; exit 1; }
 command -v gh >/dev/null || { echo "error: gh not installed (brew install gh)" >&2; exit 1; }
 gh auth status >/dev/null 2>&1 || { echo "error: gh is not authenticated (gh auth login)" >&2; exit 1; }
+
+# ============================================================
+# = 0. --resign-manifest: refresh the expiry, publish nothing =
+# ============================================================
+#
+# The client refuses a manifest past its `expires`, which is what stops a CDN
+# replaying a stale one forever. That protection has a cost: if more than a month
+# goes by without a release, the *current* manifest lapses and every user is told
+# the update check failed. This republishes the same manifest with new dates.
+#
+# It changes nothing about which build is offered — same version, same URL, same
+# checksum — so it needs no app, no build and no tag.
+if [ "$RESIGN_ONLY" = YES ]; then
+  REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+  WORK=$(mktemp -d)
+  trap 'rm -rf "$WORK"' EXIT
+
+  echo "==> fetching the published manifest"
+  curl -fsSL "https://github.com/$REPO/releases/download/updates/release.json" -o "$WORK/current.json" || {
+    echo "error: no published manifest to refresh" >&2; exit 1; }
+
+  python3 - "$WORK/current.json" "$WORK/inner.json" <<'REFRESH'
+import sys, json, base64, datetime
+wrapper = json.load(open(sys.argv[1]))
+inner = json.loads(base64.b64decode(wrapper["manifest"]))
+now = datetime.datetime.now(datetime.timezone.utc)
+inner["issued"]  = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+inner["expires"] = (now + datetime.timedelta(days=35)).strftime("%Y-%m-%dT%H:%M:%SZ")
+# separators matter only in that the bytes written here are the bytes signed;
+# the client verifies before parsing and never re-serialises.
+open(sys.argv[2], "w").write(json.dumps(inner, separators=(",", ":")))
+print("    version %s, expires %s" % (inner["version"], inner["expires"]))
+REFRESH
+
+  # No app to take the identity from here, so it must come from the environment.
+  # Without it the tool is rebuilt ad-hoc and the keychain prompts, which in a
+  # script is a hang rather than an error.
+  [ -n "$TM_CODE_SIGN_IDENTITY" ] || {
+    echo "error: set TM_CODE_SIGN_IDENTITY so bin/update-sign is built with the identity the key's ACL expects" >&2
+    echo "       TM_CODE_SIGN_IDENTITY=\"Developer ID Application: … (TEAMID)\" bin/release --resign-manifest" >&2
+    exit 1; }
+  export TM_CODE_SIGN_IDENTITY
+
+  SIG=$("$ROOT/bin/update-sign" sign "$WORK/inner.json")
+  MANIFEST="$ROOT/build/release.json"
+  mkdir -p "$ROOT/build"
+  printf '{"manifest":"%s","keyID":"j23-2026","signature":"%s"}' \
+    "$(base64 -i "$WORK/inner.json" | tr -d '\n')" "$SIG" > "$MANIFEST"
+
+  "$ROOT/bin/update-sign" verify "$MANIFEST" || {
+    echo "error: the refreshed manifest does not verify" >&2; exit 1; }
+
+  if [ "$DRY_RUN" = YES ]; then
+    echo "==> --dry-run: not uploading. Refreshed manifest at $MANIFEST"
+    exit 0
+  fi
+
+  gh release upload updates "$MANIFEST" --clobber
+  echo "==> done: https://github.com/$REPO/releases/download/updates/release.json"
+  exit 0
+fi
+
+[ -d "$APP" ] || { echo "error: $APP not found (build Release first)" >&2; exit 1; }
 
 # ============================================================
 # = 1. The app has to be something a stranger can actually open =
@@ -217,6 +283,74 @@ done < "$WORK/dsym-names"
 echo "    $(wc -l < "$WORK/dsym-names" | tr -d ' ') dSYMs, $(du -h "$DSYM_ZIP" | cut -f1), all UUID-matched to the packaged app"
 
 # ============================================================
+# = 4.5 The update payload, and its signed manifest          =
+# ============================================================
+
+TBZ="$ROOT/build/TextMate-NG-$VERSION.tbz"
+echo "==> packaging $(basename "$TBZ") for the updater"
+rm -f "$TBZ"
+
+# From "$WORK/unpacked", not from build/: that is the copy already checked for
+# signature, staple and Gatekeeper acceptance a few steps up. Packaging the
+# updater's payload from anywhere else would mean shipping something less
+# verified than the zip beside it.
+#
+# One top-level TextMate-NG.app, because the updater extracts with
+# `tar -jxmkC <dir> --strip-components 1`, which makes <dir> the application
+# itself. Change the layout here and the installed app becomes a directory
+# containing an app.
+tar -cjf "$TBZ" -C "$WORK/unpacked" TextMate-NG.app
+
+TBZ_SHA=$(shasum -a 256 "$TBZ" | cut -d' ' -f1)
+TBZ_SIZE=$(stat -f %z "$TBZ")
+REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+TBZ_URL="https://github.com/$REPO/releases/download/$TAG/$(basename "$TBZ")"
+
+# 35 days. The client refuses an expired manifest, which is what stops a CDN
+# replaying a stale-but-validly-signed one forever and pinning users to a build
+# with a known hole. If more than a month passes without a release, run
+# `bin/release --resign-manifest` rather than letting it lapse.
+ISSUED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EXPIRES=$(date -u -v+35d +%Y-%m-%dT%H:%M:%SZ)
+
+INNER="$WORK/manifest-inner.json"
+printf '{"version":"%s","url":"%s","sha256":"%s","size":%s,"issued":"%s","expires":"%s","minimumSystemVersion":"15.0"}' \
+  "$VERSION" "$TBZ_URL" "$TBZ_SHA" "$TBZ_SIZE" "$ISSUED" "$EXPIRES" > "$INNER"
+
+echo "==> signing the update manifest"
+
+# The signing key's keychain ACL is bound to a Developer ID-signed
+# bin/update-sign. Rebuild that tool ad-hoc — which happens the first time after
+# anyone edits update-sign.swift — and macOS puts up an access prompt instead of
+# signing, which in a script means it **hangs**. Cost two minutes to discover.
+#
+# So take the identity from the application this script has already verified,
+# rather than hoping the environment carries it: same certificate that signed the
+# app, which is exactly the ACL the key was created under.
+TM_CODE_SIGN_IDENTITY=$(codesign -dvv "$APP" 2>&1 | sed -n 's/^Authority=\(Developer ID Application: .*\)$/\1/p' | head -1)
+[ -n "$TM_CODE_SIGN_IDENTITY" ] || {
+  echo "error: could not read a Developer ID from $APP to sign the manifest with" >&2; exit 1; }
+export TM_CODE_SIGN_IDENTITY
+
+SIG=$("$ROOT/bin/update-sign" sign "$INNER") || {
+  echo "error: could not sign the manifest — is the signing key present? (bin/update-sign public-key)" >&2; exit 1; }
+
+# The inner document travels base64-encoded and the signature covers those exact
+# bytes, so the client verifies before it parses and neither side has to agree
+# about JSON whitespace or key order.
+MANIFEST="$ROOT/build/release.json"
+printf '{"manifest":"%s","keyID":"j23-2026","signature":"%s"}' \
+  "$(base64 -i "$INNER" | tr -d '\n')" "$SIG" > "$MANIFEST"
+
+# Check what was just produced, because a release whose manifest does not verify
+# is worse than no release: every user gets an integrity error and no way to tell
+# it from an attack.
+echo "==> verifying the manifest"
+"$ROOT/bin/update-sign" verify "$MANIFEST" || {
+  echo "error: the manifest just written does not verify" >&2; exit 1; }
+echo "    $(du -h "$TBZ" | cut -f1) payload, sha256 ${TBZ_SHA%${TBZ_SHA#????????}}…, expires $EXPIRES"
+
+# ============================================================
 # = 5. Notes, from the file that already has them            =
 # ============================================================
 
@@ -254,15 +388,39 @@ if [ "$DRY_RUN" = YES ]; then
   echo "----------------------------------------------------------------"
   echo "==> zip left at $ZIP"
   echo "==> dSYMs left at $DSYM_ZIP"
+  echo "==> updater payload left at $TBZ"
+  echo "==> signed manifest (verified, not published):"
+  echo "----------------------------------------------------------------"
+  cat "$INNER"; echo
+  echo "----------------------------------------------------------------"
   exit 0
 fi
 
 # --prerelease on purpose: these are alphas, and it keeps "Latest release" honest
 # for whenever a non-alpha appears.
 echo "==> creating GitHub release $TAG"
-gh release create "$TAG" "$ZIP" "$DSYM_ZIP" \
+gh release create "$TAG" "$ZIP" "$DSYM_ZIP" "$TBZ" \
   --title "TextMate-NG $VERSION" \
   --notes-file "$NOTES" \
   --prerelease
 
+# The manifest lives on a rolling release, so the URL the application is built
+# with never changes:
+#
+#   https://github.com/<owner>/<repo>/releases/download/updates/release.json
+#
+# A release asset rather than GitHub Pages, which needs no branch and no Pages
+# setup. It is served as application/octet-stream, which is fine — the client
+# treats Content-Type as advisory, because the signature is the authority and the
+# transport is not (see a96f759b).
+echo "==> publishing the update manifest"
+if ! gh release view updates >/dev/null 2>&1; then
+  gh release create updates \
+    --title "Update manifest" \
+    --notes "The current update manifest, replaced by each release. Not a build — see the versioned releases for those." \
+    --prerelease
+fi
+gh release upload updates "$MANIFEST" --clobber
+
 echo "==> done: $(gh release view "$TAG" --json url --jq .url)"
+echo "==> manifest: https://github.com/$REPO/releases/download/updates/release.json"

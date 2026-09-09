@@ -26,9 +26,10 @@
 // **The part that is not swappable, and therefore has to be right now:** a key
 // cannot be moved into the Enclave or onto a token — both only generate
 // internally — so changing option is always a key *rotation*. That is why the
-// manifest carries a `keyID` and the app embeds two public keys (current and
-// next). Without those, a later swap strands every user who has not updated.
-// Rotation is not a nicety here; it is what makes this decision reversible.
+// manifest carries a `keyID` and the app looks the key up in a dictionary rather
+// than holding one. Rotation is two releases: ship one trusting old **and** new,
+// wait for adoption, then sign with the new and drop the old later. Rotation is
+// not a nicety here; it is what makes this decision reversible.
 
 import Foundation
 import Security
@@ -168,6 +169,7 @@ guard let command = arguments.first else {
 	  update-sign public-key  [--label L]      print the public key (base64 X9.63)
 	  update-sign sign FILE   [--label L]      print the signature (base64 DER ECDSA)
 	  update-sign delete-key  [--label L]      remove the key
+	  update-sign verify FILE [--label L]      check a signed manifest against the key
 	  update-sign self-test                    throwaway key: create, sign, verify, delete
 	""")
 }
@@ -194,6 +196,42 @@ switch command {
 	case "delete-key":
 		try store.deleteKey(label: label)
 		FileHandle.standardError.write(Data("deleted '\(label)'\n".utf8))
+
+	// Checks a wrapper the way the *application* will: decode the base64 manifest,
+	// rebuild the public key from its string form, verify the signature over those
+	// exact bytes. bin/release runs this on what it just produced, because a
+	// release whose manifest does not verify is worse than no release — every user
+	// gets an integrity error and no way to tell it from an attack.
+	case "verify":
+		let paths = arguments.dropFirst().filter { $0 != "--label" && $0 != label }
+		guard let path = paths.first else { die("verify needs a file") }
+		guard let blob = FileManager.default.contents(atPath: path) else { die("cannot read \(path)") }
+
+		guard let wrapper = (try? JSONSerialization.jsonObject(with: blob)) as? [String: Any],
+		      let encodedManifest = wrapper["manifest"] as? String,
+		      let encodedSignature = wrapper["signature"] as? String,
+		      let keyID = wrapper["keyID"] as? String,
+		      let signedBytes = Data(base64Encoded: encodedManifest),
+		      let signature = Data(base64Encoded: encodedSignature)
+		else {
+			die("\(path) is not a signed manifest")
+		}
+
+		guard let key = try store.findKey(label: label), let publicKey = SecKeyCopyPublicKey(key) else {
+			die("no key labelled '\(label)' to verify against")
+		}
+
+		guard SecKeyVerifySignature(publicKey, .ecdsaSignatureMessageX962SHA256, signedBytes as CFData, signature as CFData, nil) else {
+			die("signature does not verify — this manifest would be refused by every client")
+		}
+
+		guard let inner = (try? JSONSerialization.jsonObject(with: signedBytes)) as? [String: Any],
+		      let version = inner["version"] as? String,
+		      let expires = inner["expires"] as? String
+		else {
+			die("the signed bytes are not a manifest")
+		}
+		print("verified: keyID \(keyID), version \(version), expires \(expires)")
 
 	case "self-test":
 		// The pin for this tool. Runs on the release Mac, not in CI, and leaves

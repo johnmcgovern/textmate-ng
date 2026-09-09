@@ -150,15 +150,29 @@ built.
 
 ### Tier 1 — closes every remote vector. Do all of it.
 
-1. **Manifest signature: ECDSA P-256, private key in the Secure Enclave of the
-   release Mac.** Not Ed25519, and not a key file. The Secure Enclave only does
-   P-256, and it makes the key **non-exportable**: signing a release requires
-   physical presence at that Mac, and a stolen disk image contains nothing.
-   Create with `SecKeyCreateRandomKey` + `kSecAttrTokenIDSecureEnclave`; clients
-   verify with `SecKeyVerifySignature` and
-   `kSecKeyAlgorithmECDSASignatureMessageX962SHA256`. This is what Ed25519-in-a-
-   file cannot give you, and it is the modern, Apple-native answer to the
-   "burned key" worry.
+1. **Manifest signature: ECDSA P-256.** Clients verify with
+   `SecKeyVerifySignature` and
+   `kSecKeyAlgorithmECDSASignatureMessageX962SHA256`; the public key travels as
+   base64 X9.63 (65 bytes), which is what `SecKeyCopyExternalRepresentation`
+   emits and `SecKeyCreateWithData` consumes, so neither side parses ASN.1.
+
+   **An earlier version of this note said the private key would live in the
+   Secure Enclave and be non-exportable. Both halves were wrong, and the
+   correction matters more than the claim did.** Measured 2026-09-08 (the table
+   is in `ide/SOFTWARE_UPDATE_PLAN.md` step 2): the Enclave is unreachable from a
+   command-line tool — it needs a `keychain-access-groups` entitlement, which is
+   restricted, and a binary carrying it without a provisioning profile is
+   SIGKILLed at launch. And the software fallback is **not** non-exportable
+   either: with `kSecAttrIsExtractable = false`, `SecKeyCopyExternalRepresentation`
+   still returned the private key, from a freshly created reference and from one
+   fetched back out of the keychain, and `SecItemExport` returned it too.
+
+   So the honest statement is: **the update-signing key is a key on the release
+   Mac**, protected by FileVault, the login keychain and physical control of that
+   machine — not by properties of its own. Reaching the Enclave needs the signer
+   to be an app bundle with a provisioning profile; a hardware token is the other
+   route. Both are open options, neither is in place, and the note will not claim
+   a property the code does not have.
 2. **Manifest contents**, signed as canonical bytes:
    `version`, `url`, `sha256`, `size`, `issued`, `expires`, `keyID`,
    `minimumSystemVersion`. Everything the client will act on is inside the

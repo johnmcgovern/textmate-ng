@@ -129,40 +129,71 @@ design note).
 
 ### Step 2 — the signing tool, and the key
 
-**What.** A new tool, `bin/update-sign`, that does three things:
+**The probe is done, and it changed this step. Read the results before planning
+around them.** Measured 2026-09-08 on the release Mac (Apple Silicon, so a Secure
+Enclave is present), with a throwaway label, key deleted after each run.
+
+| # | Configuration | Result |
+| --- | --- | --- |
+| A | Secure Enclave, ad-hoc signed CLI | `-34018` errSecMissingEntitlement — "failed to add key to keychain" |
+| B | Secure Enclave, **Developer ID** signed CLI, no entitlements | same `-34018` |
+| C | Secure Enclave, Developer ID + `keychain-access-groups` entitlement | **process SIGKILLed at launch** (exit 137). The entitlement is in the signature; it is restricted, and without a provisioning profile authorising it the kernel refuses to run the binary. |
+| D | Secure Enclave + `kSecUseDataProtectionKeychain` | same `-34018` |
+| E | Software P-256, permanent, `kSecAttrIsExtractable = false` | creates, signs, verifies — **and is fully exportable anyway** |
+
+**So the Secure Enclave is not available to a command-line tool.** It needs a
+provisioning profile authorising a keychain access group, which a CLI signed with
+a bare Developer ID cannot have.
+
+**And the fallback does not give what the fallback was for.** `isExtractable:
+false` prevented nothing: `SecKeyCopyExternalRepresentation` returned the private
+key as 97 bytes from the freshly-created reference *and* from the reference
+fetched back out of the keychain, and `SecItemExport` returned 121 bytes. The
+attribute governs some export paths and not the ones that matter here. A software
+keychain key is a key on the disk of the release Mac, and calling it
+"non-exportable" would be false.
+
+The design note's claim that the key is non-exportable therefore **does not hold
+for any option currently on the table**, and has been corrected there.
+
+#### The decision this needs
+
+Three ways forward. This is **J1**, and it is a judgement about how much the
+non-exportability is worth:
+
+1. **Software key on the release Mac.** Simplest; the tool below works today.
+   Protection is FileVault, the login keychain, and physical control of the
+   machine — not the key's own properties. Describe it that way, in the note and
+   in `bin/release`'s output.
+2. **Secure Enclave inside a signed app bundle with a provisioning profile.**
+   This is the standard way to reach the Enclave on macOS: an App ID with the
+   keychain-sharing capability, a profile embedded in a small `.app` that
+   `bin/release` invokes headlessly. **Open question nobody has checked: whether
+   a *Developer ID* provisioning profile can authorise `keychain-access-groups`
+   at all.** That is answerable only in the developer portal, and only by John.
+3. **Hardware token** (YubiKey PIV via PKCS#11). Genuinely non-exportable, works
+   from a CLI, costs a device and a dependency.
+
+What non-exportability actually buys, so the choice is made with open eyes: an
+attacker who reaches the release Mac can sign releases under *every* option — the
+key is usable there by definition. What options 2 and 3 prevent is the key being
+*taken away* and used later, elsewhere, after the machine is cleaned up. That is
+worth something, and it is not the whole threat.
+
+#### The tool, which is the same either way
 
     bin/update-sign create-key   [--label j23-update-signing]
-    bin/update-sign public-key   [--label …]      # prints DER base64, for Info.plist
-    bin/update-sign sign <file>  [--label …]      # prints DER ECDSA signature, base64
+    bin/update-sign public-key   [--label …]      # prints base64 X9.63, for Info.plist
+    bin/update-sign sign <file>  [--label …]      # prints base64 DER ECDSA
+    bin/update-sign self-test                      # throwaway key, sign, verify, delete
 
-`create-key` uses `SecKeyCreateRandomKey` with `kSecAttrKeyTypeECSECPrimeRandom`,
-256 bits, `kSecAttrTokenIDSecureEnclave`, and an access control of
-`kSecAccessControlPrivateKeyUsage` (require the device be unlocked; do **not**
-require biometrics — `bin/release` runs unattended once started). `sign` uses
-`SecKeyCreateSignature` with `kSecKeyAlgorithmECDSASignatureMessageX962SHA256`.
+Signing is `SecKeyCreateSignature` with
+`kSecKeyAlgorithmECDSASignatureMessageX962SHA256`; the public key is exported
+with `SecKeyCopyExternalRepresentation` (X9.63, 65 bytes — **not** DER; an
+earlier draft of this plan said DER and was wrong). Keep key *storage* behind one
+function so option 1 can become option 2 or 3 without touching the rest.
 
-**Probe first (rule 55), because this is the step most likely to surprise:**
-a process using Secure Enclave keys must be code-signed. A `swift` script or an
-ad-hoc-signed binary may get `errSecMissingEntitlement` or a keychain prompt loop.
-Build the tool as a small Swift executable target (the project already knows how
-to build tools — `CommitWindowTool` is the model), sign it with the same
-`TM_CODE_SIGN_IDENTITY` the app uses, and try `create-key` **with a throwaway
-label** before believing any of the above. Record what happened in the commit.
-If Secure Enclave access turns out to need an entitlement the tool cannot have,
-fall back to a **non-exportable keychain key** (`kSecAttrIsExtractable = false`,
-no token ID) and say plainly in the design note that the key is software-backed.
-Do not silently downgrade.
-
-**What this commit does *not* do:** create the real key. That is **J1**. The
-commit lands the tool and a `bin/update-sign self-test` that creates a throwaway
-key, signs a fixed string, verifies it with `SecKeyVerifySignature`, and deletes
-the key. That self-test is the pin, and it runs on the release Mac, not in CI.
-
-**Done when**: `bin/update-sign self-test` passes on the release Mac; the design
-note records whether the key is Enclave-backed or keychain-backed.
-
-**While waiting for J1:** steps 3 and 4 do not need a real key — their pins use
-a test keypair generated in the test itself.
+`self-test` is the pin, and it runs on the release Mac rather than in CI.
 
 ### Step 3 — `SecKeyVerifySignature` alongside `SecTransform`
 

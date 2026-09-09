@@ -3538,6 +3538,11 @@
 			</dict>
 		</dict>
 	</array>
+	<key>TMUpdateManifestKeys</key>
+	<dict>
+		<key>j23-2026</key>
+		<string>BOLdnDOh21LG0+jihRyfcePji8g1hrmstV6MdwqBxaLSnCMkLLzvUGL8TCqXBsCPb5nP/sRnHXjXjchBMQNL5tg=</string>
+	</dict>
 	<key>TMSigningKeys</key>
 	<dict>
 		<key>org.textmate.duff</key>

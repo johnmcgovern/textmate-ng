@@ -61,7 +61,12 @@ Bundle identifier is `com.j23software.TextMate-NG`.
 Three things. Everything else in this plan can proceed around them, and the
 plan says at each step what to do while waiting.
 
-- **J1. Create the manifest-signing key on the release Mac**, once:
+- **J1. DONE 2026-09-08.** Key `j23-update-signing` created on the release Mac
+  with the tool below; its public half is in `Info.plist` under
+  `TMUpdateManifestKeys` as `j23-2026`, and pinned by
+  `test_the_shipped_info_plist_carries_a_usable_signing_key`. The private key is
+  a software key in the login keychain — see step 2 for what that does and does
+  not protect. For reference, the command was:
 
         TM_CODE_SIGN_IDENTITY="Developer ID Application: John McGovern (R22V2H7QF4)" \
             bin/update-sign create-key

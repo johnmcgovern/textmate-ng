@@ -1121,3 +1121,40 @@ void test_bundle_without_an_info_plist_is_rejected ()
 
 	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
 }
+
+// MARK: - The key the application actually ships
+
+// TMUpdateManifestKeys in Info.plist is what every update check is verified
+// against. If it goes missing, is emptied, or is replaced by something that is
+// not a P-256 public key, every manifest is refused with "unknown key" — noisy
+// rather than silent, but only at the moment a user checks for updates, which is
+// a long way from whoever edited the plist.
+//
+// Read from the *source tree* through __FILE__ rather than Bundle.main, because
+// Bundle.main here is the xctest runner (rule 57's trick, for the same reason).
+static NSDictionary* ShippedUpdateManifestKeys ()
+{
+	NSString* path = [NSString stringWithUTF8String:__FILE__];       // …/Frameworks/SoftwareUpdate/tests/t_software_update.mm
+	for(int i = 0; i < 4; ++i)
+		path = [path stringByDeletingLastPathComponent];             // → repo root
+	NSString* plist = [path stringByAppendingPathComponent:@"Applications/TextMate/Info.plist"];
+	return [[NSDictionary dictionaryWithContentsOfFile:plist] objectForKey:@"TMUpdateManifestKeys"];
+}
+
+void test_the_shipped_info_plist_carries_a_usable_signing_key ()
+{
+	NSDictionary* keys = ShippedUpdateManifestKeys();
+	OAK_ASSERT(keys != nil);
+	OAK_ASSERT((bool)(keys.count >= 1));
+
+	// Every entry must be a key the app can actually build, not merely a string.
+	for(NSString* keyID in keys)
+	{
+		SecKeyRef publicKey = [OakDownloadManager publicKeyFromBase64X963String:keys[keyID]];
+		if(publicKey == NULL)
+			OAK_FAIL(std::string("TMUpdateManifestKeys entry is not a P-256 public key: ") + keyID.UTF8String);
+
+		NSData* raw = [[NSData alloc] initWithBase64EncodedString:keys[keyID] options:0];
+		OAK_ASSERT_EQ((size_t)raw.length, (size_t)65);   // X9.63 P-256
+	}
+}

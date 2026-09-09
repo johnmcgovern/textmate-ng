@@ -53,3 +53,17 @@
 @property (nonatomic) SEL       stopAction;
 @property (nonatomic) id        stopTarget;
 @end
+
+// Hand declaration of the Swift FFTextFieldViewController, for the pins only —
+// its real header is gone now that Find.swift sees the class directly.
+@class OakPasteboard;
+
+@interface FFTextFieldViewController : NSViewController
+@property (nonatomic) BOOL syntaxHighlightEnabled;
+@property (nonatomic) BOOL hasFocus;
+@property (nonatomic) NSString* stringValue;
+
+- (instancetype)initWithPasteboard:(OakPasteboard*)pasteboard grammarName:(NSString*)grammarName;
+- (void)showHistory:(id)sender;
+- (void)showPopoverWithString:(NSString*)aString;
+@end

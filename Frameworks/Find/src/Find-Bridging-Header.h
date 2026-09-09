@@ -59,7 +59,6 @@
 #import "FindSupport.h"
 
 // This framework's remaining ObjC++ view controllers, which Find owns and drives.
-#import "FFTextFieldViewController.h"
 #import "FFFolderMenu.h"
 
 // For the two exported notification names, whose definitions stay in ObjC
@@ -68,3 +67,12 @@
 // which would collide with the generated Swift header.
 extern NSNotificationName const FFDocumentSearchDidReceiveResultsNotification;
 extern NSNotificationName const FFDocumentSearchDidFinishNotification;
+
+// For FFTextFieldViewController.swift. Both are hand-written declarations of
+// OakAppKit *Swift* classes (rule 23) — consuming another module's Swift class
+// through its declaration is fine and is how OakChooser and friends are used
+// everywhere; only *subclassing* across that boundary is not (rule 56), and
+// nothing here does. OakSyntaxFormatter.h's own warning is about OakAppKit's
+// bridging header, not this one.
+#import <OakAppKit/OakSyntaxFormatter.h>
+#import <OakAppKit/OakPasteboardSelector.h>

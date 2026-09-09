@@ -1,5 +1,4 @@
 #import "FindTesting.h"
-#import "../src/FFTextFieldViewController.h"
 #import <Cocoa/Cocoa.h>
 
 // Pins for Find's two remaining portable view controllers, written against the

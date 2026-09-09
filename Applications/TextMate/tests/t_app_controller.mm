@@ -848,3 +848,36 @@ void test_position_string_of_nil_is_nil ()
 	OAK_ASSERT([AppControllerSupport selectionStringForPositionString:nil] == nil);
 	OAK_ASSERT(text::range_t(text::pos_t::undefined) == text::range_t::undefined);
 }
+
+// ==================================
+// = The update channel (step 6b)   =
+// ==================================
+//
+// A literal, pinned against a literal, which normally pins nothing. It earns its
+// place here for two reasons that have nothing to do with typos in Swift.
+//
+// The first is that this string is half of a pair. bin/release greps
+// AppController.swift for the URL it is about to publish to and refuses to
+// release if it is not there; this is the same coupling stated from the client
+// end, so the pair cannot be quietly reduced to one side. Change either and
+// something says so.
+//
+// The second is the failure mode. A wrong host, a wrong tag, a `releases/latest`
+// that looked tidier — every one of those produces an application that fetches
+// nothing, reports nothing, and is indistinguishable from an application with no
+// update available. There is no crash and no error anybody sees, and the first
+// symptom is a user on a months-old build asking why they never got the fix.
+//
+// The tag is `updates` and stays `updates`: it is a rolling release whose single
+// asset is overwritten, which is what makes this URL constant across versions. A
+// version-numbered tag here would work exactly once.
+void test_the_update_channel_url_is_the_rolling_manifest ()
+{
+	OAK_ASSERT_EQ(describe(AppController.releaseUpdateChannelURL.absoluteString),
+		std::string("https://github.com/johnmcgovern/textmate-ng/releases/download/updates/release.json"));
+
+	// https, and not by accident: the signature is the authority, but a manifest
+	// fetched over http is one an attacker can withhold as easily as forge, and
+	// silently withholding updates is the attack this whole chain is against.
+	OAK_ASSERT_EQ(describe(AppController.releaseUpdateChannelURL.scheme), std::string("https"));
+}

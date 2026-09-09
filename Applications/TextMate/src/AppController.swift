@@ -190,19 +190,46 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 		setup_rmate_server(!disableRmate, UInt16(truncatingIfNeeded: rmatePort), rmateInterface == kRMateServerListenRemote)
 	}
 
+	// **The one URL this build will ever ask for an update, and it is compiled in
+	// on purpose.** Nothing reads it from a preference or an environment variable:
+	// a channel URL that a user — or anything running as that user — can redirect
+	// is a way to point the updater at an attacker's manifest, and while the
+	// signature check would still refuse it, that is one check away from being the
+	// only thing standing there. It is a literal rather than an Info.plist key for
+	// the same reason: a literal cannot be *absent*, so there is no "no channel
+	// configured" fallback to reason about.
+	//
+	// A **rolling** GitHub release, tag `updates`, whose single asset bin/release
+	// overwrites each time — that is why the version-numbered tag does not appear
+	// here and the URL never changes. ide/SOFTWARE_UPDATE_PLAN.md offered
+	// gh-pages as the recommendation and this as the alternative; the release
+	// asset won because it needs no branch and no Pages setup, and because it puts
+	// the manifest behind the same publishing step, in the same place, as the
+	// build it describes. Its `application/octet-stream` Content-Type is fine now
+	// that the client treats that header as advisory (a96f759b).
+	//
+	// bin/release greps this file for this string before it publishes. The app and
+	// the publisher have to agree about where the manifest lives, and if they ever
+	// stop agreeing the symptom is every user's update check failing quietly,
+	// which is exactly the kind of thing nobody notices for a month.
+	@objc static let releaseUpdateChannelURL = URL(string: "https://github.com/johnmcgovern/textmate-ng/releases/download/updates/release.json")!
+
 	func applicationWillFinishLaunching(_ notification: Notification) {
 		// First, because it used to run at nib-load time — see the note on the method.
 		AppController.setupThemeDefaultsAndObservers()
 
 		NSApp.mainMenu = mainMenu()
 
-		// SoftwareUpdate.sharedInstance.channels is deliberately left unconfigured
-		// (Phase 2.5, 2026-07-26): these previously resolved against MacroMates'
-		// api.textmate.org/releases — this fork's own TextMate-NG. "Check for
-		// updates" now surfaces a clear "No channel named …" error instead of
-		// silently offering the wrong product's releases. Wire this back up once a
-		// J23-owned update feed exists; SoftwareUpdate.mm's checkForTestBuild: does
-		// the lookup by name against whatever channels dict is set here.
+		// The update channel, restored here after Phase 2.5 (2026-07-26) removed it.
+		// What was removed pointed at MacroMates' api.textmate.org/releases — the
+		// *other* TextMate — so "Check for updates" would have offered the wrong
+		// product's builds; it has reported "No channel named ‘release’" ever since.
+		// This is the J23-owned feed that comment was waiting for, and
+		// step 6b of ide/SOFTWARE_UPDATE_PLAN.md is the step that turns the whole
+		// chain on.
+		SoftwareUpdate.sharedInstance.channels = [
+			kSoftwareUpdateChannelRelease: AppController.releaseUpdateChannelURL,
+		]
 
 		AppControllerSupport.setupSettingsPaths()
 

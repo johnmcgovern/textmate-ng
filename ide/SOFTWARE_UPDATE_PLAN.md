@@ -385,12 +385,17 @@ unpacks to `$WORK/unpacked` and checks it), add:
    wrapper;
 4. add the tbz to the `gh release create` line at line 263, alongside the zip
    and the dSYM zip;
-5. publish the wrapper at a **stable URL**. Recommended: a `gh-pages` branch
-   holding `update/release.json`, which `bin/release` commits and pushes.
-   GitHub Pages returns `application/json; charset=utf-8`, which step 0 already
-   made acceptable. (Alternative: a rolling GitHub Release named `updates`
-   whose single asset is overwritten; the URL is stable but the API is the
-   only way to find it. Pages is simpler. Decide once and write it down.)
+5. publish the wrapper at a **stable URL**. **Decided (6a, 2026-09-08): the
+   alternative** — a rolling GitHub Release tagged `updates` whose single asset
+   `bin/release` overwrites. It needs no branch and no Pages setup, and it puts
+   the manifest behind the same publishing step, in the same place, as the build
+   it describes. Its `application/octet-stream` is fine now that Content-Type is
+   advisory (`a96f759b`); that correction is what made this option available.
+   The URL is
+   `https://github.com/johnmcgovern/textmate-ng/releases/download/updates/release.json`
+   and it is compiled into `AppController.releaseUpdateChannelURL`. `bin/release`
+   greps that file for the URL it is about to publish to and refuses to release
+   if the two have drifted.
 6. **`--dry-run` must exercise all of the above except the push**, printing the
    manifest it would sign. Run it before and after; paste the output in the
    commit.
@@ -404,7 +409,7 @@ anything. Put that in the handoff's release checklist.
 the Phase 2.5 comment block with:
 
     SoftwareUpdate.sharedInstance.channels = [
-        kSoftwareUpdateChannelRelease: URL(string: "https://johnmcgovern.github.io/textmate-ng/update/release.json")!,
+        kSoftwareUpdateChannelRelease: AppController.releaseUpdateChannelURL,
     ]
 
 (one channel; `beta` and `nightly` can be added when they mean something), and
@@ -481,6 +486,22 @@ the feature is not done.
   `KeyStore`-shaped seam for the filesystem — which is API added for a test. Left
   open deliberately; whoever changes that method should know the guard is a code
   review, not a test.
+
+- **Anti-rollback has no high-water mark.** Step 6b's guard compares a manifest
+  against the *running* version, so a replayed older manifest can never be an
+  unattended downgrade. It does not catch being **held** at a real but stale
+  release: on alpha.20, a CDN that replays alpha.21 while alpha.23 exists gets
+  alpha.21 installed, and nothing notices. TUF-style protection remembers the
+  newest version ever seen and refuses anything below it.
+
+  Not built, on purpose. The mark has to persist somewhere, and the only
+  somewhere is a user default — writable by anything running as the user, where
+  one bogus value disables updates permanently and silently. A guard that
+  converts into a durable denial of service by writing a preference is not
+  clearly better than the freeze it prevents. What bounds the freeze today is the
+  35-day `expires`, which is why `--resign-manifest` exists and why letting it
+  lapse is a real thing to avoid rather than housekeeping. Revisit if the manifest
+  ever gains a monotonic counter of its own, which is the honest fix.
 
 - **A missing `dynamic` on `FFTextFieldViewController.hasFocus`/`stringValue`
   is unguarded.** The binding pins set the property from ObjC++, which reaches

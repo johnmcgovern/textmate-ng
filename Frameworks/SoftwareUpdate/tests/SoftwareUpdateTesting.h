@@ -17,6 +17,13 @@
 
 @interface SoftwareUpdate (Testing)
 + (NSString*)mediaTypeFromContentType:(NSString*)contentType;
+
+// Anti-rollback (step 6b). The scheduled check installs nothing that is not
+// strictly newer than what is running, which is what stops a replayed — and
+// therefore validly signed — older manifest from being an unattended downgrade.
+// Declared here rather than in SoftwareUpdate.h because nothing outside the
+// scheduler calls it.
++ (BOOL)isUpdate:(TMUpdateManifest*)manifest newerThanVersion:(NSString*)runningVersion;
 @end
 
 @interface OakDownloadManager (Testing)

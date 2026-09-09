@@ -1190,3 +1190,58 @@ void test_the_shipped_key_verifies_a_manifest_signed_by_the_real_key ()
 	OAK_ASSERT(manifest != nil);
 	OAK_ASSERT_EQ(std::string(manifest.version.UTF8String), std::string("2026.9-alpha.22"));
 }
+
+// ===============================
+// = Anti-rollback (step 6b)     =
+// ===============================
+//
+// The scheduled check runs with nobody watching, and it is the one path where a
+// replayed manifest could install something without a human reading a version
+// number. Everything before this point in the chain answers "did J23 sign this?"
+// — and an older manifest passes all of it, because we really did sign it. The
+// comparison below is the only step that knows an update from a downgrade.
+//
+// These are cheap tests for an expensive mistake: the failure they guard against
+// is silent, unattended, and indistinguishable from a normal update.
+
+void test_a_newer_manifest_is_an_update ()
+{
+	if(![SoftwareUpdate isUpdate:ManifestForVersion(@"2026.9-alpha.23") newerThanVersion:@"2026.9-alpha.22"])
+		OAK_FAIL("alpha.23 should be an update over alpha.22");
+}
+
+// The rollback case, and the reason the guard exists. This manifest is validly
+// signed, unexpired, and names a build we really shipped — everything the
+// signature can tell us is fine, and it is still a downgrade.
+void test_an_older_manifest_is_not_an_update ()
+{
+	if([SoftwareUpdate isUpdate:ManifestForVersion(@"2026.9-alpha.21") newerThanVersion:@"2026.9-alpha.22"])
+		OAK_FAIL("alpha.21 must not be offered unattended over alpha.22 — that is the rollback");
+}
+
+// Replaying the *current* manifest forever is the cheapest attack of the family
+// and needs no old release to exist at all.
+void test_the_running_version_is_not_an_update ()
+{
+	if([SoftwareUpdate isUpdate:ManifestForVersion(@"2026.9-alpha.22") newerThanVersion:@"2026.9-alpha.22"])
+		OAK_FAIL("a manifest naming the running version must not be an update");
+}
+
+// Unreachable through -checkForTestBuild:, whose completion hands back an error
+// or a manifest and never neither. Pinned anyway: "no manifest" answering "yes,
+// install it" is not a shape worth leaving available to a future caller.
+void test_no_manifest_is_not_an_update ()
+{
+	if([SoftwareUpdate isUpdate:nil newerThanVersion:@"2026.9-alpha.22"])
+		OAK_FAIL("a nil manifest must not be an update");
+}
+
+// A first-launch bundle with no CFBundleShortVersionString reads as nil here.
+// OakCompareVersionStrings treats nil as lower than anything, so this offers the
+// update — which is the safe direction, and pinned because the alternative
+// reading (refuse everything) would be an updater that never runs.
+void test_an_unknown_running_version_accepts_an_update ()
+{
+	if(![SoftwareUpdate isUpdate:ManifestForVersion(@"2026.9-alpha.22") newerThanVersion:nil])
+		OAK_FAIL("an unreadable running version should not block updates");
+}

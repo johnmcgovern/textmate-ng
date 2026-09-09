@@ -106,6 +106,10 @@ class SoftwareUpdate: NSObject {
 					if let error {
 						log.log("Failed to check for update: \(error.localizedDescription, privacy: .public)")
 						completionHandler(.finished)
+					} else if !SoftwareUpdate.isUpdate(manifest, newerThanVersion: SoftwareUpdate.runningVersion()) {
+						// Anti-rollback. See +isUpdate:newerThanVersion:.
+						log.log("Skip update: \(manifest?.version ?? "no version", privacy: .public) is not newer than \(SoftwareUpdate.runningVersion() ?? "?", privacy: .public)")
+						completionHandler(.finished)
 					} else {
 						// assumeIsolated, not a hop: -checkForTestBuild: guarantees this
 						// handler runs on the main thread, which is the whole point of
@@ -121,6 +125,49 @@ class SoftwareUpdate: NSObject {
 			}
 			updateCheckScheduler = scheduler
 		}
+	}
+
+	// **Anti-rollback for the unattended path.** The scheduled check installs
+	// nothing that is not strictly newer than what is running.
+	//
+	// The threat is not a forged manifest — the signature answers that — it is a
+	// *replayed* one. Anything that sits between this application and GitHub can
+	// serve a manifest we really did sign, just an older one, and every check
+	// after the signature would pass: right key, right hash, right bundle, right
+	// Team ID. The version comparison is the only thing in the chain that knows
+	// the difference between an update and a downgrade, and the expiry in the
+	// manifest is what stops that replay lasting longer than 35 days.
+	//
+	// **This deliberately duplicates the `backgroundCheck && ordering !=
+	// .orderedAscending` early return in -presentUIForBackgroundCheck:.** That one
+	// lives in code whose job is arranging an alert, reads as presentation logic,
+	// and is one plausible refactor away from being reorganised by somebody who is
+	// thinking about buttons. This one is next to the code that acts with nobody
+	// watching, and it is the one with a pin on it.
+	//
+	// **What this is not:** a high-water mark. TUF-style rollback protection
+	// remembers the newest version ever *seen* and refuses anything below it,
+	// which would also catch being held at an old-but-newer-than-current release.
+	// That needs somewhere to persist the mark, and the only somewhere available
+	// is a user default — writable by anything running as the user, where a single
+	// bogus value disables updates permanently and looks like nothing at all. A
+	// guard that can be turned into a silent denial of service by writing one
+	// preference is not obviously better than the freeze it prevents. Recorded as
+	// a known gap in ide/SOFTWARE_UPDATE_PLAN.md rather than half-built.
+	//
+	// A `nil` manifest is not an update. It cannot arrive here — an error and a
+	// manifest are exclusive in -checkForTestBuild:'s completion — but "no
+	// manifest" answering "yes, install it" is not a shape to leave lying around.
+	@objc(isUpdate:newerThanVersion:)
+	static func isUpdate(_ manifest: UpdateManifest?, newerThanVersion runningVersion: String?) -> Bool {
+		guard let manifest else { return false }
+		return OakCompareVersionStrings(runningVersion, manifest.version) == .orderedAscending
+	}
+
+	// Split out so the guard above can be pinned without a bundle: what a test can
+	// reach is the comparison, not Info.plist.
+	@objc static func runningVersion() -> String? {
+		return Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
 	}
 
 	@objc func checkForUpdate(_ sender: Any?) {

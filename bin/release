@@ -342,6 +342,18 @@ MANIFEST="$ROOT/build/release.json"
 printf '{"manifest":"%s","keyID":"j23-2026","signature":"%s"}' \
   "$(base64 -i "$INNER" | tr -d '\n')" "$SIG" > "$MANIFEST"
 
+# The application and the publisher have to agree about *where* the manifest
+# lives, and nothing connects them but two literals in two languages. If they
+# drift, the manifest is fine, the signature is fine, and every user's update
+# check quietly 404s — which is the kind of failure nobody notices for a month,
+# because a working updater and a silent one look identical from the outside.
+# So: the app being released must be asking for the URL this release publishes to.
+MANIFEST_URL="https://github.com/$REPO/releases/download/updates/release.json"
+grep -qF "$MANIFEST_URL" "$ROOT/Applications/TextMate/src/AppController.swift" || {
+  echo "error: AppController.swift does not name $MANIFEST_URL" >&2
+  echo "       the application in this release would look for its manifest elsewhere" >&2
+  exit 1; }
+
 # Check what was just produced, because a release whose manifest does not verify
 # is worse than no release: every user gets an integrity error and no way to tell
 # it from an attack.
@@ -423,4 +435,4 @@ fi
 gh release upload updates "$MANIFEST" --clobber
 
 echo "==> done: $(gh release view "$TAG" --json url --jq .url)"
-echo "==> manifest: https://github.com/$REPO/releases/download/updates/release.json"
+echo "==> manifest: $MANIFEST_URL"

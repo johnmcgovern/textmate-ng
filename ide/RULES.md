@@ -1007,3 +1007,16 @@ is wrong** — the harness, the oracle, and the app check.
     tried twice before working that out. When a framework's only entry points are
     user-initiated, say so in the commit and put the surface on the pre-release
     smoke list instead of implying the app run covered it.
+
+    **No longer true of `SoftwareUpdate` as of step 6b**, and the way it stopped
+    being true is the part to carry forward: wiring
+    `SoftwareUpdate.sharedInstance.channels` at launch *touches the singleton*,
+    which runs `-init`, which creates the background scheduler. One assignment
+    turned a class nothing instantiated into a class that schedules recurring
+    network activity. Reading `sharedInstance` is not a free way to reach a
+    property — it is whatever `+sharedInstance` and `-init` do, and here that is
+    an `NSBackgroundActivityScheduler` and an hourly fetch. Look at both before
+    assuming an assignment is inert.
+
+    The scheduler is still not a *prompt* rule-8 observable: DAS decides when a
+    discretionary activity first runs, and it is not obliged to be soon.

@@ -51,6 +51,11 @@
 - (NSMenu*)mainMenu;
 - (NSMenu*)applicationDockMenu:(NSApplication*)anApplication;
 - (BOOL)validateMenuItem:(NSMenuItem*)item;
+
+// The update channel this build asks for (step 6b). Pinned as a literal because
+// nothing else checks it: a wrong host is a build that never updates, and it
+// looks exactly like a build with nothing to update to.
+@property (class, readonly) NSURL* releaseUpdateChannelURL;
 @end
 
 // Hand declarations for the two Swift classes in MainMenu.swift, rather than

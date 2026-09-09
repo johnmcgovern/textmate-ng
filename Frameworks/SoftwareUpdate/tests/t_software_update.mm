@@ -568,3 +568,197 @@ void test_the_tools_signature_does_not_cover_a_different_payload ()
 
 	OAK_ASSERT_EQ((bool)[OakDownloadManager.sharedInstance data:different hasValidECDSASignature:signature usingPublicKey:publicKey], false);
 }
+
+// MARK: - The signed update manifest (step 4)
+
+// Everything the updater acts on lives inside the signature: which version, where
+// to fetch it, and what those bytes must hash to. The refusals matter more than
+// the acceptance, so each has its own test — a parser that accepts one thing it
+// should not is the whole vulnerability.
+//
+// The keypair is generated in the test. Nothing here needs J23's real key.
+
+static NSString* Base64OfString (NSString* str)
+{
+	return [[str dataUsingEncoding:NSUTF8StringEncoding] base64EncodedStringWithOptions:0];
+}
+
+// Builds the wrapper: base64 of the inner bytes, the key ID, and a signature over
+// those exact bytes.
+static NSData* MakeManifest (SecKeyRef privateKey, NSString* keyID, NSString* innerJSON)
+{
+	NSData* signedBytes = [innerJSON dataUsingEncoding:NSUTF8StringEncoding];
+	NSData* signature   = SignWithTestKey(privateKey, signedBytes);
+
+	NSDictionary* wrapper = @{
+		@"manifest":  [signedBytes base64EncodedStringWithOptions:0],
+		@"keyID":     keyID,
+		@"signature": [signature base64EncodedStringWithOptions:0],
+	};
+	return [NSJSONSerialization dataWithJSONObject:wrapper options:0 error:nil];
+}
+
+static NSString* const kInnerManifest =
+	@"{\"version\":\"2026.9-alpha.22\","
+	 @"\"url\":\"https://example.invalid/TextMate-NG.tbz\","
+	 @"\"sha256\":\"ABCDEF0123456789\","
+	 @"\"size\":12345678,"
+	 @"\"issued\":\"2026-09-01T00:00:00Z\","
+	 @"\"expires\":\"2126-09-01T00:00:00Z\","
+	 @"\"minimumSystemVersion\":\"15.0\"}";
+
+void test_manifest_parses_when_the_signature_is_good ()
+{
+	SecKeyRef key = MakeTestPrivateKey();
+	NSDictionary* keys = @{ @"test-key": Base64X963PublicKey(key) };
+
+	NSError* error = nil;
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:MakeManifest(key, @"test-key", kInnerManifest) keys:keys now:[NSDate date] error:&error];
+
+	OAK_ASSERT(manifest != nil);
+	OAK_ASSERT_EQ(std::string(manifest.version.UTF8String), std::string("2026.9-alpha.22"));
+	OAK_ASSERT_EQ(std::string(manifest.url.absoluteString.UTF8String), std::string("https://example.invalid/TextMate-NG.tbz"));
+	// Lower-cased on the way in, so the comparison against shasum's output is not
+	// a case accident waiting to happen.
+	OAK_ASSERT_EQ(std::string(manifest.sha256.UTF8String), std::string("abcdef0123456789"));
+	OAK_ASSERT_EQ((long long)manifest.size, (long long)12345678);
+
+	CFRelease(key);
+}
+
+// Signed by a key this build does not carry. The scenario is a compromised
+// publishing account: it can put a file at the URL, and it cannot sign.
+void test_manifest_is_rejected_when_the_key_is_unknown ()
+{
+	SecKeyRef key = MakeTestPrivateKey();
+	NSDictionary* keys = @{ @"some-other-key": Base64X963PublicKey(key) };
+
+	NSError* error = nil;
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:MakeManifest(key, @"test-key", kInnerManifest) keys:keys now:[NSDate date] error:&error];
+
+	OAK_ASSERT(manifest == nil);
+	OAK_ASSERT(error != nil);
+
+	CFRelease(key);
+}
+
+void test_manifest_is_rejected_when_signed_by_the_wrong_key ()
+{
+	SecKeyRef ours   = MakeTestPrivateKey();
+	SecKeyRef theirs = MakeTestPrivateKey();
+	// The key ID matches; the signature does not.
+	NSDictionary* keys = @{ @"test-key": Base64X963PublicKey(ours) };
+
+	NSError* error = nil;
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:MakeManifest(theirs, @"test-key", kInnerManifest) keys:keys now:[NSDate date] error:&error];
+
+	OAK_ASSERT(manifest == nil);
+	OAK_ASSERT(error != nil);
+
+	CFRelease(ours);
+	CFRelease(theirs);
+}
+
+// Tampering with the signed bytes must fail even though everything is
+// well-formed — this is the test that would catch a parser that verified the
+// wrapper and then parsed something else.
+void test_manifest_is_rejected_when_the_signed_bytes_are_altered ()
+{
+	SecKeyRef key = MakeTestPrivateKey();
+	NSDictionary* keys = @{ @"test-key": Base64X963PublicKey(key) };
+
+	NSData* good = MakeManifest(key, @"test-key", kInnerManifest);
+	NSMutableDictionary* wrapper = [[NSJSONSerialization JSONObjectWithData:good options:0 error:nil] mutableCopy];
+
+	// Same shape, different version, same signature.
+	NSString* altered = [kInnerManifest stringByReplacingOccurrencesOfString:@"2026.9-alpha.22" withString:@"2026.9-alpha.99"];
+	wrapper[@"manifest"] = Base64OfString(altered);
+
+	NSError* error = nil;
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:[NSJSONSerialization dataWithJSONObject:wrapper options:0 error:nil] keys:keys now:[NSDate date] error:&error];
+
+	OAK_ASSERT(manifest == nil);
+	OAK_ASSERT(error != nil);
+
+	CFRelease(key);
+}
+
+// Freshness. A CDN that can only replay what we signed can still replay it
+// forever, pinning users to a build with a known hole.
+void test_manifest_is_rejected_when_expired ()
+{
+	SecKeyRef key = MakeTestPrivateKey();
+	NSDictionary* keys = @{ @"test-key": Base64X963PublicKey(key) };
+
+	NSDate* wellAfterExpiry = [NSDate dateWithTimeIntervalSince1970:5000000000]; // 2128
+	NSError* error = nil;
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:MakeManifest(key, @"test-key", kInnerManifest) keys:keys now:wellAfterExpiry error:&error];
+
+	OAK_ASSERT(manifest == nil);
+	OAK_ASSERT(error != nil);
+
+	CFRelease(key);
+}
+
+// An absent expiry is a malformed manifest, not an eternal one.
+void test_manifest_without_an_expiry_is_rejected ()
+{
+	SecKeyRef key = MakeTestPrivateKey();
+	NSDictionary* keys = @{ @"test-key": Base64X963PublicKey(key) };
+
+	NSString* noExpiry = @"{\"version\":\"1\",\"url\":\"https://example.invalid/x.tbz\",\"sha256\":\"ab\",\"size\":1}";
+
+	NSError* error = nil;
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:MakeManifest(key, @"test-key", noExpiry) keys:keys now:[NSDate date] error:&error];
+
+	OAK_ASSERT(manifest == nil);
+	OAK_ASSERT(error != nil);
+
+	CFRelease(key);
+}
+
+// A validly-signed manifest that omits what the downloader needs is refused
+// rather than half-used.
+void test_manifest_missing_required_fields_is_rejected ()
+{
+	SecKeyRef key = MakeTestPrivateKey();
+	NSDictionary* keys = @{ @"test-key": Base64X963PublicKey(key) };
+
+	NSString* noHash = @"{\"version\":\"1\",\"url\":\"https://example.invalid/x.tbz\",\"size\":1,\"expires\":\"2126-09-01T00:00:00Z\"}";
+
+	NSError* error = nil;
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:MakeManifest(key, @"test-key", noHash) keys:keys now:[NSDate date] error:&error];
+
+	OAK_ASSERT(manifest == nil);
+	OAK_ASSERT(error != nil);
+
+	CFRelease(key);
+}
+
+void test_manifest_rejects_garbage ()
+{
+	NSDictionary* keys = @{};
+	NSError* error = nil;
+	OAK_ASSERT([TMUpdateManifest manifestFromData:[@"not json" dataUsingEncoding:NSUTF8StringEncoding] keys:keys now:[NSDate date] error:&error] == nil);
+	OAK_ASSERT(error != nil);
+}
+
+// Two keys embedded at once is the normal state, not an edge case: it is what
+// makes rotation a release rather than an emergency, and rotation is what keeps
+// the key-storage choice reversible.
+void test_manifest_accepts_either_of_two_embedded_keys ()
+{
+	SecKeyRef current = MakeTestPrivateKey();
+	SecKeyRef next    = MakeTestPrivateKey();
+	NSDictionary* keys = @{
+		@"j23-current": Base64X963PublicKey(current),
+		@"j23-next":    Base64X963PublicKey(next),
+	};
+
+	NSError* error = nil;
+	OAK_ASSERT([TMUpdateManifest manifestFromData:MakeManifest(current, @"j23-current", kInnerManifest) keys:keys now:[NSDate date] error:&error] != nil);
+	OAK_ASSERT([TMUpdateManifest manifestFromData:MakeManifest(next,    @"j23-next",    kInnerManifest) keys:keys now:[NSDate date] error:&error] != nil);
+
+	CFRelease(current);
+	CFRelease(next);
+}

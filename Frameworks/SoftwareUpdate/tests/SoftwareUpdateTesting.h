@@ -13,6 +13,8 @@
 #import "../src/OakDownloadManager.h"
 #import <Security/Security.h>
 
+@class TMUpdateManifest;
+
 @interface SoftwareUpdate (Testing)
 + (NSString*)mediaTypeFromContentType:(NSString*)contentType;
 @end
@@ -29,4 +31,17 @@
 // manifest that will carry the signature is step 4 of the plan.
 + (SecKeyRef)publicKeyFromBase64X963String:(NSString*)string;
 - (BOOL)data:(NSData*)data hasValidECDSASignature:(NSData*)signature usingPublicKey:(SecKeyRef)publicKey;
+@end
+
+// The signed update manifest (step 4). `now` is a parameter so expiry is testable
+// without waiting a month; `keys` so the pins can use a throwaway keypair instead
+// of J23's real one.
+@interface TMUpdateManifest : NSObject
+@property (nonatomic, readonly) NSString* version;
+@property (nonatomic, readonly) NSURL*    url;
+@property (nonatomic, readonly) NSString* sha256;
+@property (nonatomic, readonly) int64_t   size;
+@property (nonatomic, readonly) NSString* minimumSystemVersion;
+
++ (TMUpdateManifest*)manifestFromData:(NSData*)data keys:(NSDictionary<NSString*, NSString*>*)keys now:(NSDate*)now error:(NSError**)error;
 @end

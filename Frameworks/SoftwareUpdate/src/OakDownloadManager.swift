@@ -492,6 +492,58 @@ class OakDownloadManager: NSObject {
 		return (first as! SecKey)
 	}
 
+	// MARK: - ECDSA verification — the update channel
+	//
+	// Separate from the SecTransform path below, and the two coexist on purpose.
+	// That one verifies MacroMates' bundle index for BundlesManager, using DSA keys
+	// that arrive *inside* the index itself; it is not ours to change and it goes
+	// when the bundle index goes. This one is for the update manifest, and nothing
+	// new should be built on the deprecated API. See ide/SOFTWARE_UPDATE_DESIGN.md.
+	//
+	// P-256 with SHA-256. The public key travels as base64 of its **X9.63**
+	// representation — `0x04 || X || Y`, 65 bytes — rather than PEM or
+	// SubjectPublicKeyInfo, because that is exactly what
+	// SecKeyCopyExternalRepresentation emits and SecKeyCreateWithData consumes for
+	// kSecAttrKeyTypeECSECPrimeRandom. No ASN.1 parsing on either side, and no
+	// third format to get wrong. (ide/SOFTWARE_UPDATE_PLAN.md says "DER base64";
+	// it is X9.63, and the plan is wrong on that word only.)
+	@objc(publicKeyFromBase64X963String:)
+	static func publicKey(fromBase64X963String string: String?) -> SecKey? {
+		guard let string, let keyData = Data(base64Encoded: string, options: [.ignoreUnknownCharacters]) else { return nil }
+
+		let attributes: [String: Any] = [
+			kSecAttrKeyType as String:  kSecAttrKeyTypeECSECPrimeRandom,
+			kSecAttrKeyClass as String: kSecAttrKeyClassPublic,
+		]
+
+		var error: Unmanaged<CFError>?
+		guard let key = SecKeyCreateWithData(keyData as CFData, attributes as CFDictionary, &error) else {
+			log.error("SecKeyCreateWithData: \(String(describing: error?.takeUnretainedValue()), privacy: .public)")
+			return nil
+		}
+		return key
+	}
+
+	@objc(data:hasValidECDSASignature:usingPublicKey:)
+	func data(_ contentData: Data?, hasValidECDSASignature signature: Data?, usingPublicKey publicKey: SecKey?) -> Bool {
+		guard let contentData, let signature, let publicKey else { return false }
+
+		let algorithm: SecKeyAlgorithm = .ecdsaSignatureMessageX962SHA256
+		guard SecKeyIsAlgorithmSupported(publicKey, .verify, algorithm) else {
+			log.error("Public key does not support ECDSA/SHA-256 verification")
+			return false
+		}
+
+		var error: Unmanaged<CFError>?
+		let ok = SecKeyVerifySignature(publicKey, algorithm, contentData as CFData, signature as CFData, &error)
+		if !ok, let error {
+			// Expected on a bad signature as well as a malformed one, so this is a
+			// log line and not an error path of its own.
+			log.debug("SecKeyVerifySignature: \(String(describing: error.takeUnretainedValue()), privacy: .public)")
+		}
+		return ok
+	}
+
 	func data(_ contentData: Data?, hasValidBase64EncodedSignature encodedSignature: String?, usingPublicKeyString publicKeyString: String?) -> Bool {
 		guard let encodedSignature, let contentData, let publicKeyString else { return false }
 

@@ -372,3 +372,154 @@ void test_extracting_a_non_archive_fails ()
 
 	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
 }
+
+// MARK: - ECDSA verification (the update channel)
+
+// P-256/SHA-256, which is what the update manifest will be signed with. The DSA
+// path elsewhere in this class stays for MacroMates' bundle index and is not
+// touched; these two verifiers coexist and the signee name chooses. See
+// ide/SOFTWARE_UPDATE_DESIGN.md.
+//
+// The keypair is generated here rather than shipped, so the pin needs nothing
+// from the keychain, no entitlement, and no real J23 key. A *software* key is
+// enough to pin the verification contract; whether the real key lives in the
+// Secure Enclave is a property of how it was created, not of how it verifies.
+
+static SecKeyRef MakeTestPrivateKey ()
+{
+	NSDictionary* attributes = @{
+		(__bridge id)kSecAttrKeyType:       (__bridge id)kSecAttrKeyTypeECSECPrimeRandom,
+		(__bridge id)kSecAttrKeySizeInBits: @256,
+	};
+
+	CFErrorRef error = NULL;
+	SecKeyRef key = SecKeyCreateRandomKey((__bridge CFDictionaryRef)attributes, &error);
+	if(!key && error)
+		CFRelease(error);
+	return key;
+}
+
+static NSString* Base64X963PublicKey (SecKeyRef privateKey)
+{
+	SecKeyRef publicKey = SecKeyCopyPublicKey(privateKey);
+	CFErrorRef error = NULL;
+	CFDataRef data = SecKeyCopyExternalRepresentation(publicKey, &error);
+	NSString* res = data ? [(__bridge NSData*)data base64EncodedStringWithOptions:0] : nil;
+	if(data)  CFRelease(data);
+	if(error) CFRelease(error);
+	CFRelease(publicKey);
+	return res;
+}
+
+static NSData* SignWithTestKey (SecKeyRef privateKey, NSData* payload)
+{
+	CFErrorRef error = NULL;
+	CFDataRef signature = SecKeyCreateSignature(privateKey, kSecKeyAlgorithmECDSASignatureMessageX962SHA256, (__bridge CFDataRef)payload, &error);
+	NSData* res = signature ? [(__bridge NSData*)signature copy] : nil;
+	if(signature) CFRelease(signature);
+	if(error)     CFRelease(error);
+	return res;
+}
+
+static NSData* FlipFirstByte (NSData* data)
+{
+	NSMutableData* res = [data mutableCopy];
+	((uint8_t*)res.mutableBytes)[0] ^= 0x01;
+	return res;
+}
+
+void test_ecdsa_public_key_round_trips_through_its_string_form ()
+{
+	SecKeyRef privateKey = MakeTestPrivateKey();
+	OAK_ASSERT(privateKey != NULL);
+
+	// X9.63 for P-256 is 0x04 || X || Y — 65 bytes. Pinned because the string form
+	// is what Info.plist will carry, and a change of format here is a channel that
+	// silently verifies nothing.
+	NSString* encoded = Base64X963PublicKey(privateKey);
+	OAK_ASSERT(encoded != nil);
+	OAK_ASSERT_EQ((size_t)[[NSData alloc] initWithBase64EncodedString:encoded options:0].length, (size_t)65);
+
+	SecKeyRef publicKey = [OakDownloadManager publicKeyFromBase64X963String:encoded];
+	OAK_ASSERT(publicKey != NULL);
+
+	CFRelease(privateKey);
+}
+
+void test_ecdsa_rejects_a_string_that_is_not_a_key ()
+{
+	OAK_ASSERT([OakDownloadManager publicKeyFromBase64X963String:nil] == NULL);
+	OAK_ASSERT([OakDownloadManager publicKeyFromBase64X963String:@"not base64 at all !!"] == NULL);
+	OAK_ASSERT([OakDownloadManager publicKeyFromBase64X963String:@"aGVsbG8="] == NULL); // valid base64, not a key
+}
+
+void test_ecdsa_accepts_a_good_signature ()
+{
+	SecKeyRef privateKey = MakeTestPrivateKey();
+	SecKeyRef publicKey  = [OakDownloadManager publicKeyFromBase64X963String:Base64X963PublicKey(privateKey)];
+
+	NSData* payload   = [@"{\"version\":\"2026.9-alpha.22\"}" dataUsingEncoding:NSUTF8StringEncoding];
+	NSData* signature = SignWithTestKey(privateKey, payload);
+	OAK_ASSERT(signature != nil);
+
+	OAK_ASSERT_EQ((bool)[OakDownloadManager.sharedInstance data:payload hasValidECDSASignature:signature usingPublicKey:publicKey], true);
+
+	CFRelease(privateKey);
+}
+
+// The three ways it must say no. Each is a separate test because a verifier that
+// fails one of them and passes the others is the interesting bug.
+void test_ecdsa_rejects_tampered_payload ()
+{
+	SecKeyRef privateKey = MakeTestPrivateKey();
+	SecKeyRef publicKey  = [OakDownloadManager publicKeyFromBase64X963String:Base64X963PublicKey(privateKey)];
+
+	NSData* payload   = [@"{\"version\":\"2026.9-alpha.22\"}" dataUsingEncoding:NSUTF8StringEncoding];
+	NSData* signature = SignWithTestKey(privateKey, payload);
+
+	OAK_ASSERT_EQ((bool)[OakDownloadManager.sharedInstance data:FlipFirstByte(payload) hasValidECDSASignature:signature usingPublicKey:publicKey], false);
+
+	CFRelease(privateKey);
+}
+
+void test_ecdsa_rejects_tampered_signature ()
+{
+	SecKeyRef privateKey = MakeTestPrivateKey();
+	SecKeyRef publicKey  = [OakDownloadManager publicKeyFromBase64X963String:Base64X963PublicKey(privateKey)];
+
+	NSData* payload   = [@"{\"version\":\"2026.9-alpha.22\"}" dataUsingEncoding:NSUTF8StringEncoding];
+	NSData* signature = SignWithTestKey(privateKey, payload);
+
+	OAK_ASSERT_EQ((bool)[OakDownloadManager.sharedInstance data:payload hasValidECDSASignature:FlipFirstByte(signature) usingPublicKey:publicKey], false);
+
+	CFRelease(privateKey);
+}
+
+// The one that matters most: a validly-signed manifest from somebody else's key.
+void test_ecdsa_rejects_a_signature_from_another_key ()
+{
+	SecKeyRef ours      = MakeTestPrivateKey();
+	SecKeyRef theirs    = MakeTestPrivateKey();
+	SecKeyRef ourPublic = [OakDownloadManager publicKeyFromBase64X963String:Base64X963PublicKey(ours)];
+
+	NSData* payload   = [@"{\"version\":\"2026.9-alpha.22\"}" dataUsingEncoding:NSUTF8StringEncoding];
+	NSData* signature = SignWithTestKey(theirs, payload);
+
+	OAK_ASSERT_EQ((bool)[OakDownloadManager.sharedInstance data:payload hasValidECDSASignature:signature usingPublicKey:ourPublic], false);
+
+	CFRelease(ours);
+	CFRelease(theirs);
+}
+
+void test_ecdsa_rejects_missing_arguments ()
+{
+	SecKeyRef privateKey = MakeTestPrivateKey();
+	SecKeyRef publicKey  = [OakDownloadManager publicKeyFromBase64X963String:Base64X963PublicKey(privateKey)];
+	NSData* payload      = [@"x" dataUsingEncoding:NSUTF8StringEncoding];
+
+	OAK_ASSERT_EQ((bool)[OakDownloadManager.sharedInstance data:nil     hasValidECDSASignature:payload usingPublicKey:publicKey], false);
+	OAK_ASSERT_EQ((bool)[OakDownloadManager.sharedInstance data:payload hasValidECDSASignature:nil     usingPublicKey:publicKey], false);
+	OAK_ASSERT_EQ((bool)[OakDownloadManager.sharedInstance data:payload hasValidECDSASignature:payload usingPublicKey:NULL], false);
+
+	CFRelease(privateKey);
+}

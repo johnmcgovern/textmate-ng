@@ -11,6 +11,7 @@
 // here rather than failing silently at runtime (rule 64).
 #import "../src/SoftwareUpdate.h"
 #import "../src/OakDownloadManager.h"
+#import <Security/Security.h>
 
 @interface SoftwareUpdate (Testing)
 + (NSString*)mediaTypeFromContentType:(NSString*)contentType;
@@ -22,4 +23,10 @@
 // ordering is not otherwise reachable from a test — a real download needs a
 // server. See ide/SOFTWARE_UPDATE_PLAN.md step 1.
 - (BOOL)extractArchiveAtURL:(NSURL*)fileURL intoDirectory:(NSURL*)directory error:(NSError**)error;
+
+// The update channel's ECDSA verification, pinned in t_software_update.mm with a
+// keypair generated in the test. Nothing in the app reaches these yet — the
+// manifest that will carry the signature is step 4 of the plan.
++ (SecKeyRef)publicKeyFromBase64X963String:(NSString*)string;
+- (BOOL)data:(NSData*)data hasValidECDSASignature:(NSData*)signature usingPublicKey:(SecKeyRef)publicKey;
 @end

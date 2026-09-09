@@ -973,8 +973,30 @@ about.
 Older tags were deliberately **not** backfilled: their artifacts no longer exist,
 so backfilling would mean rebuilding and re-notarizing alphas nobody ever had.
 
-Still not software update. Sparkle-style updating stays off while the fork has no
-server, and a GitHub Release is not a substitute for one.
+**Superseded 2026-09-08 — software update is on.** This paragraph used to read
+"Still not software update. Sparkle-style updating stays off while the fork has
+no server, and a GitHub Release is not a substitute for one." The second half was
+the mistake: a GitHub Release *is* a substitute for one, once what it serves is a
+signed manifest rather than a directory listing. Steps 1–6 of
+`ide/SOFTWARE_UPDATE_DESIGN.md` and `ide/SOFTWARE_UPDATE_PLAN.md` are landed —
+ECDSA P-256 manifest signing with a key in the release Mac's keychain, payload
+pinned by SHA-256 from inside the signature, a Developer ID requirement checked
+on the downloaded bundle before anything reads it, and anti-rollback on the
+unattended path. `bin/release` publishes the payload and the manifest; the app
+fetches
+`https://github.com/johnmcgovern/textmate-ng/releases/download/updates/release.json`
+hourly.
+
+Not yet exercised: nothing has ever self-updated. That is step 8 (J3) — a first
+update on a machine that is not the release Mac, including a deliberate
+wrong-hash manifest that must be refused. Until that has been done, treat the
+chain as built and untested end to end.
+
+**The release checklist gained an item.** The manifest carries a 35-day
+`expires`, and `bin/release` re-signs it every release. If a month goes by with
+no release, run `bin/release --resign-manifest`: it refreshes `issued`/`expires`
+on the published manifest and re-uploads, with no build and no tag. Letting it
+lapse means every user's update check fails with "Update manifest has expired."
 
 ## Survey (2026-08-27): where the portable work actually is
 
@@ -1023,6 +1045,13 @@ called from Swift** (`TerminalPreferences.swift:234`) as well as from
 BundlesManager's ObjC++.
 
 ### Which one, and why it is not the bigger number
+
+**Stale as of 2026-09-08: `SoftwareUpdate` was taken, and is done.** The table
+above still says "1273 lines, 0 Swift"; it is now Swift apart from the three
+files rule 19 and rule 25 keep in ObjC++. The reasoning below was sound and its
+premise expired — the feature was switched off *because* there was no channel,
+and the update work put one there, which is also what made it exercisable by
+hand. `HTMLOutput` is still the untouched framework and still the recommendation.
 
 **Take `HTMLOutput` first.** `SoftwareUpdate` has more portable lines and a test
 bundle already, but the feature is **switched off in this fork** — there is no
@@ -1989,7 +2018,7 @@ frame and takes two seconds to find:
 | Bundle Editor | Bundles ▸ Edit Bundles | Window appears, list populates |
 | Go to File | ⌘T | Panel appears, filtering responds |
 | Commit window | Bundles ▸ … ▸ Commit | Window appears (needs a dirty repo) |
-| Software Update | Check for Updates | Panel appears with a version verdict — **no test covers this**; nothing touches SoftwareUpdate at launch, so it is unreachable from any automated run (rule 64) |
+| Software Update | Check for Updates | Panel appears with a version verdict. **Changed 2026-09-08:** a channel is now wired, so the background scheduler *is* created at launch and does fetch — the log line to look for is `Update manifest failed to parse` or a version verdict, and `defaults read com.j23software.TextMate-NG SoftwareUpdateLastPoll` records every completed check. The **manual** Check Now path still has no automated coverage |
 | HTML output | run any bundle command with HTML output | Window appears |
 | A document | open a source file | Text draws, **gutter has line numbers** |
 

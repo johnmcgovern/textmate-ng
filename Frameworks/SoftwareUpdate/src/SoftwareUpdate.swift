@@ -227,17 +227,30 @@ class SoftwareUpdate: NSObject {
 				var manifest: UpdateManifest?
 
 				if error == nil {
-					// The manifest is JSON and nothing else. The property-list branch
-					// that used to be here served MacroMates' feed, which this fork
-					// does not use; a signed manifest has one format by design, and
-					// accepting a second one is a second parser to get wrong.
-					if let contentType = (response as? HTTPURLResponse)?.allHeaderFields["Content-Type"] as? String,
-					   SoftwareUpdate.mediaType(fromContentType: contentType) != "application/json" {
-						error = NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: "Update manifest is not JSON (server sent “\(contentType)”)."])
-					} else if let data {
+					// **Content-Type is advisory here, not a gate**, and an earlier
+					// version of this method got that wrong by refusing anything that
+					// was not application/json.
+					//
+					// The header is supplied by the transport, and not trusting the
+					// transport is the entire premise of this design — it is why the
+					// manifest is signed at all. Refusing on it adds nothing a bad
+					// signature would not catch, and it forecloses hosting: a GitHub
+					// *release asset* is served as application/octet-stream (measured),
+					// so the strict version could not read a manifest published the
+					// same way as the build it describes.
+					//
+					// It is still worth reading. When parsing fails, a Content-Type of
+					// text/html is the difference between "malformed manifest" and "you
+					// were served an error page", and that is most of the diagnosis.
+					if let data {
 						do {
 							manifest = try UpdateManifest.manifest(from: data, keys: UpdateManifest.embeddedKeys(), now: Date())
 						} catch let manifestError {
+							let contentType = (response as? HTTPURLResponse)?.allHeaderFields["Content-Type"] as? String
+							let mediaType = SoftwareUpdate.mediaType(fromContentType: contentType)
+							if let mediaType, mediaType != "application/json" {
+								log.error("Update manifest failed to parse; the server sent \(mediaType, privacy: .public)")
+							}
 							error = manifestError
 						}
 					} else {

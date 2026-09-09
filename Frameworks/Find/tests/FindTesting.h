@@ -40,3 +40,16 @@
 + (NSString*)shownResultCountStringForCount:(NSUInteger)count searchString:(NSString*)searchString;
 + (NSString*)searchedFilesSuffixForFileCount:(NSUInteger)fileCount seconds:(NSString*)seconds;
 @end
+
+// Hand declaration of the Swift FFStatusBarViewController (rule 23 for tests
+// only): the class has no consumer outside this module now that Find.swift sees
+// it directly, so its real header is gone — but the pins in
+// t_find_view_controllers.mm still need the ObjC spellings, and this is what
+// makes a rename fail to compile rather than fail at runtime (rule 64).
+@interface FFStatusBarViewController : NSViewController
+@property (nonatomic) NSString* statusText;
+@property (nonatomic) NSString* alternateStatusText;
+@property (nonatomic) BOOL      progressIndicatorVisible;
+@property (nonatomic) SEL       stopAction;
+@property (nonatomic) id        stopTarget;
+@end

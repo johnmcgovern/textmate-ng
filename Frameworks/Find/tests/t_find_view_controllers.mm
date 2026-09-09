@@ -1,4 +1,4 @@
-#import "../src/FFStatusBarViewController.h"
+#import "FindTesting.h"
 #import "../src/FFTextFieldViewController.h"
 #import <Cocoa/Cocoa.h>
 

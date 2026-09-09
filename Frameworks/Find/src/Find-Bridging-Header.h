@@ -59,7 +59,6 @@
 #import "FindSupport.h"
 
 // This framework's remaining ObjC++ view controllers, which Find owns and drives.
-#import "FFStatusBarViewController.h"
 #import "FFTextFieldViewController.h"
 #import "FFFolderMenu.h"
 

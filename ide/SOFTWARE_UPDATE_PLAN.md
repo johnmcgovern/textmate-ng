@@ -460,6 +460,29 @@ manifest.
 Write what happened into the handoff. If anything in this list did not happen,
 the feature is not done.
 
+## Known gaps — things believed true that no test guards
+
+- **"Nothing is extracted before verification" is structural, not pinned.**
+  Step 1 moved extraction after verification and step 4b verifies by checksum,
+  and both are visible in ten readable lines of `-didCompleteWithError:`. But
+  moving extraction back in front of `verify` **fails no test in the suite** —
+  confirmed by mutation on 2026-09-08. It is not observable from a test:
+  extraction goes into an `NSItemReplacementDirectory`, all of those land under
+  `<TMPDIR>/TemporaryItems`, and that directory is not readable
+  (`contentsOfDirectoryAtPath:` → nil, "Operation not permitted"). A test that
+  counted them was written, passed, and was deleted, because it could not fail.
+
+  To close it, the extraction destination would have to be injectable — a
+  `KeyStore`-shaped seam for the filesystem — which is API added for a test. Left
+  open deliberately; whoever changes that method should know the guard is a code
+  review, not a test.
+
+- **A missing `dynamic` on `FFTextFieldViewController.hasFocus`/`stringValue`
+  is unguarded.** The binding pins set the property from ObjC++, which reaches
+  the setter through `objc_msgSend` and fires KVO regardless. `dynamic` matters
+  for the Swift-side set, which happens inside `-observeValueForKeyPath:` and
+  needs a window. See `6ca214c8`.
+
 ## Hazards, specific to this work
 
 - **Rule 64 — custom getters.** `checking` is already handled (`isChecking`

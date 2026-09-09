@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import CryptoKit
 import os
 
 // Ported from OakDownloadManager.mm. Signed downloads: a plain file fetch with an
@@ -69,8 +70,24 @@ private func GetHardwareInfo(_ field: Int32, isInteger: Bool = false) -> String 
 // The payload is no longer accumulated in memory either. It is written straight
 // to a scratch file and memory-mapped for verification, which drops peak usage
 // by the size of the download — around 50 MB for the application.
+// How a downloaded archive is vouched for.
+//
+// `.headerSignature` is the original scheme: the signature rides in
+// `x-amz-meta-x-signature` response headers and is checked against keys the
+// caller supplies. BundlesManager still uses it for MacroMates' bundles, and it
+// is not ours to change.
+//
+// `.digest` is the update channel's: the *manifest* is signed, and it carries the
+// payload's size and SHA-256, so the archive needs no signature of its own. This
+// is the shape Chrome's updater uses, and it is what makes GitHub — which cannot
+// set those headers on a release asset — usable as a CDN at all.
+private enum ArchiveVerification {
+	case headerSignature(publicKeys: [String: String])
+	case digest(sha256: String, size: Int64)
+}
+
 private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSessionDataDelegate {
-	private let publicKeys: [String: String]
+	private let verification: ArchiveVerification
 	private var signee: String?
 	private var signature: String?
 
@@ -96,9 +113,9 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 
 	let progress: Progress
 
-	init(url: URL, forReplacing localURL: URL?, publicKeys: [String: String], completionHandler: @escaping (URL?, Error?) -> Void) {
+	init(url: URL, forReplacing localURL: URL?, verification: ArchiveVerification, completionHandler: @escaping (URL?, Error?) -> Void) {
 		self.fileURLToReplace  = localURL
-		self.publicKeys        = publicKeys
+		self.verification      = verification
 		self.completionHandler = completionHandler
 		self.progress          = Progress.discreteProgress(totalUnitCount: -1)
 
@@ -186,6 +203,17 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 			return
 		}
 
+		// Refuse past the declared size rather than filling the disk with something
+		// that cannot possibly hash correctly. Checked before the write, so nothing
+		// beyond the bound is ever stored.
+		if case .digest(_, let expectedSize) = verification,
+		   dataTask.countOfBytesReceived > expectedSize {
+			log.error("Update payload exceeds its declared size of \(expectedSize) bytes")
+			writeError = NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Update payload is larger than its manifest declares."])
+			dataTask.cancel()
+			return
+		}
+
 		do {
 			try handle.write(contentsOf: data)
 		} catch {
@@ -219,6 +247,39 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 		progress.completedUnitCount = dataTask.countOfBytesReceived
 	}
 
+	// nil when the payload is acceptable, otherwise the refusal. Whichever scheme
+	// is in force, this runs on the complete file and *before* anything is
+	// extracted.
+	private func verify(_ payload: Data?) -> Error? {
+		func refusal(_ message: String) -> Error {
+			log.error("\(message, privacy: .public)")
+			return NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: message])
+		}
+
+		switch verification {
+			case .headerSignature(let publicKeys):
+				guard OakDownloadManager.sharedInstance.data(payload, hasValidBase64EncodedSignature: signature, usingPublicKeyString: signee.flatMap { publicKeys[$0] }) else {
+					return refusal("Unable to verify signature.")
+				}
+				return nil
+
+			case .digest(let expectedSHA256, let expectedSize):
+				guard let payload else {
+					return refusal("Update payload is empty.")
+				}
+				// Size first: it is free, and a mismatch means the hash cannot match
+				// either, so there is no reason to read the whole file to find out.
+				guard payload.count == Int(expectedSize) else {
+					return refusal("Update payload is \(payload.count) bytes, but its manifest declares \(expectedSize).")
+				}
+				let digest = SHA256.hash(data: payload).map { String(format: "%02x", $0) }.joined()
+				guard digest == expectedSHA256.lowercased() else {
+					return refusal("Update payload does not match the checksum in its manifest.")
+				}
+				return nil
+		}
+	}
+
 	func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError downloadError: Error?) {
 		try? downloadHandle?.close()
 		downloadHandle = nil
@@ -237,10 +298,9 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 		// the "Unable to launch tar." the streaming version reported for that case.
 		let payload = downloadFileURL.flatMap { try? Data(contentsOf: $0, options: .mappedIfSafe) }
 
-		guard OakDownloadManager.sharedInstance.data(payload, hasValidBase64EncodedSignature: signature, usingPublicKeyString: signee.flatMap { publicKeys[$0] }) else {
-			log.error("Unable to verify signature")
+		if let failure = verify(payload) {
 			removeScratchFile()
-			completionHandler(nil, NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unable to verify signature."]))
+			completionHandler(nil, failure)
 			return
 		}
 
@@ -367,9 +427,19 @@ class OakDownloadManager: NSObject {
 		dataTask.resume()
 	}
 
+	// BundlesManager's entry point: signature in the response headers. Unchanged,
+	// and pinned as unchanged — it is the path this framework did not mean to touch.
 	@objc(downloadArchiveAtURL:forReplacingURL:publicKeys:completionHandler:)
 	func downloadArchive(at serverURL: URL, forReplacing localURL: URL?, publicKeys: [String: String], completionHandler: @escaping (URL?, Error?) -> Void) -> ProgressReporting {
-		return OakDownloadArchiveTask(url: serverURL, forReplacing: localURL, publicKeys: publicKeys, completionHandler: completionHandler)
+		return OakDownloadArchiveTask(url: serverURL, forReplacing: localURL, verification: .headerSignature(publicKeys: publicKeys), completionHandler: completionHandler)
+	}
+
+	// The update channel's entry point: size and checksum from a signed manifest,
+	// no signature on the archive itself. Both are checked on the complete file,
+	// before tar is given anything.
+	@objc(downloadArchiveAtURL:forReplacingURL:expectedSHA256:expectedSize:completionHandler:)
+	func downloadArchive(at serverURL: URL, forReplacing localURL: URL?, expectedSHA256: String, expectedSize: Int64, completionHandler: @escaping (URL?, Error?) -> Void) -> ProgressReporting {
+		return OakDownloadArchiveTask(url: serverURL, forReplacing: localURL, verification: .digest(sha256: expectedSHA256, size: expectedSize), completionHandler: completionHandler)
 	}
 
 	// MARK: - Archive extraction

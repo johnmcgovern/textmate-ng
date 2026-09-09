@@ -30,6 +30,12 @@
 // keypair generated in the test. Nothing in the app reaches these yet — the
 // manifest that will carry the signature is step 4 of the plan.
 + (SecKeyRef)publicKeyFromBase64X963String:(NSString*)string;
+
+// The update channel's download: size and checksum from a signed manifest, no
+// signature on the archive itself. Pinned end-to-end over a file:// URL, which a
+// URLSession data task delivers through the delegate exactly as it does an HTTP
+// one (measured 2026-09-08).
+- (id<NSProgressReporting>)downloadArchiveAtURL:(NSURL*)serverURL forReplacingURL:(NSURL*)localURL expectedSHA256:(NSString*)sha256 expectedSize:(int64_t)size completionHandler:(void(^)(NSURL* extractedArchiveURL, NSError* error))completionHandler;
 - (BOOL)data:(NSData*)data hasValidECDSASignature:(NSData*)signature usingPublicKey:(SecKeyRef)publicKey;
 @end
 

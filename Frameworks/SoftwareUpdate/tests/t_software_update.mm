@@ -762,3 +762,170 @@ void test_manifest_accepts_either_of_two_embedded_keys ()
 	CFRelease(current);
 	CFRelease(next);
 }
+
+// MARK: - The hash-verified download (step 4b)
+
+// End-to-end over a file:// URL: a URLSession data task delivers one through the
+// delegate exactly as it does an HTTP one, so the whole download path runs —
+// including the part that matters most, which is that **nothing is extracted
+// until the bytes have been vouched for**.
+
+static NSString* SHA256HexOfFile (NSURL* url)
+{
+	NSTask* task = [[NSTask alloc] init];
+	task.launchPath = @"/usr/bin/shasum";
+	task.arguments  = @[ @"-a", @"256", url.path ];
+	NSPipe* pipe = [NSPipe pipe];
+	task.standardOutput = pipe;
+	[task launch];
+	NSData* out = [pipe.fileHandleForReading readDataToEndOfFile];
+	[task waitUntilExit];
+	NSString* line = [[NSString alloc] initWithData:out encoding:NSUTF8StringEncoding];
+	return [[line componentsSeparatedByString:@" "] firstObject];
+}
+
+// Drives one download to completion and hands back what the completion handler
+// got. `expectedSHA256` and `expectedSize` are what the manifest would have said.
+// `forReplacingURL:` must be a real file URL: NSItemReplacementDirectory is
+// defined relative to the item being replaced, and Foundation refuses a nil
+// `appropriateForURL:`. In the app it is always the application bundle. Passing
+// the archive here puts the replacement directory on the same volume, which is
+// the property that makes -replaceItemAtURL: atomic in production.
+static void RunDownload (NSURL* archive, NSString* sha256, int64_t size, NSURL** outURL, NSError** outError)
+{
+	__block BOOL done = NO;
+	__block NSURL* resultURL = nil;
+	__block NSError* resultError = nil;
+
+	[OakDownloadManager.sharedInstance downloadArchiveAtURL:archive forReplacingURL:archive expectedSHA256:sha256 expectedSize:size completionHandler:^(NSURL* extracted, NSError* error){
+		// -retain, and it is not optional: this file compiles with ARC off, so
+		// storing the handler's arguments past its return without owning them reads
+		// freed memory in the assertions below. That is rule 63, and it cost three
+		// tests crashing with *zero reported failures* before rule 54's third grep
+		// caught it. Leaked deliberately; these are short-lived tests.
+		resultURL   = [extracted retain];
+		resultError = [error retain];
+		done        = YES;
+	}];
+
+	NSDate* giveUp = [NSDate dateWithTimeIntervalSinceNow:10];
+	while(!done && [giveUp timeIntervalSinceNow] > 0)
+		[NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+
+	OAK_ASSERT(done);
+	*outURL   = resultURL;
+	*outError = resultError;
+}
+
+void test_download_extracts_when_the_checksum_matches ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* archive = MakeArchive(scratch);
+	OAK_ASSERT(archive != nil);
+
+	NSNumber* size = nil;
+	[archive getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+
+	NSURL* extracted = nil; NSError* error = nil;
+	RunDownload(archive, SHA256HexOfFile(archive), size.longLongValue, &extracted, &error);
+
+	if(error) OAK_FAIL(std::string("unexpected error: ") + error.localizedDescription.UTF8String);
+	OAK_ASSERT(extracted != nil);
+	NSString* tool = [extracted URLByAppendingPathComponent:@"Contents/MacOS/tool"].path;
+	OAK_ASSERT_EQ((bool)[NSFileManager.defaultManager fileExistsAtPath:tool], true);
+
+	[NSFileManager.defaultManager removeItemAtURL:extracted error:nil];
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// **The pin step 1 was written for.** A payload whose checksum does not match
+// must be refused, and — the part that would otherwise be silent — nothing may be
+// extracted. The ObjC++ this was ported from streamed the archive into tar as it
+// arrived and only then checked its signature; this asserts that cannot happen.
+void test_download_extracts_nothing_when_the_checksum_is_wrong ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* archive = MakeArchive(scratch);
+
+	NSNumber* size = nil;
+	[archive getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+
+	NSURL* extracted = nil; NSError* error = nil;
+	RunDownload(archive, @"0000000000000000000000000000000000000000000000000000000000000000", size.longLongValue, &extracted, &error);
+
+	OAK_ASSERT(extracted == nil);
+	OAK_ASSERT(error != nil);
+
+	// **What this does NOT assert, and the honest reason.** Refusing is only half
+	// of what step 1 was for; the other half is that tar never ran. That is not
+	// observable from here: extraction goes into an NSItemReplacementDirectory,
+	// those all land in <TMPDIR>/TemporaryItems, and that directory is not
+	// readable — `contentsOfDirectoryAtPath:` returns nil with "Operation not
+	// permitted". A version of this test that counted them was written, passed,
+	// and was deleted: it could not fail, which makes it worse than nothing
+	// (rule 40).
+	//
+	// Confirmed by mutation instead: moving extraction back before verification
+	// fails **no test in this suite**. The ordering is structural — `verify`
+	// returns before the replacement directory is created, in ten readable lines
+	// of -didCompleteWithError: — and it is *not* pinned. Recorded as a known gap
+	// in ide/SOFTWARE_UPDATE_PLAN.md rather than papered over.
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// A payload larger than the manifest declares is refused. Checked as bytes
+// arrive, so an attacker cannot fill the disk on the way to failing the hash.
+void test_download_refuses_a_payload_larger_than_declared ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* archive = MakeArchive(scratch);
+
+	NSURL* extracted = nil; NSError* error = nil;
+	RunDownload(archive, SHA256HexOfFile(archive), 16, &extracted, &error);   // declares 16 bytes
+
+	OAK_ASSERT(extracted == nil);
+	OAK_ASSERT(error != nil);
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// A payload *smaller* than declared fails too — the size check is an equality,
+// not an upper bound, so a truncated download cannot slip through to the hash.
+void test_download_refuses_a_payload_smaller_than_declared ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* archive = MakeArchive(scratch);
+
+	NSNumber* size = nil;
+	[archive getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+
+	NSURL* extracted = nil; NSError* error = nil;
+	RunDownload(archive, SHA256HexOfFile(archive), size.longLongValue + 4096, &extracted, &error);
+
+	OAK_ASSERT(extracted == nil);
+	OAK_ASSERT(error != nil);
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// Upper-case hex from a manifest is still a match. shasum prints lower case, but
+// nothing stops a generator emitting upper, and a case mismatch would refuse
+// every update with a checksum error that looked like tampering.
+void test_download_accepts_an_uppercase_checksum ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* archive = MakeArchive(scratch);
+
+	NSNumber* size = nil;
+	[archive getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+
+	NSURL* extracted = nil; NSError* error = nil;
+	RunDownload(archive, SHA256HexOfFile(archive).uppercaseString, size.longLongValue, &extracted, &error);
+
+	if(error) OAK_FAIL(std::string("unexpected error: ") + error.localizedDescription.UTF8String);
+	OAK_ASSERT(extracted != nil);
+
+	[NSFileManager.defaultManager removeItemAtURL:extracted error:nil];
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}

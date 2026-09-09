@@ -1,0 +1,41 @@
+#!/bin/sh
+#
+# Signs the update manifest. See bin/update-sign.swift for what it does and, more
+# importantly, for what the key's protection actually is.
+#
+#   bin/update-sign self-test          # safe: throwaway key, deletes itself
+#   bin/update-sign create-key         # once, on the release Mac
+#   bin/update-sign public-key         # base64 X9.63, for Info.plist TMSigningKeys
+#   bin/update-sign sign manifest.json # base64 DER ECDSA
+#
+# Compiled rather than run through `swift`, and code-signed when an identity is
+# available, for a reason that matters: a software key's keychain ACL is bound to
+# the program that created it. Created by the `swift` interpreter, the ACL would
+# name *swift* — and any script anyone runs through it could then use the key
+# without a prompt. Bound to a Developer ID-signed binary, the ACL matches on the
+# designated requirement, so rebuilding this tool keeps access and nothing else
+# gains it.
+set -e
+
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+SRC="$ROOT/bin/update-sign.swift"
+BIN="$ROOT/build/update-sign"
+
+mkdir -p "$ROOT/build"
+
+if [ ! -x "$BIN" ] || [ "$SRC" -nt "$BIN" ]; then
+	echo "==> compiling update-sign" >&2
+	xcrun swiftc -O "$SRC" -o "$BIN"
+
+	# Same identity the app uses, when the environment provides one. Without it
+	# the tool still works; the key's ACL is then bound to an ad-hoc binary, which
+	# changes on every rebuild and will prompt.
+	if [ -n "$TM_CODE_SIGN_IDENTITY" ]; then
+		codesign -f -s "$TM_CODE_SIGN_IDENTITY" --timestamp=none "$BIN" >/dev/null 2>&1 \
+			&& echo "==> signed with $TM_CODE_SIGN_IDENTITY" >&2
+	else
+		echo "==> TM_CODE_SIGN_IDENTITY not set; the key's ACL will be bound to an ad-hoc binary" >&2
+	fi
+fi
+
+exec "$BIN" "$@"

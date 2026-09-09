@@ -61,10 +61,16 @@ Bundle identifier is `com.j23software.TextMate-NG`.
 Three things. Everything else in this plan can proceed around them, and the
 plan says at each step what to do while waiting.
 
-- **J1. Generate the manifest-signing key in the Secure Enclave of the release
-  Mac**, using the tool from step 2. Once. The public key that tool prints goes
-  into `Info.plist`. Nobody else can do this and the private key must never
-  leave that machine — that is the point.
+- **J1. Create the manifest-signing key on the release Mac**, once:
+
+        TM_CODE_SIGN_IDENTITY="Developer ID Application: John McGovern (R22V2H7QF4)" \
+            bin/update-sign create-key
+
+  It prints the public key; that string goes into `Info.plist` under
+  `TMSigningKeys`. **Option 1 was chosen** (2026-09-08) — a software key in the
+  login keychain, with the storage seam in place to move to the Enclave or a
+  token later. See step 2 for what that does and does not protect, and why the
+  move is always a key rotation rather than a migration.
 - **J2. Decide Tier 2** (the separate verifying helper, step 7). The design note
   is honest that it protects the update *decision*, not the account. It is
   real work and a real property; it is a judgement call.
@@ -156,10 +162,11 @@ keychain key is a key on the disk of the release Mac, and calling it
 The design note's claim that the key is non-exportable therefore **does not hold
 for any option currently on the table**, and has been corrected there.
 
-#### The decision this needs
+#### The decision, taken 2026-09-08
 
-Three ways forward. This is **J1**, and it is a judgement about how much the
-non-exportability is worth:
+**Option 1**, with the seam. The tool is built and its self-test passes; creating
+the real key is one command (see "What only John can do"). The three options
+were:
 
 1. **Software key on the release Mac.** Simplest; the tool below works today.
    Protection is FileVault, the login keychain, and physical control of the
@@ -180,6 +187,20 @@ key is usable there by definition. What options 2 and 3 prevent is the key being
 *taken away* and used later, elsewhere, after the machine is cleaned up. That is
 worth something, and it is not the whole threat.
 
+**Why starting at 1 does not foreclose 2 or 3.** All three produce the same
+artifact — a P-256 key that answers `SecKeyCreateSignature`, and a 65-byte X9.63
+public key — so *the application's verification code never changes*, and macOS
+surfaces PIV tokens through CryptoTokenKit as ordinary `SecKey`s. Storage lives
+behind a `KeyStore` protocol in `bin/update-sign.swift`; another option is one
+conformance.
+
+**What is not swappable, and so has to be right from the start.** A key cannot be
+moved into the Enclave or onto a token — both only generate internally — so
+changing option is always a key **rotation**. That is why the manifest carries a
+`keyID` and the app embeds two public keys, current and next. Ship those in step
+4 or the later swap strands every user who has not updated. This is the part that
+makes the decision reversible; the protocol is just tidiness.
+
 #### The tool, which is the same either way
 
     bin/update-sign create-key   [--label j23-update-signing]
@@ -193,7 +214,22 @@ with `SecKeyCopyExternalRepresentation` (X9.63, 65 bytes — **not** DER; an
 earlier draft of this plan said DER and was wrong). Keep key *storage* behind one
 function so option 1 can become option 2 or 3 without touching the rest.
 
-`self-test` is the pin, and it runs on the release Mac rather than in CI.
+`self-test` is the pin, and it runs on the release Mac rather than in CI. It
+creates a throwaway key, signs, verifies **through the app's own key-import
+path**, checks that a tampered payload is rejected, and deletes the key.
+
+`bin/update-sign` compiles and code-signs the tool rather than running it through
+`swift`, and that is not incidental: a software key's keychain ACL binds to the
+program that created it. Created by the interpreter, the ACL would name `swift`,
+and any script run through it could then use the key unprompted. Bound to a
+Developer ID-signed binary, the ACL matches on the designated requirement, so
+rebuilding keeps access and nothing else gains it.
+
+**Done** — `bin/update-sign` and `bin/update-sign.swift`, plus a fixture test
+(`test_a_signature_from_the_signing_tool_verifies`) that checks a signature the
+tool actually produced against the app's verifier. Nothing else covers that: the
+tool and the verifier each have their own pins and could be internally consistent
+while disagreeing about a format.
 
 ### Step 3 — `SecKeyVerifySignature` alongside `SecTransform`
 

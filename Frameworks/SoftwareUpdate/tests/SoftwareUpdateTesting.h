@@ -25,6 +25,11 @@
 // scheduler calls it.
 + (BOOL)isUpdate:(TMUpdateManifest*)manifest newerThanVersion:(NSString*)runningVersion;
 
+// The manifest's minimumSystemVersion, finally read by something. An update that
+// installs and then will not launch is the one failure nothing after the swap can
+// report, because the application that would report it has been replaced.
++ (BOOL)manifestRunsOnThisSystem:(TMUpdateManifest*)manifest;
++ (NSString*)runningSystemVersion;
 @end
 
 @interface OakDownloadManager (Testing)

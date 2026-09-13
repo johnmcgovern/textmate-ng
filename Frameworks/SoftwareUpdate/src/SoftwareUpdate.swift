@@ -110,6 +110,13 @@ class SoftwareUpdate: NSObject {
 						// Anti-rollback. See +isUpdate:newerThanVersion:.
 						log.log("Skip update: \(manifest?.version ?? "no version", privacy: .public) is not newer than \(SoftwareUpdate.runningVersion() ?? "?", privacy: .public)")
 						completionHandler(.finished)
+					} else if !SoftwareUpdate.manifestRunsOnThisSystem(manifest) {
+						// See +manifestRunsOnThisSystem:. Silent on the unattended path for
+						// the same reason anti-rollback is: there is nothing the user can
+						// do about it, and an hourly alert about it would be a fault of its
+						// own.
+						log.log("Skip update: \(manifest?.version ?? "?", privacy: .public) needs macOS \(manifest?.minimumSystemVersion ?? "?", privacy: .public), this is \(SoftwareUpdate.runningSystemVersion(), privacy: .public)")
+						completionHandler(.finished)
 					} else {
 						// assumeIsolated, not a hop: -checkForTestBuild: guarantees this
 						// handler runs on the main thread, which is the whole point of
@@ -162,6 +169,39 @@ class SoftwareUpdate: NSObject {
 	static func isUpdate(_ manifest: UpdateManifest?, newerThanVersion runningVersion: String?) -> Bool {
 		guard let manifest else { return false }
 		return OakCompareVersionStrings(runningVersion, manifest.version) == .orderedAscending
+	}
+
+	// **The manifest says which macOS an update needs, and until now nothing read
+	// it.** UpdateManifest has decoded `minimumSystemVersion` since step 4 and no
+	// code anywhere asked for it, which makes it worse than absent: bin/release
+	// writes "15.0" into every manifest, so the field looks enforced.
+	//
+	// The failure it allows is the nastiest one this updater has. The payload is
+	// genuine, correctly signed, correctly hashed, and every check passes — and
+	// then macOS refuses to launch it, because the bundle's own
+	// LSMinimumSystemVersion is higher than the system it was just installed on.
+	// The user is left with an application that will not start and an update that
+	// did exactly what it was told. Nothing in the chain after the swap can help,
+	// because the running application is already gone.
+	//
+	// A missing field means no constraint, which is the only safe reading: a
+	// manifest that omits it must not become uninstallable. An unparseable one is
+	// treated as a constraint that is not met — refusing to install beats
+	// installing something that will not run.
+	@objc(manifestRunsOnThisSystem:)
+	static func manifestRunsOnThisSystem(_ manifest: UpdateManifest?) -> Bool {
+		guard let manifest else { return false }
+		guard let minimum = manifest.minimumSystemVersion, !minimum.isEmpty else { return true }
+		return OakCompareVersionStrings(runningSystemVersion(), minimum) != .orderedAscending
+	}
+
+	// Built from the components rather than `operatingSystemVersionString`, which
+	// reads "Version 15.6 (Build 24G84)" and compares as nonsense. Separate and
+	// @objc so a test can check the comparator against versions this machine is
+	// not running.
+	@objc static func runningSystemVersion() -> String {
+		let v = ProcessInfo.processInfo.operatingSystemVersion
+		return "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
 	}
 
 	// Split out so the guard above can be pinned without a bundle: what a test can

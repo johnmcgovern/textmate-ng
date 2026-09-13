@@ -1319,3 +1319,88 @@ void test_an_unrelated_error_is_worth_retrying ()
 		OAK_FAIL("an error from outside UpdateVerification should default to retryable");
 }
 
+// ==========================================
+// = minimumSystemVersion, actually enforced =
+// ==========================================
+//
+// The field was parsed from step 4 onward and read by nothing, which is worse than
+// absent: bin/release writes "15.0" into every manifest, so it looked enforced.
+// What it allows through is the one failure the updater cannot report — a genuine,
+// correctly signed, correctly hashed build that macOS then refuses to launch,
+// discovered after the running application has already been replaced.
+
+static TMUpdateManifest* ManifestNeedingSystem (NSString* minimumSystemVersion)
+{
+	SecKeyRef key = MakeTestPrivateKey();
+	NSDictionary* keys = @{ @"test-key": Base64X963PublicKey(key) };
+	NSString* minimum = minimumSystemVersion ? [NSString stringWithFormat:@",\"minimumSystemVersion\":\"%@\"", minimumSystemVersion] : @"";
+	NSString* inner = [NSString stringWithFormat:
+		@"{\"version\":\"2026.9-alpha.99\",\"url\":\"https://example.invalid/x.tbz\",\"sha256\":\"ab\",\"size\":1,\"expires\":\"2126-09-01T00:00:00Z\"%@}", minimum];
+	TMUpdateManifest* manifest = [TMUpdateManifest manifestFromData:MakeManifest(key, @"test-key", inner) keys:keys now:[NSDate date] error:nil];
+	CFRelease(key);
+	return manifest;
+}
+
+// An absent field is no constraint. This is the reading that matters most: the
+// alternative would make every manifest that omits it uninstallable, which is a
+// way to break updates for everyone at once.
+void test_a_manifest_with_no_minimum_system_version_runs_anywhere ()
+{
+	TMUpdateManifest* manifest = ManifestNeedingSystem(nil);
+	if(manifest.minimumSystemVersion != nil) OAK_FAIL("fixture should have no minimumSystemVersion");
+	if(![SoftwareUpdate manifestRunsOnThisSystem:manifest])
+		OAK_FAIL("a manifest with no minimum must not be refused");
+}
+
+// The machine's own version must satisfy a minimum equal to it — an off-by-one
+// here refuses every update on the exact system it was built for.
+void test_the_running_system_version_satisfies_itself ()
+{
+	if(![SoftwareUpdate manifestRunsOnThisSystem:ManifestNeedingSystem([SoftwareUpdate runningSystemVersion])])
+		OAK_FAIL("the running system must satisfy a minimum equal to itself");
+}
+
+void test_an_older_minimum_is_satisfied ()
+{
+	if(![SoftwareUpdate manifestRunsOnThisSystem:ManifestNeedingSystem(@"10.0")])
+		OAK_FAIL("macOS 10.0 as a minimum should be satisfied by anything current");
+}
+
+// The case the guard exists for.
+void test_a_future_minimum_is_refused ()
+{
+	if([SoftwareUpdate manifestRunsOnThisSystem:ManifestNeedingSystem(@"99.0")])
+		OAK_FAIL("a manifest needing macOS 99 must be refused, not installed and then unlaunchable");
+}
+
+// A nil manifest is not installable, matching +isUpdate:newerThanVersion:.
+void test_no_manifest_does_not_run_on_this_system ()
+{
+	if([SoftwareUpdate manifestRunsOnThisSystem:nil])
+		OAK_FAIL("a nil manifest must not report that it runs here");
+}
+
+// What the running version actually looks like, because a string like
+// "Version 15.6 (Build 24G84)" compares as nonsense and this is built from the
+// components specifically to avoid that.
+void test_the_running_system_version_is_dotted_numbers ()
+{
+	NSString* version = [SoftwareUpdate runningSystemVersion];
+	NSCharacterSet* allowed = [NSCharacterSet characterSetWithCharactersInString:@"0123456789."];
+	if([version stringByTrimmingCharactersInSet:allowed].length != 0)
+		OAK_FAIL(std::string("running system version is not dotted numbers: ") + version.UTF8String);
+	if([version componentsSeparatedByString:@"."].count != 3)
+		OAK_FAIL(std::string("expected major.minor.patch, got ") + version.UTF8String);
+}
+
+// A minimum that is not a version at all. Pinned because the comment on
+// +manifestRunsOnThisSystem: makes a claim about it, and a claim in a comment that
+// nothing checks is how the last few surprises in this framework started.
+void test_an_unparseable_minimum_system_version ()
+{
+	BOOL runs = [SoftwareUpdate manifestRunsOnThisSystem:ManifestNeedingSystem(@"not-a-version")];
+	// Refusing is the safe answer: installing something whose requirement we cannot
+	// read risks an application that will not launch, and the cost of being wrong
+	// the other way is one missed update that a later manifest fixes.
+	if(runs) OAK_FAIL("an unreadable minimumSystemVersion should be treated as unmet");
+}

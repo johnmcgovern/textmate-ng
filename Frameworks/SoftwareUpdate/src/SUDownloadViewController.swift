@@ -350,7 +350,18 @@ final class SUDownloadViewController: NSViewController {
 		contentViewController.subview = infoViewController.view
 
 		let appName = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? ""
-		if ordering == .orderedAscending {
+		// A newer version that this Mac cannot run is not an offer, it is an
+		// explanation. Offering Download here would install a bundle whose own
+		// LSMinimumSystemVersion stops macOS launching it, and the application that
+		// could have told the user so has already been replaced. See
+		// +manifestRunsOnThisSystem: — the unattended path skips these silently,
+		// but somebody who asked deserves to know why the answer is no.
+		if ordering == .orderedAscending && !SoftwareUpdate.manifestRunsOnThisSystem(manifest) {
+			infoViewController.messageTextField.stringValue     = "Update Requires a Newer macOS"
+			infoViewController.informativeTextField.stringValue = "\(appName) \(remoteVersion ?? "") requires macOS \(manifest?.minimumSystemVersion ?? "?") or later. This Mac is running macOS \(SoftwareUpdate.runningSystemVersion()), so the update has not been installed."
+
+			addButton(withTitle: "OK")
+		} else if ordering == .orderedAscending {
 			infoViewController.messageTextField.stringValue     = "New Version Available"
 			infoViewController.informativeTextField.stringValue = "\(appName) \(remoteVersion ?? "") is now available. You have version \(localVersion ?? ""). Would you like to download it now?"
 
@@ -373,8 +384,13 @@ final class SUDownloadViewController: NSViewController {
 			addButton(withTitle: "Downgrade to \(remoteVersion ?? "")")
 		}
 
+		// `expected` is the response that means "go ahead and download". The
+		// too-old-macOS branch has a single OK button, whose tag is
+		// alertFirstButtonReturn — the same tag Download carries — so without this
+		// it would read as consent and start the download it just declined to offer.
+		let offersDownload = (ordering == .orderedAscending) && SoftwareUpdate.manifestRunsOnThisSystem(manifest)
 		runModal { response in
-			let expected: NSApplication.ModalResponse = (ordering == .orderedAscending) ? .alertFirstButtonReturn : .alertSecondButtonReturn
+			let expected: NSApplication.ModalResponse = offersDownload ? .alertFirstButtonReturn : .alertSecondButtonReturn
 			if response == expected {
 				var sfsb = statfs()
 				let readOnly = Bundle.main.bundlePath.withCString { statfs($0, &sfsb) == 0 } && (sfsb.f_flags & UInt32(MNT_RDONLY)) != 0

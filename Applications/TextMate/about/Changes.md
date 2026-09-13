@@ -2,6 +2,72 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-12 (v2026.9-alpha.22)
+
+**Software update works again.** Since 2026-07-26 *Check for Update* has answered
+"No channel named ‘release’", because the fork inherited MacroMates' server address
+and pointing a fork's updater at the original product's builds is worse than having
+no updater at all. This release gives it a feed of its own, and every previous alpha
+had to be downloaded by hand.
+
+**Because this is the one feature that can replace the application on your disk, here
+is exactly what it will and will not accept.** Each update is described by a small
+document signed with a key that exists only on the machine releases are built on;
+this build carries the public half and refuses anything it cannot verify with it.
+Inside that signature is the download's SHA-256 and its exact size, so whatever
+serves or proxies the file cannot substitute a different build — including an older
+one genuinely signed by us, which is the interesting case, and one an automatic check
+will not install in any event. Nothing is unpacked until it has been verified, and
+before the running application is replaced the new copy's own code signature is
+checked against the Developer ID and identifier this fork ships under, and its
+version against what the update claimed. The signed document also expires after 35
+days, so a genuine but stale one cannot be replayed at you indefinitely.
+
+**Nothing has ever actually self-updated**, and it is worth being plain about that:
+this is the first build that *can*, so the first real exercise of it is the step from
+this release to the next one. If it fails, the fallback is what you have been doing
+all along — download the new build.
+
+Two things it deliberately does not do yet. *Check for Test Build* (hold ⌥ in the
+application menu) looks for a `canary` channel that does not exist, and will say so.
+And automatic checks will not offer to move you *backwards*; if you are ever on a
+build newer than the published one, only the menu item will mention it.
+
+**One fix.** **Export Bundle silently dropped proxy items.** The query behind it
+documented itself as leaving proxies unresolved and did not, so exporting a bundle
+wrote out the items a proxy stands for and never the proxy — found by writing a test
+around that header comment and watching it fail, not by anyone hitting it.
+
+**Rewritten in Swift this time**, and this is the largest single stretch of the
+rewrite so far:
+
+* **the application delegate** — the object that owns the menu bar, opens your
+  documents, and handles `txmt://` links. Its 248-item main menu, the Theme menu
+  under *View*, and the Dock menu were all built in code and are now built in Swift;
+* **the software update machinery**, and the download manager it shares with bundle
+  updating;
+* **Find's status bar**, and its find and replace fields — the history popup, the
+  syntax highlighting on a regular expression, and the way a field grows as the
+  search string gets longer.
+
+Nothing above is meant to look or behave differently.
+
+**Where to look if something is off.** The app shell is the exposed part this time,
+because the delegate and the whole menu bar were rewritten:
+
+* **the menu bar itself** — and particularly items that grey out depending on what is
+  in front of you, which is the failure a rewrite of this kind produces: the Find
+  submenu, *Text*, *Bundles*, and *Go ▸ Back*/*Forward*;
+* **the Theme menu** under *View ▸ Theme*, including Light/Dark/Auto and the two
+  per-appearance lists, and the **Dock menu** on a right-click;
+* **opening documents by every route** — double-clicking a file, dragging onto the
+  Dock icon, `mate` from a terminal, a `txmt://` link in HTML output, and the session
+  restore that runs at launch;
+* **the find and replace fields** under ⌘F and ⌘⇧F: ↓ for history, a regexp being
+  highlighted as you type, and the field growing to a few lines;
+* and **Check for Update** in the application menu, which until the next release is
+  published will tell you this is the latest version.
+
 ## 2026-09-01 (v2026.9-alpha.21)
 
 **First release of September, so the version rolls from 2026.8 to 2026.9.** That is

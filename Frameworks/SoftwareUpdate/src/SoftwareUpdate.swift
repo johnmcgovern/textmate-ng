@@ -171,8 +171,23 @@ class SoftwareUpdate: NSObject {
 	}
 
 	@objc func checkForUpdate(_ sender: Any?) {
-		let isOptionDown = OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.option.rawValue)
-		let isShiftDown  = OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.shift.rawValue)
+		// **Both arguments explicit.** This is where the alpha.22 crash lived:
+		// OakAppKit.h used to declare `anEvent = [NSApp currentEvent]` as a C++
+		// default argument, and letting Swift supply it over-released NSApp's current
+		// event. Two calls in a row made it fatal — the first dropped the event to
+		// zero, the second retained the corpse:
+		//
+		//     *** -[NSEvent retain]: message sent to deallocated instance
+		//
+		// 23ms after this method was entered, nowhere near the network. Without
+		// NSZombieEnabled it presented as an unrecognized selector
+		// -[__CFN_ConnectionMetrics type] thrown out of AppKit's window animation,
+		// because `[anEvent type]` is that function's body and CFNetwork had taken
+		// the freed block. The header no longer has the default at all, so this can
+		// only be written the safe way now. Rule 65.
+		let currentEvent = NSApp.currentEvent
+		let isOptionDown = OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.option.rawValue, currentEvent)
+		let isShiftDown  = OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.shift.rawValue, currentEvent)
 
 		checkForTestBuild(isOptionDown) { manifest, error in
 			MainActor.assumeIsolated {

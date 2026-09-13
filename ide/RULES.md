@@ -790,6 +790,10 @@ is wrong** — the harness, the oracle, and the app check.
 ## Rule 61 — the free-function probe (2026-09-02)
 
 61. **C++-linkage free functions and their default arguments DO reach Swift under
+
+    **Amended by rule 65:** they reach Swift and are evaluated per call, but a
+    default whose expression is an **ObjC message send** gets the wrong ownership
+    and over-releases. Read 65 before relying on any default argument here.
     `SWIFT_OBJC_INTEROP_MODE=objcxx`. Two earlier claims in this file were
     inferences, and both were wrong.**
 
@@ -1020,3 +1024,59 @@ is wrong** — the harness, the oracle, and the app check.
 
     The scheduler is still not a *prompt* rule-8 observable: DAS decides when a
     discretionary activity first runs, and it is not obliged to be soon.
+
+65. **A C++ default argument whose expression is an ObjC message send gets the
+    wrong ownership when Swift supplies it — it over-releases the returned
+    object.** This is an amendment to rule 61, which probed that such defaults
+    *reach* Swift and concluded they were usable. They do reach Swift, and they
+    are evaluated per call — both re-measured. What rule 61 did not test is
+    whether the ownership is right, and for an ObjC message send it is not.
+
+    The case: `OakAppKit.h` declared
+
+        BOOL OakIsAlternateKeyOrMouseEvent (NSUInteger flags = NSEventModifierFlagOption,
+                                            NSEvent* anEvent = [NSApp currentEvent]);
+
+    `-[NSApplication currentEvent]` returns the app's own event **+0 unowned, not
+    autoreleased**. Swift's default-argument path releases it. One call is often
+    survivable; `-[SoftwareUpdate checkForUpdate:]` made two in a row, so the
+    first dropped NSApp's event to zero and the second retained a corpse. It
+    shipped in v2026.9-alpha.22 and crashed on Settings ▸ Software Update ▸ Check
+    Now.
+
+    **How it presents, which is the expensive part.** Without `NSZombieEnabled`
+    the freed block gets reused and you get an unrecognized selector on whatever
+    took it — the first report said `-[__CFN_ConnectionMetrics type]` thrown from
+    inside AppKit's window animation, because CFNetwork had reoccupied the memory
+    and `[anEvent type]` is the callee's body. That sent me looking at the window
+    code, which was innocent. A second report 13 seconds later segfaulted in
+    `-[NSToolbarView windowDidUpdate:]` — collateral, because the exception
+    unwound through `-[NSWindow makeKeyAndOrderFront:]` and left AppKit's
+    bookkeeping half-updated. **Two crash reports, one bug, and neither names it.**
+
+    `NSZombieEnabled=YES` named it in one run: `*** -[NSEvent retain]: message
+    sent to deallocated instance`. Reach for zombies before reading stacks when
+    the symptom is a selector sent to an object of an implausible class.
+
+    **What I got wrong on the way, twice.** First I blamed the port for changing
+    the window's lifetime — `+windowWithContentViewController:` versus
+    `NSPanel(contentViewController:)`. Wrong: the original `.mm` compiled with ARC
+    **on**, so the ownership was identical. Then a probe appeared to exonerate the
+    default argument, because the probe's default was a plain *function call*
+    returning an autoreleased object. Measured both shapes: a function-call
+    default is balanced, an **ObjC message send** default is not. A probe of the
+    wrong shape is worse than no probe — it retires the correct hypothesis.
+
+    **What to do.** Never write an ObjC message send as a C++ default argument in
+    a header Swift imports. Prefer no default at all: this one was deleted
+    outright, because every caller was already Swift and all eight already passed
+    both arguments, which turns the hazard into a compile error. C++ requires
+    defaults to be trailing, so removing the last one removes the others.
+
+    Reproducing it needs the app, not the suite: the bug is in Swift-side code
+    generation and the test bundles are ObjC++ with ARC off. The loop that worked
+    was a local build with the channel pointed at a `file://` manifest and a
+    four-second `checkForUpdate(nil)` at launch — 14 seconds per run, crashing 2
+    in 3 before the fix and 0 in 5 after. **2-in-3 is what a dangling pointer
+    looks like**; the run that survives is the one where `NSApp.currentEvent` was
+    nil and messaging nil did nothing (rule 33).

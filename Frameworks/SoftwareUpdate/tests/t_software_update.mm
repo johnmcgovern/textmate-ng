@@ -1245,3 +1245,77 @@ void test_an_unknown_running_version_accepts_an_update ()
 	if(![SoftwareUpdate isUpdate:ManifestForVersion(@"2026.9-alpha.22") newerThanVersion:nil])
 		OAK_FAIL("an unreadable running version should not block updates");
 }
+
+// =========================================================
+// = Damaged versus refused: which failures deserve a retry =
+// =========================================================
+//
+// Everything that reaches UpdateVerification has already matched the SHA-256 and
+// the size inside the signed manifest, so "your download was corrupt" is close to
+// the one explanation available. The panel used to give exactly that explanation
+// for every failure, and offer Redownload — which, for an intact payload that is
+// simply unacceptable, is a loop that fails the same way every time while hiding
+// the real reason. These pin the two families on opposite sides.
+
+// A version that disagrees with the manifest is not damage. The bytes were what
+// J23 described; what they contain is not.
+void test_a_version_mismatch_is_not_worth_retrying ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* bundle = MakeBundleWithInfoPlist(scratch, @"com.j23software.TextMate-NG", @"2026.9-alpha.21");
+
+	NSError* error = nil;
+	BOOL ok = [TMUpdateVerification checkBundleAtURL:bundle matchesManifest:ManifestForVersion(@"2026.9-alpha.22") error:&error];
+	if(ok) OAK_FAIL("a version mismatch must be refused");
+
+	if([TMUpdateVerification isWorthRetryingError:error])
+		OAK_FAIL("a version mismatch must not offer a redownload — the same bytes would arrive again");
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// Nor is a different application, which is the case where somebody is serving a
+// validly-signed payload that is not this product.
+void test_a_different_identifier_is_not_worth_retrying ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* bundle = MakeBundleWithInfoPlist(scratch, @"com.j23software.SomethingElse", @"2026.9-alpha.22");
+
+	NSError* error = nil;
+	BOOL ok = [TMUpdateVerification checkBundleAtURL:bundle matchesManifest:ManifestForVersion(@"2026.9-alpha.22") error:&error];
+	if(ok) OAK_FAIL("a different identifier must be refused");
+
+	if([TMUpdateVerification isWorthRetryingError:error])
+		OAK_FAIL("a different application must not offer a redownload");
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// The control that must land on the *other* side (rule 59). A tree with no
+// signature at all is the shape post-extraction damage takes, and it is the one
+// case where trying again is a sensible thing to offer.
+void test_an_unsigned_bundle_is_worth_retrying ()
+{
+	NSURL* scratch = MakeScratchDirectory();
+	NSURL* bundle = MakeBundleWithInfoPlist(scratch, @"com.j23software.TextMate-NG", @"2026.9-alpha.22");
+
+	NSError* error = nil;
+	BOOL ok = [TMUpdateVerification checkCodeSignatureOfBundleAtURL:bundle requirement:@"anchor apple generic" error:&error];
+	if(ok) OAK_FAIL("a bundle with no signature must not pass the signature check");
+
+	if(![TMUpdateVerification isWorthRetryingError:error])
+		OAK_FAIL("an unsigned or damaged bundle is exactly the case a redownload can fix");
+
+	[NSFileManager.defaultManager removeItemAtURL:scratch error:nil];
+}
+
+// An error from somewhere else must read as damage, not refusal: offering a retry
+// that may fail is the conservative mistake, refusing one that would have worked
+// is not.
+void test_an_unrelated_error_is_worth_retrying ()
+{
+	NSError* other = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil];
+	if(![TMUpdateVerification isWorthRetryingError:other])
+		OAK_FAIL("an error from outside UpdateVerification should default to retryable");
+}
+

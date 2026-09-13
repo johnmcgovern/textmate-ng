@@ -24,6 +24,7 @@
 // Declared here rather than in SoftwareUpdate.h because nothing outside the
 // scheduler calls it.
 + (BOOL)isUpdate:(TMUpdateManifest*)manifest newerThanVersion:(NSString*)runningVersion;
+
 @end
 
 @interface OakDownloadManager (Testing)
@@ -66,4 +67,10 @@
 @property (class, readonly) NSString* designatedRequirement;
 + (BOOL)checkCodeSignatureOfBundleAtURL:(NSURL*)url requirement:(NSString*)requirement error:(NSError**)error;
 + (BOOL)checkBundleAtURL:(NSURL*)url matchesManifest:(TMUpdateManifest*)manifest error:(NSError**)error;
+
+// Whether a failed verification is worth downloading again: a damaged bundle is,
+// an intact one that we simply will not install is not. The update panel picks
+// its wording and its buttons off this, so getting it backwards offers somebody
+// an endless retry on a build that can never be accepted.
++ (BOOL)isWorthRetryingError:(NSError*)error;
 @end

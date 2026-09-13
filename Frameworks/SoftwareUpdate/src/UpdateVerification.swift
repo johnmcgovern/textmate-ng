@@ -17,6 +17,44 @@ import os
 
 private let log = Logger()
 
+// **Why these are distinguishable.** Everything reaching UpdateVerification has
+// already matched the manifest's SHA-256 and size, so "the download is corrupt"
+// is *almost* never the explanation — the bytes were exactly what J23 described.
+// The one exception is damage after extraction, which is what
+// SecStaticCodeCheckValidityWithErrors catches and what the old
+// "the system has been deleting temporary files" wording was really about.
+//
+// A wrong signer, a different application, or a version that disagrees with the
+// manifest are a different thing entirely: the download succeeded and what
+// arrived is not acceptable. Redownloading cannot help, and offering it as the
+// remedy sends the user round a loop that fails identically every time.
+//
+// So the codes exist to let the UI say which happened, and the tests to pin that
+// the two families stay apart. Codes are stable: SUDownloadViewController
+// switches on them.
+@objc(TMUpdateVerificationError)
+enum UpdateVerificationError: Int, Error, CustomNSError {
+	case notCodeSigned      = 1   // no signature at all — damage, or not an app
+	case signatureNotValid  = 2   // signature present and unacceptable, or damaged resources
+	case malformedRequirement = 3 // our bug, not the download's
+	case unreadableInfoPlist  = 4
+	case differentApplication = 5
+	case versionMismatch      = 6
+
+	static var errorDomain: String { "SoftwareUpdate" }
+	var errorCode: Int { rawValue }
+
+	// True when trying again could plausibly produce a different outcome: the
+	// bundle arrived damaged. False when the payload is intact and simply not
+	// something this build will install.
+	var isWorthRetrying: Bool {
+		switch self {
+			case .notCodeSigned, .signatureNotValid, .unreadableInfoPlist: return true
+			case .malformedRequirement, .differentApplication, .versionMismatch: return false
+		}
+	}
+}
+
 @objc(TMUpdateVerification)
 final class UpdateVerification: NSObject {
 	// **A typo here is an updater that never installs anything**, and it would look
@@ -47,7 +85,7 @@ final class UpdateVerification: NSObject {
 		var staticCode: SecStaticCode?
 		let createStatus = SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode)
 		guard createStatus == errSecSuccess, let staticCode else {
-			throw failure("The update is not code-signed (status \(createStatus)).")
+			throw failure(.notCodeSigned, "The update is not code-signed (status \(createStatus)).")
 		}
 
 		var secRequirement: SecRequirement?
@@ -55,7 +93,7 @@ final class UpdateVerification: NSObject {
 		guard requirementStatus == errSecSuccess, let secRequirement else {
 			// A malformed requirement string is our bug, not a bad download, and it
 			// would otherwise present as every update failing its integrity check.
-			throw failure("Internal error: the update requirement is malformed (status \(requirementStatus)).")
+			throw failure(.malformedRequirement, "Internal error: the update requirement is malformed (status \(requirementStatus)).")
 		}
 
 		let flags = SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckAllArchitectures)
@@ -64,7 +102,7 @@ final class UpdateVerification: NSObject {
 		guard status == errSecSuccess else {
 			let detail = cfError.map { String(describing: $0.takeRetainedValue()) } ?? "status \(status)"
 			log.error("Update failed its code-signature check: \(detail, privacy: .public)")
-			throw failure("The update is not signed by J23.")
+			throw failure(.signatureNotValid, "The update is not signed by J23.")
 		}
 	}
 
@@ -82,19 +120,40 @@ final class UpdateVerification: NSObject {
 		guard let data = try? Data(contentsOf: infoURL),
 		      let info = (try? PropertyListSerialization.propertyList(from: data, options: 0, format: nil)) as? [String: Any]
 		else {
-			throw failure("The update has no readable Info.plist.")
+			throw failure(.unreadableInfoPlist, "The update has no readable Info.plist.")
 		}
 
 		guard let identifier = info["CFBundleIdentifier"] as? String, identifier == "com.j23software.TextMate-NG" else {
-			throw failure("The update is a different application (\(info["CFBundleIdentifier"] as? String ?? "no identifier")).")
+			throw failure(.differentApplication, "The update is a different application (\(info["CFBundleIdentifier"] as? String ?? "no identifier")).")
 		}
 
 		guard let version = info["CFBundleShortVersionString"] as? String, version == manifest.version else {
-			throw failure("The update is version \(info["CFBundleShortVersionString"] as? String ?? "?"), but its manifest says \(manifest.version).")
+			throw failure(.versionMismatch, "The update is version \(info["CFBundleShortVersionString"] as? String ?? "?"), but its manifest says \(manifest.version).")
 		}
 	}
 
-	private static func failure(_ message: String) -> Error {
-		return NSError(domain: "SoftwareUpdate", code: 0, userInfo: [NSLocalizedDescriptionKey: message])
+	// The message stays the authority on what the user reads; the code only says
+	// which family it belongs to. Spelled this way so the existing pins on these
+	// strings keep testing the strings.
+	private static func failure(_ code: UpdateVerificationError, _ message: String) -> Error {
+		return NSError(domain: UpdateVerificationError.errorDomain, code: code.rawValue,
+		               userInfo: [NSLocalizedDescriptionKey: message])
+	}
+
+	// Whether a failed verification is worth downloading again. Exposed for the
+	// UI and pinned, because getting it backwards is how you offer somebody an
+	// infinite retry loop on a build that will never be acceptable.
+	@objc(isWorthRetryingError:)
+	static func isWorthRetrying(_ error: Error) -> Bool {
+		let nsError = error as NSError
+		guard nsError.domain == UpdateVerificationError.errorDomain,
+		      let code = UpdateVerificationError(rawValue: nsError.code)
+		else {
+			// An error from somewhere else: assume damage rather than rejection, which
+			// is the conservative answer — it offers a retry that may fail, instead of
+			// refusing one that would have worked.
+			return true
+		}
+		return code.isWorthRetrying
 	}
 }

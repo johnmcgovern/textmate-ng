@@ -459,19 +459,24 @@ final class SUDownloadViewController: NSViewController {
 	// The old check is not kept alongside: a valid signature over a bundle that has
 	// no executable is not a thing that happens, and two overlapping checks would
 	// mean two error paths for one failure.
-	private func isInstallableApplication(at applicationURL: URL) -> Bool {
+	// Returns the reason it is not installable, or nil when it is. Was a Bool, and
+	// the Bool is what made the dialog below lie: the caller had no way to tell a
+	// bundle that arrived damaged from one that is intact and unacceptable.
+	private func reasonNotInstallable(at applicationURL: URL) -> Error? {
 		guard let manifest else {
 			log.error("No manifest for the downloaded update; refusing to install it")
-			return false
+			return NSError(domain: UpdateVerificationError.errorDomain,
+			               code: UpdateVerificationError.signatureNotValid.rawValue,
+			               userInfo: [NSLocalizedDescriptionKey: "The update could not be checked against its manifest."])
 		}
 
 		do {
 			try UpdateVerification.checkCodeSignature(ofBundleAt: applicationURL, requirement: UpdateVerification.designatedRequirement)
 			try UpdateVerification.checkBundle(at: applicationURL, matches: manifest)
-			return true
+			return nil
 		} catch {
 			log.error("Refusing to install \(applicationURL.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
-			return false
+			return error
 		}
 	}
 
@@ -480,8 +485,31 @@ final class SUDownloadViewController: NSViewController {
 
 		let appName = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? ""
 
-		guard isInstallableApplication(at: applicationURL) else {
-			presentAlert(message: "Integrity Check Failed", informativeText: "The download is incomplete. This can happen if the system has been deleting temporary files.\n\nWould you like to redownload the update?", buttonTitles: ["Redownload", "Cancel"]) { returnCode in
+		// **This used to say "The download is incomplete. This can happen if the
+		// system has been deleting temporary files" and offer Redownload, whatever
+		// had gone wrong.** By the time execution reaches here the payload has
+		// already matched the SHA-256 and the size inside the signed manifest, so
+		// an incomplete download is very nearly the one thing it cannot be. The
+		// text was written for the check this replaced — an executable-bit test —
+		// and step 5 changed what the guard means without changing what it says.
+		//
+		// Getting it wrong is not cosmetic. A build signed by the wrong identity,
+		// or one whose version disagrees with its manifest, is intact: downloading
+		// it again produces the same bytes and the same refusal, so the offered
+		// remedy is an infinite loop, and the actual reason — which may be that
+		// somebody is serving a payload we did not build — is never shown.
+		if let reason = reasonNotInstallable(at: applicationURL) {
+			let retryable = UpdateVerification.isWorthRetrying(reason)
+			let message = retryable ? "The Update Could Not Be Verified" : "Update Refused"
+			let informativeText = retryable
+				? "\(reason.localizedDescription)\n\nThe download may have been damaged after it arrived. Would you like to download it again?"
+				: "\(reason.localizedDescription)\n\nThe download matched its signed description, so downloading it again will not help. \(appName) has not been changed."
+
+			presentAlert(message: message, informativeText: informativeText,
+			             buttonTitles: retryable ? ["Redownload", "Cancel"] : ["OK"]) { returnCode in
+				// With one button there is nothing to redownload; close on any response.
+				guard retryable else { return true }
+
 				if returnCode == .alertFirstButtonReturn {
 					if let manifest = self.manifest {
 						self.downloadSoftwareUpdate(manifest)

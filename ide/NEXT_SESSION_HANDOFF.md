@@ -1046,12 +1046,37 @@ BundlesManager's ObjC++.
 
 ### Which one, and why it is not the bigger number
 
-**Stale as of 2026-09-08: `SoftwareUpdate` was taken, and is done.** The table
-above still says "1273 lines, 0 Swift"; it is now Swift apart from the three
-files rule 19 and rule 25 keep in ObjC++. The reasoning below was sound and its
-premise expired — the feature was switched off *because* there was no channel,
-and the update work put one there, which is also what made it exercisable by
-hand. `HTMLOutput` is still the untouched framework and still the recommendation.
+**Stale as of 2026-09-08, and the correction below was itself wrong — fixed
+2026-09-12.** Two things:
+
+`SoftwareUpdate` was taken and is done. The table above still says "1273 lines,
+0 Swift"; it is now Swift apart from the three files rules 19 and 25 keep in
+ObjC++. The reasoning below was sound and its premise expired — the feature was
+switched off *because* there was no channel, and the update work put one there.
+
+**`HTMLOutput` is also done, and on 2026-09-08 this paragraph claimed it was
+"still the untouched framework and still the recommendation".** That was written
+without opening the directory, eight days after the port finished
+(`22da4863` 2026-08-27 through `9b0fe8dc` 2026-08-31): six Swift files, 1486
+Swift against 607 ObjC++, and what is left is locked — `HOJSBridge.mm` (414)
+takes `std::map<std::string, std::string> const&` in its selectors and runs
+`io::spawn`/`io::process_t`, which is rule 37 on both sides; `HOEnvironment.mm`
+and `HOLocalURLRewriter.mm` are the rule-25 boundary files the port created.
+
+Repeating a stale survey line *inside a commit whose subject was correcting stale
+survey lines* is the failure this file keeps warning about, so: **no "which
+framework next" recommendation in this document is to be believed without
+re-measuring.** The measurement is one command:
+
+    for d in Frameworks/*/; do echo "$(basename $d) \
+      mm=$(find $d/src -name '*.mm' | xargs wc -l | tail -1 | awk '{print $1+0}') \
+      swift=$(find $d/src -name '*.swift' | xargs wc -l | tail -1 | awk '{print $1+0}')"; done
+
+Run on 2026-09-12 it says the portable UI work is finished. The frameworks with
+ObjC++ left are the ones that wrap the C++ engine — `OakTextView` (5649),
+`document` (3250), `BundlesManager` (995), `ns`, `OakCommand`, `theme`,
+`command`, `encoding`, `io` — plus each finished framework's handful of boundary
+files. There is no next framework of the old kind.
 
 **Take `HTMLOutput` first.** `SoftwareUpdate` has more portable lines and a test
 bundle already, but the feature is **switched off in this fork** — there is no

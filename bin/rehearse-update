@@ -1,0 +1,275 @@
+#!/bin/zsh
+# Rehearse the whole software-update chain against a local channel, unattended.
+#
+# Usage: bin/rehearse-update [scenario ...]
+#   with no arguments, runs all of them.
+#
+# **Why this exists.** The pre-release smoke pass cannot reach the Download button:
+# getting there needs a manifest offering a *newer* version, which only exists once
+# you have published one. So the two most dangerous steps in the application — the
+# download and the swap that replaces the running app — were unreachable until they
+# were live, and two releases (alpha.22, alpha.23) shipped crashing there. Both
+# faults were in code no test could construct.
+#
+# What it does: builds a payload one version ahead, builds a second copy of the app
+# whose update channel is a local file:// manifest and which drives its own update
+# panel, then runs each scenario and checks what the application actually said and
+# whether it actually installed anything.
+#
+# **The driver is never in the shipping source.** It is patched in, built, and
+# reverted, and this script refuses to start on a dirty tree so a failed revert can
+# never be mistaken for your own edits. The shipping binary has no driver, no
+# env-var override and no redirectable channel — a channel URL that anything running
+# as the user can point elsewhere is one check away from being the only thing
+# standing between them and an attacker's manifest.
+#
+# Requires: TM_CODE_SIGN_IDENTITY (the payload has to satisfy the same designated
+# requirement the updater enforces) and the j23-update-signing key.
+set -e
+
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+cd "$ROOT"
+
+# --reuse: skip the two builds and the manifests, and run the scenarios against
+# whatever build/rehearsal already holds. For iterating on the scenario list; a
+# real pre-release run must not use it, because then it is not testing this build.
+REUSE=NO
+ARGS=()
+for a in "$@"; do
+  case "$a" in
+    --reuse) REUSE=YES ;;
+    *)       ARGS+=("$a") ;;
+  esac
+done
+set -- "${ARGS[@]}"
+H="$ROOT/build/rehearsal"
+APPCTL="Applications/TextMate/src/AppController.swift"
+CHANGES="Applications/TextMate/about/Changes.md"
+DD=$(xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release -showBuildSettings 2>/dev/null \
+      | sed -n 's/ *BUILT_PRODUCTS_DIR = //p' | head -1)/TextMate-NG.app
+
+[ -n "$TM_CODE_SIGN_IDENTITY" ] || { echo "error: TM_CODE_SIGN_IDENTITY must be set" >&2; exit 1; }
+[ -n "$(git status --porcelain "$APPCTL" "$CHANGES")" ] && {
+  echo "error: $APPCTL / $CHANGES have uncommitted changes." >&2
+  echo "       This script patches and restores both; refusing so a failed" >&2
+  echo "       restore cannot be confused with your edits." >&2
+  exit 1; }
+
+restore() {
+  [ -f "$H/AppController.orig" ] && cp "$H/AppController.orig" "$APPCTL"
+  [ -f "$H/Changes.orig" ]       && cp "$H/Changes.orig" "$CHANGES"
+  ruby ide/seed_xcodeproj.rb >/dev/null 2>&1 || true
+  pkill -x TextMate-NG 2>/dev/null || true
+}
+trap restore EXIT INT TERM
+
+if [ "$REUSE" = NO ]; then rm -rf "$H"; fi
+mkdir -p "$H"
+cp "$APPCTL" "$H/AppController.orig"
+cp "$CHANGES" "$H/Changes.orig"
+
+CUR=$(ruby -e 'puts (File.read("'"$CHANGES"'")[/^## .* \(v(.*)\)$/, 1])')
+NEXT=$(printf '%s' "$CUR" | awk -F. '{ $NF = $NF + 1; print $1"."$2"."$3"."$NF }' 2>/dev/null || true)
+NEXT=$(python3 -c "
+import re,sys
+v='$CUR'
+m=re.match(r'(.*?)(\d+)$', v)
+print(m.group(1)+str(int(m.group(2))+1))")
+AFTER=$(python3 -c "
+import re
+v='$NEXT'
+m=re.match(r'(.*?)(\d+)$', v)
+print(m.group(1)+str(int(m.group(2))+1))")
+echo "==> running version $CUR, payload will be $NEXT"
+
+# ---------------------------------------------------------------- 1. the payload
+if [ "$REUSE" = YES ]; then
+  echo "==> --reuse: keeping the existing payload and driving copy (manifests are re-signed)"
+  SHA=$(shasum -a 256 "$H/payload.tbz" | awk '{print $1}')
+  SZ=$(stat -f %z "$H/payload.tbz")
+else
+echo "==> building the payload ($NEXT)"
+python3 - "$CHANGES" "$CUR" "$NEXT" <<'PY'
+import sys
+p,cur,nxt = sys.argv[1:4]
+s = open(p).read()
+head = [l for l in s.split("\n") if l.startswith("## ")][0]
+s = s.replace(head, "## 2026-01-01 (v%s)\n\nRehearsal payload — not a release.\n\n%s" % (nxt, head), 1)
+open(p,"w").write(s)
+PY
+ruby ide/seed_xcodeproj.rb >/dev/null
+xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build > "$H/payload-build.log" 2>&1 \
+  || { echo "error: payload build failed, see $H/payload-build.log" >&2; exit 1; }
+mkdir -p "$H/payload"; ditto "$DD" "$H/payload/TextMate-NG.app"
+cp "$H/Changes.orig" "$CHANGES"
+tar -cjf "$H/payload.tbz" -C "$H/payload" TextMate-NG.app
+SHA=$(shasum -a 256 "$H/payload.tbz" | awk '{print $1}')
+SZ=$(stat -f %z "$H/payload.tbz")
+
+# The payload must satisfy the requirement the updater enforces, or every scenario
+# fails for a reason that has nothing to do with what is being tested.
+codesign --verify --strict \
+  -R='anchor apple generic and identifier "com.j23software.TextMate-NG" and certificate leaf[subject.OU] = "R22V2H7QF4"' \
+  "$H/payload/TextMate-NG.app" \
+  || { echo "error: the payload does not meet the updater's designated requirement" >&2; exit 1; }
+
+# ------------------------------------------------ 2. the app under test
+echo "==> building the driving copy ($CUR, local channel)"
+python3 - "$APPCTL" "$H" <<'PY'
+import sys
+p,H = sys.argv[1:3]
+s = open(p).read()
+s = s.replace("https://github.com/johnmcgovern/textmate-ng/releases/download/updates/release.json",
+              "file://%s/channel.json" % H, 1)
+anchor = "\tfunc applicationDidFinishLaunching(_ notification: Notification) {"
+assert anchor in s, "anchor not found — has applicationDidFinishLaunching moved?"
+driver = '''
+		// ===== REHEARSAL DRIVER, injected by bin/rehearse-update. Never committed. =====
+		DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+			NSLog("DRIVER: checkForUpdate")
+			SoftwareUpdate.sharedInstance.checkForUpdate(nil)
+			var ticks = 0, pressed = Set<String>(), seen = Set<String>()
+			Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { timer in
+				ticks += 1
+				if ticks > 30 { NSLog("DRIVER: done"); timer.invalidate(); return }
+				func walk(_ v: NSView) -> ([String], [NSButton]) {
+					var t: [String] = []; var b: [NSButton] = []
+					if let f = v as? NSTextField, !f.stringValue.isEmpty { t.append("TEXT: " + f.stringValue) }
+					if let x = v as? NSButton { if !x.title.isEmpty { t.append("BUTTON: " + x.title) }; b.append(x) }
+					for sub in v.subviews { let (st, sb) = walk(sub); t += st; b += sb }
+					return (t, b)
+				}
+				// Sheets are separate windows and are not in NSApp.windows while
+				// attached, so a refusal presented as a sheet is invisible without this.
+				var targets: [NSWindow] = []
+				for w in NSApp.windows where w.isVisible {
+					targets.append(w)
+					var sheet = w.attachedSheet
+					while let s = sheet { targets.append(s); sheet = s.attachedSheet }
+				}
+				for w in targets {
+					guard let root = w.contentView else { continue }
+					let (lines, buttons) = walk(root)
+					guard lines.contains(where: { $0.contains("Update") || $0.contains("Download") || $0.contains("version") || $0.contains("Refus") || $0.contains("Verif") || $0.contains("Prerelease") }) else { continue }
+					let key = lines.joined(separator: "|")
+					if !seen.contains(key) {
+						seen.insert(key)
+						NSLog("DRIVER: --- screen ---")
+						for l in lines { NSLog("DRIVER:   %@", l) }
+					}
+					for b in buttons where b.isEnabled {
+						if ["Download", "Install & Relaunch"].contains(b.title), !pressed.contains(b.title) {
+							pressed.insert(b.title)
+							NSLog("DRIVER: pressing '%@'", b.title)
+							b.performClick(nil)
+							return
+						}
+					}
+				}
+			}
+		}
+		// ===== end rehearsal driver =====
+'''
+s = s.replace(anchor, anchor + driver, 1)
+open(p,"w").write(s)
+PY
+ruby ide/seed_xcodeproj.rb >/dev/null
+xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build > "$H/driver-build.log" 2>&1 \
+  || { echo "error: driver build failed, see $H/driver-build.log" >&2; exit 1; }
+mkdir -p "$H/pristine"; ditto "$DD" "$H/pristine/TextMate-NG.app"
+cp "$H/AppController.orig" "$APPCTL"
+ruby ide/seed_xcodeproj.rb >/dev/null
+fi   # end of the build stages, skipped by --reuse
+
+# ----------------------------------------------------------- 3. the manifests
+mkmanifest() { # name version sha expiry_days [label]
+  python3 - "$H/inner-$1.json" "$H/payload.tbz" "$2" "$3" "$SZ" "$4" <<'PY'
+import json,sys,datetime
+out,tbz,ver,sha,sz,days = sys.argv[1:7]
+now = datetime.datetime.now(datetime.timezone.utc)
+json.dump({"version":ver,"url":"file://"+tbz,"sha256":sha,"size":int(sz),
+  "issued":now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+  "expires":(now+datetime.timedelta(days=int(days))).strftime("%Y-%m-%dT%H:%M:%SZ"),
+  "minimumSystemVersion":"15.0"}, open(out,"w"), separators=(",",":"))
+PY
+  # An ARRAY, because zsh does not word-split an unquoted expansion: the obvious
+  # `${5:+--label $5}` arrives at update-sign as the single argument
+  # "--label j23-..." , which does not match "--label", so it silently signs with
+  # the DEFAULT key. That made the wrongkey fixture a validly-signed manifest and
+  # the scenario "failed" by correctly installing it.
+  local -a labelarg
+  [ -n "$5" ] && labelarg=(--label "$5")
+  local sig
+  sig=$("$ROOT/bin/update-sign" sign "$H/inner-$1.json" $labelarg)
+  printf '{"manifest":"%s","keyID":"j23-2026","signature":"%s"}' \
+    "$(base64 -i "$H/inner-$1.json" | tr -d '\n')" "$sig" > "$H/$1.json"
+}
+echo "==> signing manifests"
+mkmanifest good     "$NEXT"  "$SHA" 35
+mkmanifest badhash  "$NEXT"  "0000000000000000000000000000000000000000000000000000000000000000" 35
+mkmanifest expired  "$NEXT"  "$SHA" -1
+mkmanifest mismatch "$AFTER" "$SHA" 35
+mkmanifest rollback "2026.1-alpha.1" "$SHA" 35
+WRONG=j23-rehearsal-throwaway
+"$ROOT/bin/update-sign" delete-key --label $WRONG >/dev/null 2>&1 || true
+"$ROOT/bin/update-sign" create-key --label $WRONG >/dev/null 2>&1
+mkmanifest wrongkey "$NEXT" "$SHA" 35 $WRONG
+"$ROOT/bin/update-sign" delete-key --label $WRONG >/dev/null 2>&1
+
+# --------------------------------------------------------------- 4. the scenarios
+#
+# Each line is: scenario | version expected afterwards | text the app must show.
+# The version check is the one that matters — it is the difference between "refused"
+# and "installed something it should not have".
+typeset -A EXPECT_VERSION EXPECT_TEXT
+EXPECT_VERSION=( good "$NEXT" badhash "$CUR" expired "$CUR" mismatch "$CUR" wrongkey "$CUR" rollback "$CUR" )
+EXPECT_TEXT=(
+  good     "Install & Relaunch"
+  badhash  "does not match the checksum"
+  expired  "has expired"
+  mismatch "Update Refused"
+  wrongkey "signature is not valid"
+  rollback "You are Using a Prerelease"
+)
+# `${@:-a b c}` expands the default as a SINGLE word in zsh, which looked for a
+# scenario named "good badhash expired ..." and reported every one of them missing.
+if [ $# -gt 0 ]; then
+  SCENARIOS=($@)
+else
+  SCENARIOS=(good badhash expired mismatch wrongkey rollback)
+fi
+FAILED=0
+for S in $SCENARIOS; do
+  [ -f "$H/$S.json" ] || { echo "no such scenario: $S" >&2; FAILED=1; continue }
+  pkill -x TextMate-NG 2>/dev/null || true
+  python3 -c "import time; time.sleep(2)"
+  cp "$H/$S.json" "$H/channel.json"
+  defaults delete com.j23software.TextMate-NG SoftwareUpdateSuspendUntil 2>/dev/null || true
+  rm -rf "$H/installed"; mkdir -p "$H/installed"
+  ditto "$H/pristine/TextMate-NG.app" "$H/installed/TextMate-NG.app"
+  NSZombieEnabled=YES "$H/installed/TextMate-NG.app/Contents/MacOS/TextMate-NG" > "$H/run-$S.log" 2>&1 &
+  python3 -c "import time; time.sleep(26)"
+  pkill -x TextMate-NG 2>/dev/null || true
+
+  GOT=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$H/installed/TextMate-NG.app/Contents/Info.plist" 2>/dev/null)
+  WANT=$EXPECT_VERSION[$S]
+  CRASH=$(grep -icE "Fatal error|message sent to deallocated" "$H/run-$S.log" || true)
+  SAID=$(grep -c "$EXPECT_TEXT[$S]" "$H/run-$S.log" || true)
+
+  if [ "$GOT" = "$WANT" ] && [ "$CRASH" -eq 0 ] && [ "$SAID" -gt 0 ]; then
+    echo "  PASS  $S — version $GOT, said \"$EXPECT_TEXT[$S]\""
+  else
+    echo "  FAIL  $S — version $GOT (wanted $WANT), crashes $CRASH, matched \"$EXPECT_TEXT[$S]\" $SAID times"
+    echo "        transcript: $H/run-$S.log"
+    FAILED=1
+  fi
+done
+
+echo
+if [ $FAILED -eq 0 ]; then
+  echo "==> all scenarios passed. Transcripts in $H."
+else
+  echo "==> FAILURES above. This is a release blocker: it means the updater is" >&2
+  echo "    wrong in the path that replaces the running application." >&2
+fi
+exit $FAILED

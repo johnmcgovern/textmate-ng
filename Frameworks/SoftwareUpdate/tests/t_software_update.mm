@@ -1404,3 +1404,61 @@ void test_an_unparseable_minimum_system_version ()
 	// the other way is one missed update that a later manifest fixes.
 	if(runs) OAK_FAIL("an unreadable minimumSystemVersion should be treated as unmet");
 }
+
+// ================================================
+// = The Download button's trap (alpha.22, alpha.23) =
+// ================================================
+//
+// -downloadSoftwareUpdate: assigns `progress` and only then installs the view:
+//
+//     progressViewController.progress = progressReporting.progress
+//     contentViewController.subview = progressViewController.view
+//
+// The first line reaches -checkProgressTimerDidFire:, which writes to three
+// outlets that -loadView has not created yet. In the ObjC++ those were nil ivars
+// and -setStringValue: on nil did nothing (rule 33); as Swift IUOs the same nil is
+// a runtime trap (rule 44), so every click on Download killed the application.
+//
+// It shipped twice. The reason it shipped is that the class had no @objc name and
+// so was unreachable from here at all; it has one now for this test's sake.
+
+// The pin, and it fails with the crash rather than an assertion if the guard goes:
+// touching `progress` before the view exists must be survivable.
+void test_setting_progress_before_the_view_is_loaded_does_not_trap ()
+{
+	SUProgressViewController* controller = [[SUProgressViewController alloc] init];
+	if(controller.isViewLoaded) OAK_FAIL("fixture is wrong: the view must not be loaded yet");
+
+	NSProgress* progress = [NSProgress progressWithTotalUnitCount:100];
+	progress.completedUnitCount = 25;
+
+	controller.progress = progress;   // this is the line that trapped
+
+	if(!controller.progress) OAK_FAIL("progress should have been stored");
+	if(controller.isViewLoaded) OAK_FAIL("reporting progress must not force the view to load");
+
+	controller.progress = nil;        // the nil branch fires the same method
+	[controller release];
+}
+
+// And once there *is* a view, the fields are actually written — so the guard skips
+// work rather than silently disabling the progress display for good.
+void test_progress_reaches_the_fields_once_the_view_is_loaded ()
+{
+	SUProgressViewController* controller = [[SUProgressViewController alloc] init];
+
+	NSProgress* progress = [NSProgress progressWithTotalUnitCount:100];
+	progress.completedUnitCount = 40;
+	controller.progress = progress;
+
+	(void)controller.view;            // loadView runs here, as it does in the app
+	[controller checkProgressTimerDidFire:nil];
+
+	if(controller.progressIndicator.doubleValue <= 0.0)
+		OAK_FAIL("after the view loads, progress must reach the indicator");
+	if(controller.messageTextField.stringValue == nil)
+		OAK_FAIL("message field should have been written");
+
+	controller.progress = nil;
+	[controller release];
+}

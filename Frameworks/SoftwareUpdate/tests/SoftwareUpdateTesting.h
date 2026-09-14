@@ -79,3 +79,16 @@
 // an endless retry on a build that can never be accepted.
 + (BOOL)isWorthRetryingError:(NSError*)error;
 @end
+
+// The download panel's progress page. Reachable from a test only because the class
+// was given an @objc name for exactly that purpose: setting `progress` before the
+// view is loaded trapped on three implicitly-unwrapped outlets, which killed the
+// app on the Download button in alpha.22 and alpha.23, and nothing here could see
+// it.
+@interface SUProgressViewController : NSViewController
+@property (nonatomic) NSProgress* progress;
+@property (nonatomic, readonly) NSTextField* messageTextField;
+@property (nonatomic, readonly) NSTextField* informativeTextField;
+@property (nonatomic, readonly) NSProgressIndicator* progressIndicator;
+- (void)checkProgressTimerDidFire:(NSTimer*)timer;
+@end

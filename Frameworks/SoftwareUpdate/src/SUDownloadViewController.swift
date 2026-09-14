@@ -53,15 +53,20 @@ final class SUInfoViewController: NSViewController {
 // ============================
 
 @MainActor
+// @objc so t_software_update.mm can reach it. Not otherwise needed — nothing
+// outside this file uses the class — and added only because the crash it now
+// guards was unreachable from any test, which is how it shipped twice.
+@objc(SUProgressViewController)
 final class SUProgressViewController: NSViewController {
-	private(set) var messageTextField: NSTextField!
-	private(set) var informativeTextField: NSTextField!
-	private(set) var progressIndicator: NSProgressIndicator!
+	// @objc alongside the class name, so the test can read what the timer wrote.
+	@objc private(set) var messageTextField: NSTextField!
+	@objc private(set) var informativeTextField: NSTextField!
+	@objc private(set) var progressIndicator: NSProgressIndicator!
 
 	private var checkProgressTimer: Timer?
 
 	private var _progress: Progress?
-	var progress: Progress? {
+	@objc var progress: Progress? {
 		get { _progress }
 		set {
 			if _progress != nil && newValue == nil {
@@ -116,6 +121,26 @@ final class SUProgressViewController: NSViewController {
 	}
 
 	@objc func checkProgressTimerDidFire(_ timer: Timer?) {
+		// **The three fields are IUO and only exist once -loadView has run, and this
+		// method is reached before that happens.** -downloadSoftwareUpdate: sets
+		// `progress` and *then* installs the view:
+		//
+		//     progressViewController.progress = progressReporting.progress   // fires this
+		//     contentViewController.subview = progressViewController.view    // runs loadView
+		//
+		// so on the first download of a session every one of them is nil here. In the
+		// ObjC++ these were nil ivars and -setStringValue: on nil did nothing (rule
+		// 33); as Swift implicitly-unwrapped optionals (rule 44) the same nil is a
+		// trap, and it killed the app the moment anybody clicked Download. It shipped
+		// in alpha.22 and alpha.23 and is the reason neither can install an update.
+		//
+		// `isViewLoaded` rather than reordering the two lines at the call site: doing
+		// nothing is precisely what the original did, it holds for every caller
+		// instead of one, and it does not force a view to load as a side effect of
+		// reporting progress. Nothing is lost by skipping — -viewWillAppear calls this
+		// again once there is a view, and the timer is still running every 0.04s.
+		guard isViewLoaded else { return }
+
 		// Messaging a nil _progress returned nil/0 in the original, and -stringValue
 		// tolerates neither, so the fallbacks are what nil-messaging did.
 		messageTextField.stringValue     = _progress?.localizedDescription ?? ""

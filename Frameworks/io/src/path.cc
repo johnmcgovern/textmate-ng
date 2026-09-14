@@ -869,7 +869,12 @@ namespace path
 		if(file != NULL_STR)
 		{
 			str = join(str, std::string(getprogname() ?: "untitled") + "_" + file + ".XXXXXX");
-			str.c_str(); // ensure the buffer is zero terminated, should probably move to a better approach
+			// `str.c_str();` used to sit here, commented "ensure the buffer is zero
+			// terminated". It never did that: c_str() has no side effects, and since
+			// C++11 std::string already guarantees str[str.size()] == '\0', so the
+			// &str[0] handed to mkstemp/mktemp below is a valid C string either way.
+			// The call relied on the guarantee rather than creating it. libc++ in the
+			// macOS 27 SDK marks c_str() [[nodiscard]], which is what finally said so.
 
 			if(content != NULL_STR)
 			{

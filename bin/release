@@ -313,9 +313,34 @@ TBZ_URL="https://github.com/$REPO/releases/download/$TAG/$(basename "$TBZ")"
 ISSUED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EXPIRES=$(date -u -v+35d +%Y-%m-%dT%H:%M:%SZ)
 
+# **Read out of the app, never written here.** This used to be the literal "15.0",
+# a second copy of ide/seed_xcodeproj.rb's DEPLOY_TGT with nothing keeping the two
+# in step — and the client *enforces* this field as of 5882b2d5, which is what makes
+# a stale copy dangerous rather than untidy.
+#
+# Raise DEPLOY_TGT for a new macOS and the hardcoded version would have offered the
+# build to everyone the app can no longer launch on: manifest says 15.0, bundle says
+# it needs 26, so the update installs and then macOS refuses to start it — with the
+# application that could have explained why already replaced. That is the exact
+# failure the enforcement exists to prevent, defeated by a copy of a number.
+APP_MIN_OS=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$UNPACKED/Contents/Info.plist" 2>/dev/null)
+[ -n "$APP_MIN_OS" ] || {
+  echo "error: $UNPACKED has no LSMinimumSystemVersion; refusing to guess one" >&2; exit 1; }
+
+# The plist is what macOS consults when deciding whether to launch; LC_BUILD_VERSION's
+# minos is what dyld enforces. They come from different build settings and are
+# supposed to agree — if they do not, this build is inconsistent and whichever one
+# the manifest copied would be wrong.
+BIN_MIN_OS=$(otool -l "$UNPACKED/Contents/MacOS/TextMate-NG" 2>/dev/null \
+  | awk '/LC_BUILD_VERSION/{f=1} f&&/^ *minos/{print $2; exit}')
+[ "$APP_MIN_OS" = "$BIN_MIN_OS" ] || {
+  echo "error: LSMinimumSystemVersion is $APP_MIN_OS but the binary's minos is $BIN_MIN_OS" >&2
+  echo "       these must agree; the manifest would advertise the wrong floor" >&2
+  exit 1; }
+
 INNER="$WORK/manifest-inner.json"
-printf '{"version":"%s","url":"%s","sha256":"%s","size":%s,"issued":"%s","expires":"%s","minimumSystemVersion":"15.0"}' \
-  "$VERSION" "$TBZ_URL" "$TBZ_SHA" "$TBZ_SIZE" "$ISSUED" "$EXPIRES" > "$INNER"
+printf '{"version":"%s","url":"%s","sha256":"%s","size":%s,"issued":"%s","expires":"%s","minimumSystemVersion":"%s"}' \
+  "$VERSION" "$TBZ_URL" "$TBZ_SHA" "$TBZ_SIZE" "$ISSUED" "$EXPIRES" "$APP_MIN_OS" > "$INNER"
 
 echo "==> signing the update manifest"
 
@@ -374,19 +399,23 @@ awk '/^## /{ if(seen) exit; seen=1; next } seen' "$CHANGES" > "$NOTES"
 
 # The requirements do not appear in Changes.md, and a release page that omits
 # them produces a bug report from an Intel Mac.
+#
+# The Requirements line is printf'd instead of living in the heredoc, because it has
+# to expand $APP_MIN_OS and the heredoc has to stay **quoted**: its body contains
+# `/Applications` and `-dSYMs.zip` in backticks, which an unquoted heredoc would run
+# as commands. Writing it in the heredoc and unquoting the delimiter is the obvious
+# move and produces a release page with the output of `/Applications` in it.
+printf '\n---\n\n**Requirements:** Apple Silicon, macOS %s or later.\n' "$APP_MIN_OS" >> "$NOTES"
+
 cat >> "$NOTES" <<'REQUIREMENTS'
-
----
-
-**Requirements:** Apple Silicon, macOS 15 Sequoia or later.
 
 Unzip and drag to `/Applications`. The build is signed with an Apple Developer ID
 and notarized, so Gatekeeper accepts it with no workaround — if macOS refuses to
 open it, that is a real signal rather than something to work around.
 
-This is an alpha. Software update and crash-report submission are switched off
-while the fork has no server of its own, so a new build means downloading a new
-build.
+This is an alpha, but it can update itself: it checks for new releases and installs
+them after asking you. Crash-report *submission* stays switched off while the fork
+has no collector of its own — macOS's own crash reporting is unaffected either way.
 
 The `-dSYMs.zip` asset is debug symbols for this exact build — only useful for
 turning a crash report into readable function names. **The app is the other

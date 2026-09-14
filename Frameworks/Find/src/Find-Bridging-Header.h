@@ -57,9 +57,6 @@
 #import "FindTypes.h"
 #import "FindSupport.h"
 
-// This framework's remaining ObjC++ view controllers, which Find owns and drives.
-#import "FFFolderMenu.h"
-
 // For the two exported notification names, whose definitions stay in ObjC
 // because a Swift NSNotification.Name extension emits no C symbol and consumers
 // link against one. Declared here rather than importing FFDocumentSearch.h,

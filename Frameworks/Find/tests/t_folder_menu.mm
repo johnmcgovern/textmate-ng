@@ -1,4 +1,4 @@
-#import "../src/FFFolderMenu.h"
+#import "FindTesting.h"
 #import <Cocoa/Cocoa.h>
 #import <sys/stat.h>
 

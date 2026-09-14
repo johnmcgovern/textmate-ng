@@ -72,3 +72,11 @@
 - (void)showHistory:(id)sender;
 - (void)showPopoverWithString:(NSString*)aString;
 @end
+
+// Hand declaration of the Swift FFFolderMenu, for the pins in t_folder_menu.mm
+// only — its real header is gone now that Find.swift sees the class directly.
+@interface FFFolderMenu : NSObject <NSMenuDelegate>
+@property (class, readonly) FFFolderMenu* sharedInstance;
++ (void)addSubmenuForDirectoryAtPath:(NSString*)path toMenuItem:(NSMenuItem*)aMenuItem;
+- (void)addSubmenuForDirectoryAtPath:(NSString*)path toMenuItem:(NSMenuItem*)aMenuItem;
+@end

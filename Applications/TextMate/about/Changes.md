@@ -2,6 +2,53 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-14 (v2026.9-alpha.24)
+
+**If you are on alpha.22 or alpha.23, you have to download this one by hand.**
+Clicking **Download** on an available update crashes both of those builds, so
+neither can install this fix — which is the fix. Grab the zip from this release
+page and replace the application; after that, updating works normally.
+
+That is three releases in a row with something broken in the updater, so it is
+worth saying what was wrong and what has changed about how it is tested.
+
+**The fault.** The download panel reported its progress a moment before it built
+the view that displays it, so the three fields it writes to did not exist yet. In
+the Objective-C++ this code was rewritten from, writing to a missing field did
+nothing at all; in Swift the same missing field stops the program. Clicking
+Download hit it every time.
+
+**Why it reached you twice.** The pre-release check cannot press that button. To
+get an update offered, a newer release has to already be published — so the
+download, and the swap that replaces the running application, were the two steps
+nobody could exercise until they were live. Both of the last two faults were in
+exactly that unreachable stretch.
+
+**What is different now.** There is a rehearsal that stands in for the missing
+newer release: it builds a genuine signed update one version ahead, points a copy
+of the application at it locally, and drives the panel itself — pressing Download,
+pressing Install & Relaunch, and reading back what the application said. Six
+situations run before a release now, and all six had to pass before this one was
+built:
+
+* a good update installs, replaces the app, and relaunches;
+* a payload whose checksum does not match its signed description is refused during
+  the download;
+* a manifest signed by the wrong key is refused before anything is fetched;
+* an expired manifest is refused;
+* a payload whose version disagrees with its manifest is refused at the last step,
+  after downloading cleanly;
+* an older version is never offered as an update.
+
+**This release is the first whose updater was exercised before it shipped rather
+than after.** Two updates were installed end to end during that rehearsal,
+including the part where the application replaces itself and relaunches — which
+had never once run before today.
+
+**Where to look if something is off.** Check for Update, from the application menu
+and from Settings ▸ Software Update, and — once alpha.25 exists — the Download and
+Install & Relaunch buttons. Nothing in this release touches the editor.
+
 ## 2026-09-14 (v2026.9-alpha.23)
 
 **A crash fix, and please install this one.** alpha.22 crashes when you ask it to

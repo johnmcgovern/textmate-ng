@@ -2,6 +2,51 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-14 (v2026.9-alpha.23)
+
+**A crash fix, and please install this one.** alpha.22 crashes when you ask it to
+check for updates — *Check for Update* in the application menu, or **Check Now** in
+Settings ▸ Software Update. Either one kills the app. Nothing is damaged by it and
+nothing else is affected, but there is no way to use that menu item on alpha.22 at
+all.
+
+**Automatic checking was never affected**, which is how alpha.22 reaches this
+release on its own: leave it running and it will offer alpha.23 within the hour.
+Only the check *you* ask for was broken.
+
+The cause, for the record, was a single missing argument. A helper that reads the
+modifier keys took the current event as a defaulted parameter, and the way that
+default was written let the application release an event it did not own — so the
+first call freed it and the second used it. It shipped because the surrounding
+change was the one that made anybody able to reach that menu item in the first
+place: with no update server configured, the fork had spent two months answering
+"No channel named ‘release’" before ever getting that far.
+
+**Two things about updates are now more honest.**
+
+*Refusals say what was actually refused.* When an update fails its checks, the
+dialog reported "The download is incomplete. This can happen if the system has been
+deleting temporary files" and offered to download it again — whatever had really
+gone wrong. That was left over from an older, weaker check. By the time the dialog
+can appear, the download has already been matched against the checksum and size in
+its signed manifest, so an incomplete download is close to the one thing it cannot
+be. An update signed by the wrong identity, or one whose version disagrees with
+what its manifest promised, is intact: fetching it again produces the same bytes
+and the same refusal. You now get the real reason, and the offer to retry appears
+only where retrying could plausibly help.
+
+*An update that your Mac cannot run is no longer offered.* Each update says which
+macOS it needs. Nothing had been reading that, so a future release built for a
+newer system could have installed cleanly and then refused to launch — with the
+application that would have explained why already replaced. It is checked now,
+before anything is downloaded.
+
+**Where to look if something is off.** Both ways of checking for an update:
+*Check for Update* in the application menu, ⌥ for *Check for Test Build* (which
+still reports no `canary` channel, as intended), and Settings ▸ Software Update ▸
+Check Now, including that the "Last check" line there updates afterwards. Nothing
+else in this release goes near the editor.
+
 ## 2026-09-12 (v2026.9-alpha.22)
 
 **Software update works again.** Since 2026-07-26 *Check for Update* has answered

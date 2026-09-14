@@ -50,6 +50,11 @@
 @class OakDocument;
 
 @interface DocumentWindowController (Testing)
+// The titlebar accessory's size, extracted from -init so it can be pinned: the value
+// it computes is overwritten by AppKit moments later, so a test that reads the
+// installed accessory's frame cannot see a wrong answer. macOS 27 is what surfaced
+// the wrong answer (a -1 width, from NSView.noIntrinsicMetric).
++ (NSSize)titlebarAccessorySizeFor:(NSView*)view;
 // Pure, and a class method for that reason — see the note at its definition.
 + (BOOL)documents:(NSArray<OakDocument*>*)lhs hasCommonSubsequenceWithDocuments:(NSArray<OakDocument*>*)rhs;
 

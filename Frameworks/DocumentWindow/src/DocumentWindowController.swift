@@ -295,7 +295,7 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 		window.isReleasedWhenClosed = false
 
 		titlebarViewController = NSTitlebarAccessoryViewController()
-		tabBarView.setFrameSize(tabBarView.intrinsicContentSize)
+		tabBarView.setFrameSize(DocumentWindowController.titlebarAccessorySize(for: tabBarView))
 		titlebarViewController?.view = tabBarView
 		titlebarViewController?.fullScreenMinHeight = NSHeight(tabBarView.frame)
 		window.addTitlebarAccessoryViewController(titlebarViewController!)
@@ -365,6 +365,29 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 
 		let offset = NSMaxY(frameRect) - NSMaxY(contentRect)
 		return NSOffsetRect(frameRect, offset, -offset)
+	}
+
+	// **Height from the intrinsic size, width left alone.** `intrinsicContentSize` is
+	// (NSView.noIntrinsicMetric, 23), and noIntrinsicMetric is **-1** — a sentinel
+	// meaning "no preference", not a measurement. Passing the whole size to
+	// -setFrameSize: therefore set the frame width to -1. macOS 26 and earlier
+	// accepted that silently; macOS 27's AppKit reports "Invalid view geometry: width
+	// is negative", which is how a misuse that survived the Swift port became visible.
+	//
+	// Only the height was ever wanted — the caller reads NSHeight(frame) for
+	// fullScreenMinHeight on the next line. The width belongs to AppKit once this is a
+	// titlebar accessory, so preserving the current one changes nothing except that it
+	// stops being nonsense.
+	//
+	// **A static function rather than three inline words, because inline it cannot be
+	// pinned.** The obvious test — construct the controller and read the accessory's
+	// frame — passes with the bug still in: AppKit lays the accessory out after
+	// installation and overwrites the -1, so the bad value never survives long enough
+	// to observe. That test was written, it passed, and the mutation that restored the
+	// bug did not fail it. Same shape as +mediaTypeFromContentType: and
+	// +isUpdate:newerThanVersion: — extract the decision, then pin the decision.
+	@objc static func titlebarAccessorySize(for view: NSView) -> NSSize {
+		return NSMakeSize(NSWidth(view.frame), view.intrinsicContentSize.height)
 	}
 
 	@objc func frameRectForNewWindow() -> NSRect {

@@ -231,3 +231,45 @@ void test_document_window_controller_keeps_its_cxx_selectors ()
 	// category method.
 	assert_responds(@selector(scopeAttributes));
 }
+
+// ================================================================
+// = The titlebar accessory's size (macOS 27 surfaced this)        =
+// ================================================================
+//
+// -init sized the tab bar from `intrinsicContentSize`, which is
+// (NSView.noIntrinsicMetric, 23). noIntrinsicMetric is **-1** — a sentinel meaning
+// "no preference", not a measurement — so the frame width became -1. macOS 26 and
+// earlier accepted it silently; macOS 27's AppKit reports "Invalid view geometry:
+// width is negative".
+//
+// **Pinned on the computation, not on the installed view.** The first version of this
+// test constructed the controller and read the accessory's frame, and it could not
+// fail: AppKit lays a titlebar accessory out after installation and overwrites the
+// -1, so the bad value is gone before any test can look. It was deleted after the
+// mutation that restored the bug left it green.
+void test_the_titlebar_accessory_size_keeps_a_usable_width ()
+{
+	// A view whose intrinsic width is the sentinel — which is what OakTabBarView
+	// returns — and a real frame width to preserve.
+	NSView* view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 400, 10)];
+	OAK_ASSERT(NSViewNoIntrinsicMetric < 0);   // the whole reason this is a bug
+
+	NSSize size = [DocumentWindowController titlebarAccessorySizeFor:view];
+
+	if(size.width < 0)
+		OAK_FAIL(std::string("width must not be negative, got ") + std::to_string(size.width));
+	OAK_ASSERT_EQ(size.width, 400);             // the view's own width, preserved
+	[view release];
+}
+
+// And the height still comes from the intrinsic size, because the caller reads it
+// straight back off the frame for fullScreenMinHeight — a regression that returned
+// the frame's height instead would silently collapse the full-screen titlebar.
+void test_the_titlebar_accessory_size_takes_the_intrinsic_height ()
+{
+	NSView* view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 400, 999)];
+	NSSize size = [DocumentWindowController titlebarAccessorySizeFor:view];
+	OAK_ASSERT_EQ(size.height, view.intrinsicContentSize.height);
+	OAK_ASSERT(size.height != 999);
+	[view release];
+}

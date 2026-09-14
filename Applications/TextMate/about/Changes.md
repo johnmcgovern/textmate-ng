@@ -2,6 +2,41 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-14 (v2026.9-alpha.25)
+
+**If you are running alpha.24, leave this one alone and let it arrive.** It should
+offer itself within the hour and install without you fetching anything — the first
+update in this fork's history that does. If it does not turn up, that is worth
+reporting; downloading it by hand would paper over exactly the thing this release is
+meant to demonstrate.
+
+**Nothing you look at has changed.** No new features, nothing moved, no visible fixes.
+What is in it:
+
+* **macOS 27 is supported, and now built against.** The application is compiled with
+  the macOS 27 SDK as of this release. The minimum stays **macOS 15**, deliberately —
+  two releases back, and nobody on 15 or 26 is left behind by this.
+* **Two latent bugs the new compiler found**, neither of which anyone could have
+  noticed. A temporary-file path helper carried a line that claimed to null-terminate
+  a buffer and did nothing at all; the document window asked for its tab bar to be
+  one pixel *less than zero* wide, which every macOS until 27 silently accepted.
+* **The release page you are reading is more accurate.** It had been saying software
+  update was switched off — untrue since alpha.22, and it went out that way three
+  times. It also derives the macOS requirement from the application itself now
+  instead of repeating a number by hand.
+
+**Why a release with nothing in it.** Because the updater has never once run in the
+field. Everything about it has been tested locally — six situations, twice, including
+the part where the application replaces itself — but a rehearsal on the machine that
+built it is not the same as an update arriving over the internet at a copy somebody
+installed normally. alpha.25 exists to be that, and its contents are deliberately
+dull so that if something goes wrong the updater is the obvious suspect.
+
+**Where to look if something is off.** Whether it showed up on its own; and if you
+went looking, Check for Update in the application menu and in Settings ▸ Software
+Update. After it installs, that it relaunches by itself and reopens what you had
+open. Nothing here goes near the editor.
+
 ## 2026-09-14 (v2026.9-alpha.24)
 
 **If you are on alpha.22 or alpha.23, you have to download this one by hand.**

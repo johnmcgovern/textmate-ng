@@ -251,6 +251,15 @@ for S in $SCENARIOS; do
   python3 -c "import time; time.sleep(26)"
   pkill -x TextMate-NG 2>/dev/null || true
 
+  # **Take the transcript from the unified log, not from the redirected stderr.**
+  # NSLog writes to stderr, and stderr pointed at a file is block-buffered, so a
+  # successful `good` run — which kills itself to relaunch — dies with up to 4KB of
+  # driver output still unflushed. That produced a FAIL on a scenario whose *version*
+  # check had already proved it worked: 3890 bytes of log, one line of transcript,
+  # and an installed alpha.25. os_log keeps the lines regardless.
+  /usr/bin/log show --last 3m --style compact --predicate 'process == "TextMate-NG"' 2>/dev/null \
+    | grep "DRIVER:" >> "$H/run-$S.log" || true
+
   GOT=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$H/installed/TextMate-NG.app/Contents/Info.plist" 2>/dev/null)
   WANT=$EXPECT_VERSION[$S]
   CRASH=$(grep -icE "Fatal error|message sent to deallocated" "$H/run-$S.log" || true)

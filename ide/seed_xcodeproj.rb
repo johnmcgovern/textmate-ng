@@ -50,6 +50,24 @@ DEP_PREFIXES =
     brew = `brew --prefix 2>/dev/null`.strip
     [brew.empty? ? "/usr/local" : brew]
   end
+# The deployment floor. **Decided 2026-09-14 to stay at 15.0**, with Xcode 27 and the
+# macOS 27 SDK installed and the whole suite green against them — so this is a choice,
+# not an accident of tooling. macOS went 15 → 26 → 27, which puts 15.0 two releases
+# back: n-2, and still a modern floor.
+#
+# Nothing technical is pushing it up. The fork builds against the newest SDK with the
+# floor here, which is the right pairing: new headers, old minimum, nobody stranded.
+#
+# **If you do raise it, that is the whole edit.** bin/release reads the manifest's
+# minimumSystemVersion and the release-note requirements line out of the built app
+# (f37ea453), so both follow from this line. They used to be separate literals, and
+# since the updater *enforces* minimumSystemVersion, a stale copy would have offered
+# builds to people who cannot launch them. What does not follow from here is CI's
+# runner image and Xcode version.
+#
+# Raising it strands every user below the new floor, and the update they are offered
+# is the one that strands them — so it is a release-notes decision as much as a build
+# setting.
 DEPLOY_TGT = "15.0"                       # migration floor (Stream 4); also > SDK min 10.13
 
 # App version, captured the way rave does (grep the latest Changes.md heading). Fed

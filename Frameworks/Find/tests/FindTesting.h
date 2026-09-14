@@ -39,6 +39,11 @@
 + (NSString*)resultCountStringForCount:(NSUInteger)count searchString:(NSString*)searchString;
 + (NSString*)shownResultCountStringForCount:(NSUInteger)count searchString:(NSString*)searchString;
 + (NSString*)searchedFilesSuffixForFileCount:(NSUInteger)fileCount seconds:(NSString*)seconds;
+
+// CommonAncestor.swift's ObjC face, for t_common_ancestor.mm. The Swift is a
+// free function, which Swift cannot export (rule 19); this class method is how
+// the pins reach it, and the only reason it exists.
++ (NSString*)commonAncestorOfPaths:(NSArray<NSString*>*)paths;
 @end
 
 // Hand declaration of the Swift FFStatusBarViewController (rule 23 for tests

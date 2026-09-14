@@ -50,7 +50,6 @@
 // The document enumerator and its kSearch* option keys.
 #import <document/OakDocumentController.h>
 
-#import "CommonAncestor.h"
 #import "FFFindAction.h"
 #import "FFFindOptions.h"
 #import "FFResultNodeSupport.h"

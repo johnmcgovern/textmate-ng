@@ -1,4 +1,4 @@
-#import "../src/CommonAncestor.h"
+#import "FindTesting.h"
 
 // CommonAncestor reduces the folder search's path list to the directory that
 // results are displayed relative to (Find.swift's -acceptMatches: hands it
@@ -13,9 +13,11 @@
 // pathComponents and a common-prefix reduce, which is the obvious spelling and
 // is not the same function. These tests are what tells the two apart.
 
+// Through the class method FindTesting.h declares: the function itself is
+// Swift now, and a Swift free function has no ObjC symbol (rule 19).
 static NSString* Ancestor (NSArray<NSString*>* paths)
 {
-	return CommonAncestor(paths);
+	return [Find commonAncestorOfPaths:paths];
 }
 
 // A directory that does not exist, so the trailing fileExistsAtPath: check is a

@@ -2013,12 +2013,125 @@ By contrast the OakDownloadManager port *was* exercised end to end, by shortenin
     document     3,250 / 0%     |  needing boundary extraction before any
     OakTextView  5,649 / 23%    |  translation. A different kind of work.
 
-**Next: the four Find files** — `FFTextFieldViewController.mm` (216, 0 C++),
-`FFStatusBarViewController.mm` (156, 2), `FFFolderMenu.mm` (108, 3),
-`CommonAncestor.mm` (36, 0). All subclass real AppKit classes. Note
-`FFTextFieldViewController` has three KVO/bind sites — rule 64 territory.
+~~**Next: the four Find files**~~ — **all four are Swift.** The two view
+controllers landed 2026-09-08 (`265fd963`, `6ca214c8`); `CommonAncestor` and
+`FFFolderMenu` on 2026-09-14 — see "Session 2026-09-14" below. Find is
+finished; what is left in it is three rule-25 boundary files.
 
 Do not start `document` or `OakTextView` on momentum. They want a survey first.
+
+## Session 2026-09-14 — Find's last two leaves, and a pop-up reached for the first time
+
+Three commits (`f4e1ab39`, `22542e19`, `209c6538`), not pushed. Full suite
+**1087/1087 across 39 bundles**, started == passed, 0 restarts, 0 "Fatal
+error:" — counted by summing each bundle's own `Executed N tests?` line and
+cross-checked against the `Test Case … started` count, as the note above says.
+
+`CommonAncestor.mm` (36) and `FFFolderMenu.mm` (108) are Swift. Find's `.mm`
+went 735 → 591 and its Swift 3,138 → 3,359, which is **85%**. The 591 that
+remain are `FindSupport.mm` (271), `FFResultNodeSupport.mm` (244),
+`FFDocumentSearchSupport.mm` (76) — every one a rule-25 boundary. **Find is
+finished.** Do not try to "finish" it further; that would be the OakFilterList
+mistake the section above warns about.
+
+    f4e1ab39  pin FFFolderMenu (12 tests, rule 18/40)     Find bundle 89 → 101
+    22542e19  CommonAncestor.mm   36 → 40 Swift            rule 19 shaped the surface
+    209c6538  FFFolderMenu.mm    108 → 147 Swift           rule 8 done in the app
+
+### FFFolderMenu had no test, and what it does is exactly what a port breaks
+
+Filesystem filtering and a sort. The order is Finder-like — case-insensitive,
+numeric-aware, on the *stem*, then by extension — and four kinds of entry are
+skipped for four different reasons: files, dot-directories (the `"*"` glob's
+`matchDotFiles` defaults to false — read `regexp/glob.h`, not the call site),
+`UF_HIDDEN`, packages, plus symlinks by `d_type`. The fixture has one witness
+per rule, named so each mutation fails a different assertion. Both sides were
+mutation-checked: four fail against the ObjC++, four against the Swift, and
+the sets differ only where the positional tests re-address `alpha`.
+
+Deliberately not pinned: the `NSHomeDirectory()` fallback when the parent item
+has no path. Listing home from the test runner can raise a Desktop/Documents
+privacy prompt. That judgement was then confirmed in the app — see below.
+
+### Rule 19 decided CommonAncestor's shape
+
+A Swift free function has no ObjC symbol, and `t_common_ancestor.mm` calls it
+from ObjC++. The ObjC face is `+[Find commonAncestorOfPaths:]` in
+`FindTesting.h`, beside the class methods the status-string pins already use;
+the Swift spelling stays a free function so the four call sites are untouched.
+The scan is the original's character-wise loop over UTF-16 units, on purpose —
+the pin for a path prefixing another (grandparent, not the shared directory)
+still holds, defect carried rather than fixed, as that test says it should be.
+
+Two small things the compiler taught: `UInt16` has no `init(ascii:)`, so a
+`unichar` literal is `unichar(UInt8(ascii: "/"))`; and `-[NSMenuItem
+parentItem]` imports as `.parent`.
+
+### Rule 8 on a pop-up: reachable after all
+
+Rule 59 and the 2026-09-02 notes record accessibility as unavailable. Today
+**System Events could see the process** — windows, menu bar, pop-up buttons —
+with no settings change I know of. What worked, verbatim, after
+`open -a build/Release/TextMate-NG.app "$PWD"` and an `activate`:
+
+    tell application "System Events" to tell process "TextMate-NG"
+        keystroke "f" using {command down, shift down}        -- Find in Project
+        delay 1.5
+        click pop up button 1 of window 1                     -- the In: pop-up
+        delay 0.5
+        key code 124                                          -- → opens the highlighted row's submenu
+        delay 1
+        set sub to menu 1 of menu item (value of pop up button 1 of window 1) of menu 1 of pop up button 1 of window 1
+        name of every menu item of sub
+        key code 53                                           -- ONE escape
+    end tell
+
+It returned the repo's nine subfolders in Finder order, no `.git`/`.github`,
+no `TextMate.xcodeproj` (a package), a separator, "Enclosing Folders",
+Developer, jmcgovern, Users, the volume. That is the pins' shape, in the app.
+
+Three traps, each of which cost a run:
+
+- **Reading a submenu through accessibility does not populate it.** Without
+  the `key code 124` the same query answered zero items. Open it by keyboard.
+- **One Escape closes the whole pop-up. A second closes the Find window, a
+  third the document.** Two of the runs "lost" the window this way.
+- **The pop-up's tracking loop swallows Apple Events.** While a menu is open,
+  `tell application "TextMate-NG" to activate` hangs, and so does anything
+  after it. If a script stalls, `sample TextMate-NG 2` before guessing.
+
+### Pre-existing: a privacy prompt inside the menu tracking loop
+
+With the **home directory** as the last search folder, opening that submenu
+lists every subfolder of home to decide which rows get a submenu of their own,
+and the listing blocked in `open()` on a protected folder — the sample showed
+the main thread in `FFFolderMenu.folders(atPath:)` →
+`contentsOfDirectory(atPath:)` → `open`, inside `NSMenuTrackingSession`,
+waiting for a prompt nobody was there to answer. The ObjC++ did the same
+through `scandir`, so this is not the port. Not acted on; the prompt is the
+user's call. The smoke list now says where to look. The unified log did not
+name the folder, and I did not answer the prompt: the app was quit with
+SIGTERM and relaunched on the repo, which has no protected subfolders.
+
+### Housekeeping
+
+- `-scheme Find` has no test action. A single bundle is
+  `-scheme AllTests -only-testing:FindTests`, as FILEBROWSER_PORT_HANDOFF.md
+  says and this file did not.
+- Line counts with `find | xargs cat` silently drop every file with a space in
+  its name (`NSMenuItem Additions.swift` and eight others). Use
+  `find -print0 | xargs -0`. The tree-wide figures below are counted that way;
+  the 2026-09-05 figures in this file were not, and are low by a few hundred.
+
+### Numbers, measured 2026-09-14
+
+| | |
+| --- | --- |
+| Full suite | **1087 tests, 39 bundles, 0 failures, 0 restarts** |
+| Published releases | 20 (alpha.7 … alpha.25); 3 commits unreleased |
+| Swift, non-test | 107 files, 31,476 lines |
+| ObjC++ `.mm`, non-test | 20,840 in Frameworks, 1,768 in the app |
+| Find | 591 `.mm` (three boundary files) / 3,359 Swift — **85%, finished** |
 
 ## Before cutting a release: the five-minute smoke pass
 
@@ -2039,7 +2152,7 @@ frame and takes two seconds to find:
 | --- | --- | --- |
 | Settings | ⌘, | Window appears; click through **every** toolbar pane |
 | File browser | open a git repo | Tree populates, SCM badges draw |
-| Find | ⌘F, and Find in Folder | Both windows appear; run one search |
+| Find | ⌘F, and Find in Folder | Both windows appear; run one search. Open the **In:** pop-up and its folder submenu (→ on the highlighted row): subfolders in Finder order, then a separator and "Enclosing Folders" up to the volume. **If it appears to hang, look for a privacy prompt** — see "Session 2026-09-14" |
 | Bundle Editor | Bundles ▸ Edit Bundles | Window appears, list populates |
 | Go to File | ⌘T | Panel appears, filtering responds |
 | Commit window | Bundles ▸ … ▸ Commit | Window appears (needs a dirty repo) |

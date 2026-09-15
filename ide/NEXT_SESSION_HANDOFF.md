@@ -2231,6 +2231,59 @@ left of the frontier, and both want a survey before anything else — the
 2026-09-06 warning stands. The modernization items are unchanged: CI's runner
 image and Xcode version, About ▸ Bundles, and `FavoriteChooser` behind rule 56.
 
+## Survey (2026-09-14, evening): `document` is one boundary and two portable files
+
+Done by reading the ivars and the headers before writing anything (the cheap
+order), and the CI runner while at it.
+
+**`OakDocument.mm` (1,873) stays ObjC++**, for the reason OakTextView does: it
+*is* the engine's face, not a shell over one. Its ivars are
+`std::unique_ptr<ng::buffer_t>`, a `ng::callback_t*` (a C++ virtual class,
+subclassed in-file), `std::unique_ptr<ng::undo_manager_t>`, `scm::info_ptr`
+with a live callback, a `std::map` of SCM variables, and a file-scope
+`document::mark_tracker_t`; its public header carries C++ in twenty selectors
+(`text::pos_t`, `ng::index_t`, `find::options_t`, `std::multimap`,
+`scm::status::type`, `osx::authorization_t`, `oak::uuid_t` inside completion
+blocks) and nine `getter =` properties. Seven bridging headers already import
+it and let the importer drop what it cannot see. The DWScopeContext treatment
+would peel the SCM part; the buffer and its callback would still be there. Not
+a candidate. **`OakDocumentEditor.mm` (184)** is `ng::editor_t`/`ng::layout_t`
+glue with its own `ng::callback_t` subclass — same verdict. **`clipboard.mm`**
+(59) exports a `clipboard_ptr` (rule 37), **`merge.cc`** is C++, and
+**`Printing.mm`** (278) draws through `ng::layout_t` and has a `+initialize`
+(rule 24); low value, leave it.
+
+**Two files are portable**, in this order:
+
+1. **`EncodingView.mm` (324, 10 C++)** — `EncodingWindowController`, a
+   programmatic window (no nib) with three bindings through an
+   NSObjectController. Its only C++ is `convert_and_highlight`, a
+   `text::transcode_t` helper that becomes one support function (rule 25).
+   One consumer, `OakDocument.mm`, so the hand-written header stays (rule 23).
+   No test exists; pin the bindings and the encoding/encodingNoBOM pair first.
+2. **`OakDocumentController.mm` (532, 53 C++)** — Swift calls ten of its
+   methods in thirty places already, through a header that is C++-free except
+   the window category's `text::range_t const&`, which the importer drops and
+   which lives in DocumentWindow's `OakDocumentControllerWindows.mm` anyway.
+   The C++ is two coherent pieces: the registry (three `std::map`s keyed by
+   UUID, path and an inode struct, under a `std::mutex`) and the directory
+   enumeration (`path::glob_list_t` over `path::entries`). Both are the
+   BundlesIndexCache shape — extract each behind an ObjC face while the file
+   is still ObjC++, let pins judge it, then translate. Untitled-count
+   reservation and LRU ranking are pinnable without any of that.
+
+After those two, `document` is 2,500 lines of engine face by decision, like
+OakTextView, and the frontier of the old kind is closed.
+
+### CI, looked at for the first time
+
+`macos-latest` was the macos-26-arm64 image with Xcode 26.6 and the 26.5 SDK;
+the release machine runs Xcode 27.0 / Swift 6.4 / SDK 27. `30c440ce` pins the
+image and DEVELOPER_DIR so a runner change fails loudly, and records the
+`xcode-27` preview label (beta 6 today) as where the pin moves at GA. Only
+Xcode 27 is installed locally, so **the nine commits since alpha.25 have not
+compiled under Swift 6.3 yet — the next push is what checks that.**
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

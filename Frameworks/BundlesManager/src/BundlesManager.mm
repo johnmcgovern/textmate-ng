@@ -749,3 +749,18 @@ namespace
 	[plist writeToFile:_localIndexPath atomically:YES];
 }
 @end
+
+// The tests' way in to BundlesFromIndex (declared for them in
+// tests/BundlesManagerTesting.h). A class method rather than exporting the
+// function: the test bundle is ObjC++ and could call it, but the port that
+// follows makes it Swift, and a Swift free function has no ObjC symbol (rule 19).
+@interface BundlesManager (Testing)
++ (NSArray<Bundle*>*)bundlesFromRemoteIndexAtPath:(NSString*)remoteIndexPath localIndexPath:(NSString*)localIndexPath installDirectory:(NSString*)installDir previousBundles:(NSDictionary<NSUUID*, Bundle*>*)cache;
+@end
+
+@implementation BundlesManager (Testing)
++ (NSArray<Bundle*>*)bundlesFromRemoteIndexAtPath:(NSString*)remoteIndexPath localIndexPath:(NSString*)localIndexPath installDirectory:(NSString*)installDir previousBundles:(NSDictionary<NSUUID*, Bundle*>*)cache
+{
+	return BundlesFromIndex(remoteIndexPath, localIndexPath, installDir, cache);
+}
+@end

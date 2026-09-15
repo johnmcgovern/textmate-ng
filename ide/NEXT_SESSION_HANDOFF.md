@@ -2284,6 +2284,63 @@ image and DEVELOPER_DIR so a runner change fails loudly, and records the
 Xcode 27 is installed locally, so **the nine commits since alpha.25 have not
 compiled under Swift 6.3 yet — the next push is what checks that.**
 
+## Session 2026-09-14, part three — EncodingView is Swift, and CI agrees with the tree
+
+Three commits (`09391ee9`, `9d7b0169`, `76fb3a76`), the two-commit shape with
+the pins in front. Full suite **1129/1129 across 41 bundles**, started ==
+passed, 0 restarts. **CI passed on the ten commits pushed earlier** (run on
+`3eddbc89`, Xcode 26.6): everything from this morning compiles one Swift
+behind the release machine. Three commits sit unpushed on top of that.
+
+`EncodingWindowController` (203 ObjC++ → 228 Swift) is the document
+framework's first Swift file and first bridging header. What stays is
+`EncodingViewSupport.mm` (131), the `text::transcode_t` preview pass behind
+one class method — the survey's "one helper to extract", and it was.
+
+    09391ee9  pin (16 tests, rule 18/40)       document bundle 1 → 17
+    9d7b0169  boundary extraction, ObjC++      the pins judge the shim
+    76fb3a76  the flip                          suite measured at 1129
+
+### Three things the pins taught
+
+- **A nil-target button click cannot be exercised headless.** The action
+  climbs from the key window, a test process has none, and nil-target dispatch
+  falls through to NSDocumentController, which dies on an XPC endpoint it
+  cannot get. The Enter pin names its target and says why.
+- **The Swift-side set that only `dynamic` makes visible was in the
+  initializer.** `acceptableEncoding` is set from Swift after the bindings are
+  made; without `dynamic`, the Open button starts disabled. Same lesson as the
+  morning's BundlesManager gap, found here by the mutation check rather than
+  missed by it.
+- **A subtracted suite count was wrong by one.** The pin commit claimed 1130
+  from 1114 + 16; measured, 1129. Rule 10, again; corrected in the flip's
+  message rather than force-pushed.
+
+### Rule 8 owed
+
+The sheet appears only for a file no encoding classifier accepts, which means
+opening one in the running app, and the machine was in use all evening. A
+fixture of mixed high bytes that should trigger it is in the session
+scratchpad (`unknown-encoding.txt`); the smoke list has a row for it now.
+Next session: open it, confirm the sheet shows the file name in its
+explanation and a highlighted preview, and that Cancel and Open both dismiss
+it.
+
+### Numbers, measured 2026-09-14 (late)
+
+| | |
+| --- | --- |
+| Full suite | **1129 tests, 41 bundles, 0 failures, 0 restarts** |
+| CI | green on `3eddbc89` under Xcode 26.6 |
+| Swift, non-test | 32513 lines |
+| ObjC++ `.mm`, non-test, Frameworks | 20141 |
+| document | EncodingView Swift; `OakDocumentController` is next, then the framework is engine face by decision |
+
+**Next:** `OakDocumentController` (532) — pin the untitled-count reservation,
+LRU ranking and the enumeration options first; extract the registry and the
+glob enumeration behind ObjC faces; then translate. After it, the frontier of
+the old kind is closed.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**
@@ -2310,6 +2367,7 @@ frame and takes two seconds to find:
 | Software Update | Check for Updates | Panel appears with a version verdict. **Changed 2026-09-08:** a channel is now wired, so the background scheduler *is* created at launch and does fetch — the log line to look for is `Update manifest failed to parse` or a version verdict, and `defaults read com.j23software.TextMate-NG SoftwareUpdateLastPoll` records every completed check. The **manual** Check Now path still has no automated coverage |
 | HTML output | run any bundle command with HTML output | Window appears |
 | A document | open a source file | Text draws, **gutter has line numbers** |
+| Unknown Encoding sheet | open a file of bytes no encoding fits (the scratchpad's `unknown-encoding.txt`, or any Latin-1 file with stray high bytes) | Sheet appears naming the file, preview highlights the odd lines, Open is enabled only for an encoding that decodes every byte, Cancel dismisses. **Swift since 2026-09-14**, not yet seen in the app |
 
 Two minutes if nothing is broken. The gutter line is there because that bug also
 shipped in every release until alpha.10 (see "The gutter bug" above), and it is

@@ -2341,6 +2341,69 @@ LRU ranking and the enumeration options first; extract the registry and the
 glob enumeration behind ObjC faces; then translate. After it, the frontier of
 the old kind is closed.
 
+## Session 2026-09-14, part four — OakDocumentController is Swift; the old frontier is closed
+
+Three commits (`4230a7ef`, `bc48dc7b`, `8e340192`), pins in front. Full suite
+**1147/1147 across 41 bundles**, started == passed, 0 restarts. Rule 8 done
+for both of the evening's ports, by accessibility only, once the machine had
+been idle: the Unknown Encoding sheet appeared for the scratchpad fixture,
+named the file, offered Latin-1 with Open enabled, and Cancel dismissed it;
+the registry served the project's open documents beside it.
+
+`OakDocumentController` (187 → 192 Swift) is the last portable file in
+`document`. What the framework keeps in ObjC++ is now all by decision:
+OakDocument and OakDocumentEditor as the engine's face, clipboard, merge and
+Printing beside them, and the four boundary files the two ports made
+(`EncodingViewSupport`, `OakDocumentRegistry`, `OakDocumentWalk`,
+`OakDocumentControllerCxx`) plus the constants. **There is no next framework
+of the old kind, and no next file of the old kind either.** What has ObjC++
+left in the tree is the engine's face and boundaries kept on purpose.
+
+    4230a7ef  pin (18 tests, rule 18/40)              document bundle 17 → 35
+    bc48dc7b  two boundaries, still ObjC++           registry + walk; Private.h split (rule 11)
+    8e340192  the flip                                suite measured at 1147
+
+### What the walk's pins settled, because a port could have changed it
+
+- **Exclusions alone match nothing.** Once any glob is given, a path that
+  matches none is excluded (`glob_list_t::exclude` defaults to true). Every
+  consumer passes an include glob as well — Find's `FFGlobOptionsForPath`,
+  the file chooser — and a port that "fixed" the default would change what
+  each of them searches. Pinned as behaviour.
+- **A followed link lands in whichever directory's batch is current**, and
+  batches sort by full path (`text::less_t`, case-insensitive). A fixture
+  whose outside directory sorted by temp-directory *number* flipped between
+  runs; it is a sibling named to sort last now. Fixtures decide order.
+- **A nil-target click cannot run headless** (from the EncodingView pins,
+  same evening): the action climbs from a key window the test process lacks
+  and lands in NSDocumentController. Name the target in the test.
+
+### The extraction's one design point
+
+`-documentForPath:` keeps lookup-by-path, lookup-by-inode, creation and
+registration under **one** lock, as the original did, because the walk calls
+it from Find's background queue while the main thread does the same. A
+registry face that returned "not found" and let the caller create would have
+opened a window for two documents on one path. The registry creates, and so
+it imports `OakDocument Private.h`; the Swift never sees the initializer.
+
+### Numbers, measured 2026-09-14 (end of session)
+
+| | |
+| --- | --- |
+| Full suite | **1147 tests, 41 bundles, 0 failures, 0 restarts** |
+| Unreleased commits on alpha.25 | 18 |
+| Swift, non-test | 32705 lines |
+| ObjC++ `.mm`, non-test, Frameworks | 20035 |
+| document | 2951 `.mm` (engine face + boundaries) / 420 Swift — **finished** |
+
+**Next:** the port has no translation left of the old kind. What remains is
+by decision, and each decision is written where it was made. The open items
+are the modernization ones — About ▸ Bundles, FavoriteChooser behind rule
+56 — and, when the `xcode-27` runner image leaves preview, moving CI's pin.
+A release is due: eighteen commits, four ports and a CI pin since alpha.25,
+none of them user-visible, all of them on the smoke list.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**
@@ -2367,7 +2430,7 @@ frame and takes two seconds to find:
 | Software Update | Check for Updates | Panel appears with a version verdict. **Changed 2026-09-08:** a channel is now wired, so the background scheduler *is* created at launch and does fetch — the log line to look for is `Update manifest failed to parse` or a version verdict, and `defaults read com.j23software.TextMate-NG SoftwareUpdateLastPoll` records every completed check. The **manual** Check Now path still has no automated coverage |
 | HTML output | run any bundle command with HTML output | Window appears |
 | A document | open a source file | Text draws, **gutter has line numbers** |
-| Unknown Encoding sheet | open a file of bytes no encoding fits (the scratchpad's `unknown-encoding.txt`, or any Latin-1 file with stray high bytes) | Sheet appears naming the file, preview highlights the odd lines, Open is enabled only for an encoding that decodes every byte, Cancel dismisses. **Swift since 2026-09-14**, not yet seen in the app |
+| Unknown Encoding sheet | open a file of bytes no encoding fits (any Latin-1 file with stray high bytes) | Sheet appears naming the file, preview highlights the odd lines, Open is enabled only for an encoding that decodes every byte, Cancel dismisses. Swift since 2026-09-14, seen in the app the same evening |
 
 Two minutes if nothing is broken. The gutter line is there because that bug also
 shipped in every release until alpha.10 (see "The gutter bug" above), and it is

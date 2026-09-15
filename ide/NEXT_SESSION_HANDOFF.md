@@ -2404,6 +2404,53 @@ are the modernization ones — About ▸ Bundles, FavoriteChooser behind rule
 A release is due: eighteen commits, four ports and a CI pin since alpha.25,
 none of them user-visible, all of them on the smoke list.
 
+## Session 2026-09-15 — alpha.26 is published, and a rule-59 incident
+
+`v2026.9-alpha.26` (`825dffa4`, build 20260915.1) is on GitHub Releases:
+notarized (submission `6a99cdf1`), stapled, and verified from the outside —
+downloaded over HTTPS, quarantined, `spctl` accepted, staple valid; three
+assets; the live manifest decodes to alpha.26 with the payload's SHA-256, the
+15.0 floor and an expiry of 2026-10-20. Gate before building:
+`bin/rehearse-update` 6/6 (good at alpha.26 → alpha.27, and the five refusals).
+Sequence, for the record: notes commit → rehearsal → seed with
+`TM_CODE_SIGN_IDENTITY`/`TM_DEVELOPMENT_TEAM` → Release build → smoke pass →
+`bin/notarize` → tag + push → `bin/release --dry-run` → `bin/release`.
+
+**The manifest on the wire is an envelope**, `{manifest, keyID, signature}`
+with the manifest base64 inside — a first check that read it as a bare object
+saw nothing. Decode `manifest` before comparing.
+
+### The smoke pass, and what went wrong during it
+
+Verified on the alpha.26 build by accessibility: the document window, the
+file browser (19 rows), all six Settings panes, the Software Update verdict
+("You are Using a Prerelease … alpha.25 is the latest … you have alpha.26",
+with a Downgrade button — the anti-rollback path, seen for the first time),
+and the Unknown Encoding sheet. Not verified on this build: Find in Folder
+results, the Bundle Editor window, Go to File, the commit window, HTML output
+— my selectors were wrong (the Find button is "Find All", Edit Bundles… is
+not a top-level item, Go to File is not under Navigate) and I stopped rather
+than keep the app in front. None of those surfaces changed since alpha.25.
+
+**What went wrong: the user's keystrokes landed in the app.** The pass ran
+with HIDIdleTime at about two minutes, and while TextMate-NG was frontmost
+the text "is an interesting " arrived in the open document — typed in
+Termius, delivered to the editor. It surfaced as a save prompt on quit; the
+session backup in `~/Library/Application Support/TextMate/Session/` diffed
+against disk showed exactly that string and nothing else, so it was
+discarded. **Rule 59, sharpened: an accessibility-only script is safe from
+*my* keystrokes, not from the user's. Do not put the app in front unless
+HIDIdleTime is well past five minutes, and re-check it between steps.** The
+session backup is the way to tell an accident from work before discarding
+either.
+
+### Numbers
+
+| | |
+| --- | --- |
+| Published releases | 21 (alpha.7 … alpha.26); 0 commits unreleased after this handoff |
+| Full suite | 1147 tests, 41 bundles (unchanged; notes only) |
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

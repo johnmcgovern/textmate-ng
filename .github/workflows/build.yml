@@ -20,7 +20,17 @@ jobs:
   # The rave/ninja build this once ran alongside is gone (tag `rave-final`) — the
   # rave parity audit in PROJECT_PHASES.md found no functional gap remaining.
   xcode:
-    runs-on: macos-latest
+    # Pinned, not `macos-latest` (checked 2026-09-14, the first time anyone had).
+    # `macos-latest` resolves to the macos-26-arm64 image today, whose default
+    # Xcode is 26.6 with the 26.5 SDK — the toolchain baseline PROJECT_PHASES.md
+    # records. The machine that builds releases runs Xcode 27.0 (Swift 6.4) with
+    # the 27 SDK, so CI compiles one Swift behind what ships; that gap is known
+    # and accepted until the image below carries 27. Naming both here means a
+    # runner-image change fails this job loudly instead of moving the toolchain
+    # under us. Xcode 27 is on the `xcode-27` preview image (actions/runner-images
+    # #14404), still beta 6 as of the check; move DEVELOPER_DIR and runs-on
+    # together when it reaches GA.
+    runs-on: macos-26
     # Without this a stuck job runs to GitHub's 6-hour default. The exposure is the
     # Test step (~205s of the ~390s run): the AllTests scheme includes the GUI
     # harnesses, which can block rather than fail. 30 min is ~4.5x the current
@@ -28,6 +38,7 @@ jobs:
     timeout-minutes: 30
 
     env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
       RUBYOPT: "-EUTF-8"

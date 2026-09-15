@@ -2133,6 +2133,104 @@ SIGTERM and relaunched on the repo, which has no protected subfolders.
 | ObjC++ `.mm`, non-test | 20,840 in Frameworks, 1,768 in the app |
 | Find | 591 `.mm` (three boundary files) / 3,359 Swift — **85%, finished** |
 
+## Session 2026-09-14, part two — BundlesManager is Swift, and OakCommand is declined
+
+Three commits (`0e5edefc`, `fd2e2358`, `d3ec5400`), not pushed; seven sit on
+alpha.25 now. Full suite **1114/1114 across 41 bundles**, started == passed, 0
+restarts, 0 "Fatal error:". Tree-wide Swift 32,285 non-test lines; Frameworks
+`.mm` 20,334 (both counted with `-print0`).
+
+### The frontier survey, and which of the two to take
+
+BundlesManager and OakCommand were surveyed together, as the morning's plan
+said. **OakCommand is declined**, the way `OakCommandRefresh` was on 2026-08-24:
+its public API is C++ on both sides — `-initWithBundleCommand:` takes a
+`bundle_command_t const&`, `-executeWithInput:variables:outputHandler:` takes a
+`std::map` and hands back `std::string` and three C++ enums in a block — and
+its only callers are `OakTextView.mm`, which stays, and two boundary files
+that already hold C++. There is no Swift consumer. A port would move the
+fork/pipe/signal machinery into a support file the same size as the class and
+leave every signature where it is. Rule 37 from both sides; nothing to gain.
+
+**BundlesManager was the real candidate** and is done: a Swift consumer
+already bound to it (`BundlesPreferences` on `bundles`), and its C++ was one
+coherent model layer — the plist cache and its FSEvents callback — that
+extracts cleanly. `0% → 62%` Swift; the 489 `.mm` lines left are five boundary
+files by design (`BundlesIndexCache`, `BundlesManagerCxx`,
+`BundlesManagerSupport`, `InstallBundleItems`, the constants). **Finished, in
+the same sense as Find and OakFilterList.**
+
+    0e5edefc  pin (26 tests, rule 18/40/64)          suite 1087 → 1113
+    fd2e2358  boundary extraction, still ObjC++       the pins judge each shim
+    d3ec5400  the flip                                 27th pin added; 1114
+
+### The two-commit method, again, and what each half caught
+
+The extraction commit moved every piece of C++ out while the file was still
+ObjC++ (rule 25, rule 37): the cache and the `fs::event_callback_t` subclass
+into `BundlesIndexCache` (blocks report what the callback did), the
+one-liners into `BundlesManagerSupport` verbatim (rule 6 — both halves of the
+xattr date format in one file), and `-findBundleForInstall:` into a `-Cxx`
+category because its `bundles::item_ptr*` is C++ on both sides. The public
+header lost `<bundles/item.h>`, which four bridging headers had been importing
+around. The pins were green throughout.
+
+The flip then had only translation to do, and the compiler found three
+things: the importer's spelling of one support method was unpredictable, so
+they are all `NS_SWIFT_NAME`d now (rule 28); `OakDownloadManager.h` sat under
+`NS_ASSUME_NONNULL` with two unmarked `NSError*` block parameters, which would
+have imported a nil error as a non-optional and trapped on first read (rule
+44 — the hand declaration now matches the Swift definition); and
+`OakFoundation.h` needs the prelude, like Find's bridging header says.
+
+### Rule 64, five times in one class
+
+`Bundle` had five `getter =` properties. Each is a KVO-spelled stored property
+plus a computed `isX` getter. **The pin that catches a dropped getter is a
+predicate**: the manager filters with `isInstalled == NO`, KVC resolves that
+through the selector, and losing it is a `valueForUndefinedKey:` exception —
+which is how it showed up in the mutation run, as "unexpected" failures.
+
+### A gap the mutation check found in the pins, and the rule it confirms
+
+Dropping `dynamic` from `name` and from `bundles` failed **nothing**, for the
+reason the FFTextField port recorded on 2026-09-08: every pin set properties
+from ObjC++, where NSObject's automatic KVO fires regardless. `dynamic` guards
+*Swift-side* sets. The parser makes one when it refreshes a reused bundle, so a
+27th pin binds a control to a reused bundle and re-parses; it fails exactly
+when `dynamic` is dropped. `bundles` is set from Swift only after a network
+fetch and stays unguarded — said in the commit rather than left unsaid.
+**Generalise it:** for every `@objc dynamic` a port keeps, ask which *Swift*
+code path writes it, and pin that path, not an ObjC set.
+
+### Two things worth knowing before the next rule-8 run
+
+- **`keystroke` goes to the frontmost application, whatever process the
+  script names.** While the machine was in use, ⌘, and ⌘W went to Chrome. Use
+  accessibility clicks — `click menu item …`, `click button … of toolbar 1` —
+  which target the process, and check `ioreg -c IOHIDSystem` idle time first.
+  Rule 59 material.
+- **The Bundles menu count depends on the key window.** 35 with the Software
+  Update window key, 36 with a document key. A local Release build is older
+  than the published alpha, so the updater offers an update at launch; close
+  that window (button 1) before counting anything.
+
+### Numbers, measured 2026-09-14 (end of session)
+
+| | |
+| --- | --- |
+| Full suite | **1114 tests, 41 bundles, 0 failures, 0 restarts** |
+| Unreleased commits on alpha.25 | 7 |
+| Swift, non-test | 32,285 lines |
+| ObjC++ `.mm`, non-test, Frameworks | 20,334 |
+| BundlesManager | 489 `.mm` (five boundary files) / 809 Swift — **62%, finished** |
+| OakCommand | 672 `.mm` — **declined**, rule 37 on both sides |
+
+**Next:** `document` (3,250) and OakTextView's one blocked file are what is
+left of the frontier, and both want a survey before anything else — the
+2026-09-06 warning stands. The modernization items are unchanged: CI's runner
+image and Xcode version, About ▸ Bundles, and `FavoriteChooser` behind rule 56.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

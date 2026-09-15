@@ -1,6 +1,6 @@
 target "${dirname}" {
 	require BundlesManager OakAppKit OakFoundation TMFileReference authorization buffer cf command editor encoding file io layout ns plist regexp scm selection settings text theme undo
-	headers src/OakDocument.h src/OakDocumentController.h src/OakDocumentEditor.h
+	headers src/OakDocument.h src/OakDocumentController.h src/OakDocumentControllerConstants.h src/OakDocumentEditor.h
 	sources src/*.{mm,cc,swift}
 	tests tests/t_*.{mm,cc}
 	frameworks ApplicationServices

@@ -1,17 +1,7 @@
 #import <text/types.h>
+#import "OakDocumentControllerConstants.h"
 
 @class OakDocument;
-
-extern NSString* kSearchFollowDirectoryLinksKey;
-extern NSString* kSearchFollowFileLinksKey;
-extern NSString* kSearchDepthFirstSearchKey;
-extern NSString* kSearchIgnoreOrderingKey;
-extern NSString* kSearchExcludeDirectoryGlobsKey;
-extern NSString* kSearchExcludeFileGlobsKey;
-extern NSString* kSearchExcludeGlobsKey;
-extern NSString* kSearchDirectoryGlobsKey;
-extern NSString* kSearchFileGlobsKey;
-extern NSString* kSearchGlobsKey;
 
 @interface OakDocumentController : NSObject
 @property (class, readonly) OakDocumentController* sharedInstance;

@@ -1,12 +1,7 @@
-#import "OakDocument.h"
+#import "OakDocument Internal.h"
 #import <undo/undo.h> // ng::buffer_t and ng::undo_manager_t types
 
 @interface OakDocument (Private)
-- (instancetype)initWithPath:(NSString*)aPath;
-
-@property (nonatomic) NSUInteger  untitledCount;
-@property (nonatomic) NSString*   folded;
-
 - (ng::buffer_t&)buffer;
 - (ng::undo_manager_t&)undoManager;
 

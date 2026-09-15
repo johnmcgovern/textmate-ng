@@ -1,28 +1,14 @@
 #import "BundlesManager.h"
-#import <bundles/load.h>
-#import "InstallBundleItems.h"
-#import <OakAppKit/NSAlert Additions.h>
+#import "BundlesIndexCache.h"
+#import "BundlesManagerSupport.h"
 #import <OakFoundation/OakFoundation.h>
-#import <OakFoundation/NSString Additions.h>
 #import <SoftwareUpdate/OakDownloadManager.h>
-#import <bundles/locations.h>
-#import <bundles/query.h> // set_index
-#import <regexp/format_string.h>
-#import <text/ctype.h>
-#import <text/decode.h>
-#import <ns/ns.h>
-#import <io/path.h>
-#import <io/move_path.h>
-#import <io/entries.h>
-#import <io/events.h>
-#import <oak/debug.h>
 
 NSString* const kUserDefaultsDisableBundleUpdatesKey       = @"disableBundleUpdates";
 NSString* const kUserDefaultsLastBundleUpdateCheckKey      = @"lastBundleUpdateCheck";
 NSString* const kUserDefaultsBundleUpdateFrequencyKey      = @"bundleUpdateFrequency";
 
 static NSTimeInterval const kDefaultPollInterval = 3*60*60;
-static char const* kBundleAttributeUpdated = "org.textmate.bundle.updated";
 
 static NSString* SafeBasename (NSString* name)
 {
@@ -33,10 +19,11 @@ static NSString* SafeBasename (NSString* name)
 {
 	NSBackgroundActivityScheduler* _updateBundleIndexScheduler;
 
-	std::vector<std::string> bundlesPaths;
-	std::string bundlesIndexPath;
-	std::set<std::string> watchList;
-	plist::cache_t cache;
+	// The C++ model layer — plist::cache_t, the bundle paths, the watch list and
+	// the fs::event_callback_t — behind an ObjC face (rule 25). nil until
+	// -loadBundlesIndex, and every use is nil-tolerant, which is what an empty
+	// plist::cache_t answered before.
+	BundlesIndexCache* _indexCache;
 }
 @property (nonatomic) BOOL      autoUpdateBundles;
 
@@ -65,7 +52,7 @@ static NSString* SafeBasename (NSString* name)
 		_installDirectory = [[NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:@"TextMate/Managed"];
 		_localIndexPath   = [_installDirectory stringByAppendingPathComponent:@"LocalIndex.plist"];
 		_remoteIndexPath  = [_installDirectory stringByAppendingPathComponent:@"Cache/org.textmate.updates.default"];
-		_remoteIndexURL   = [NSURL URLWithString:@REST_API "/bundles"];
+		_remoteIndexURL   = [BundlesManagerSupport remoteIndexURL];
 
 		[self userDefaultsDidChange:nil];
 		OakObserveUserDefaults(self);
@@ -115,7 +102,7 @@ static NSString* SafeBasename (NSString* name)
 - (void)tryUpdateBundleIndexAndCallback:(void(^)(BOOL wasUpdated))completionHandler
 {
 	[OakDownloadManager.sharedInstance downloadFileAtURL:_remoteIndexURL replacingFileAtURL:[NSURL fileURLWithPath:_remoteIndexPath] publicKeys:self.publicKeys completionHandler:^(BOOL wasUpdated, NSError* error){
-		path::set_attr(_remoteIndexPath.fileSystemRepresentation, "last-check", to_s(oak::date_t::now()));
+		[BundlesManagerSupport recordIndexCheckAtPath:_remoteIndexPath];
 		if(!error)
 			[NSUserDefaults.standardUserDefaults setObject:[NSDate date] forKey:kUserDefaultsLastBundleUpdateCheckKey];
 		if(wasUpdated)
@@ -150,61 +137,7 @@ static NSString* SafeBasename (NSString* name)
 
 - (void)installBundleItemsAtPaths:(NSArray*)somePaths
 {
-	InstallBundleItems(somePaths);
-}
-
-- (BOOL)findBundleForInstall:(bundles::item_ptr*)res
-{
-	oak::uuid_t defaultBundle;
-
-	std::string const personalBundleName = format_string::expand("${TM_FULLNAME/^(\\S+).*$/$1/}’s Bundle", std::map<std::string, std::string>{ { "TM_FULLNAME", path::passwd_entry()->pw_gecos ?: "John Doe" } });
-	for(auto item : bundles::query(bundles::kFieldName, personalBundleName, scope::wildcard, bundles::kItemTypeBundle))
-		defaultBundle = item->uuid();
-
-	NSPopUpButton* bundleChooser = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
-	[bundleChooser.menu removeAllItems];
-	[bundleChooser.menu addItemWithTitle:@"Create new bundle…" action:NULL keyEquivalent:@""];
-	[bundleChooser.menu addItem:[NSMenuItem separatorItem]];
-
-	std::multimap<std::string, bundles::item_ptr, text::less_t> ordered;
-	for(auto item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeBundle))
-		ordered.emplace(item->name(), item);
-
-	for(auto pair : ordered)
-	{
-		NSMenuItem* menuItem = [bundleChooser.menu addItemWithTitle:[NSString stringWithCxxString:pair.first] action:NULL keyEquivalent:@""];
-		[menuItem setRepresentedObject:[NSString stringWithCxxString:to_s(pair.second->uuid())]];
-		if(defaultBundle && defaultBundle == pair.second->uuid())
-			[bundleChooser selectItem:menuItem];
-	}
-
-	[bundleChooser sizeToFit];
-	NSRect frame = [bundleChooser frame];
-	if(NSWidth(frame) > 200)
-		[bundleChooser setFrameSize:NSMakeSize(200, NSHeight(frame))];
-
-	NSAlert* alert = [NSAlert tmAlertWithMessageText:@"Select Bundle" informativeText:@"Select the bundle which should be used for the new item(s)." buttons:@"OK", @"Cancel", nil];
-	[alert setAccessoryView:bundleChooser];
-	if([alert runModal] == NSAlertFirstButtonReturn) // "OK"
-	{
-		if(NSString* bundleUUID = [[bundleChooser selectedItem] representedObject])
-		{
-			for(auto item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeBundle, to_s(bundleUUID)))
-			{
-				*res = item;
-				return YES;
-			}
-		}
-		else
-		{
-			NSAlert* alert        = [[NSAlert alloc] init];
-			alert.messageText     = @"Creating bundles is not yet supported.";
-			alert.informativeText = @"You can create a new bundle in the bundle editor via File → New (⌘N) and then repeat the previous action.";
-			[alert addButtonWithTitle:@"OK"];
-			[alert runModal];
-		}
-	}
-	return NO;
+	[BundlesManagerSupport installBundleItemsAtPaths:somePaths];
 }
 
 - (NSProgress*)installBundles:(NSArray<Bundle*>*)someBundles completionHandler:(void(^)(NSArray<Bundle*>*))callback
@@ -234,7 +167,14 @@ static NSString* SafeBasename (NSString* name)
 	dispatch_group_t group = dispatch_group_create();
 	NSArray* bundles = bundlesToInstall.allObjects;
 	NSProgress* progress = [NSProgress discreteProgressWithTotalUnitCount:bundles.count];
-	__block std::vector<std::string> res(bundles.count);
+
+	// Was a std::vector<std::string> sized to the bundles, NULL_STR meaning "not
+	// installed"; NSNull plays that part now. The path stored is the file system
+	// representation, as before, not -[NSURL path].
+	NSMutableArray* res = [NSMutableArray arrayWithCapacity:bundles.count];
+	for(NSUInteger i = 0; i < bundles.count; ++i)
+		[res addObject:NSNull.null];
+
 	for(NSUInteger i = 0; i < bundles.count; ++i)
 	{
 		dispatch_group_enter(group);
@@ -250,7 +190,7 @@ static NSString* SafeBasename (NSString* name)
 				NSError* error;
 				if([NSFileManager.defaultManager replaceItemAtURL:destURL withItemAtURL:extractedArchiveURL backupItemName:nil options:NSFileManagerItemReplacementUsingNewMetadataOnly resultingItemURL:nil error:&error])
 				{
-					res[i] = destURL.fileSystemRepresentation;
+					res[i] = [NSString stringWithUTF8String:destURL.fileSystemRepresentation];
 					os_log(OS_LOG_DEFAULT, "Updated %{public}@", destURL.path);
 				}
 				else
@@ -270,15 +210,15 @@ static NSString* SafeBasename (NSString* name)
 	dispatch_group_notify(group, dispatch_get_main_queue(), ^{
 		for(NSUInteger i = 0; i < bundles.count; ++i)
 		{
-			if(res[i] == NULL_STR)
+			if(res[i] == NSNull.null)
 				continue;
 
 			Bundle* bundle = bundles[i];
 			bundle.installed   = YES;
-			bundle.path        = to_ns(res[i]);
+			bundle.path        = res[i];
 			bundle.lastUpdated = bundle.downloadLastUpdated;
 
-			path::set_attr(res[i], kBundleAttributeUpdated, to_s(bundle.downloadLastUpdated));
+			[BundlesManagerSupport setUpdatedDate:bundle.downloadLastUpdated forBundleAtPath:res[i]];
 			[self reloadPath:bundle.path recursive:YES];
 		}
 
@@ -316,23 +256,12 @@ static NSString* SafeBasename (NSString* name)
 		return;
 	_needsCreateBundlesIndex = NO;
 
-	auto pair = create_bundle_index(bundlesPaths, cache);
-	bundles::set_index(pair.first, pair.second);
-
-	std::set<std::string> newWatchList;
-	for(auto path : bundlesPaths)
-		cache.copy_heads_for_path(path, std::inserter(newWatchList, newWatchList.end()));
-	[self updateWatchList:newWatchList];
+	[_indexCache createIndex];
 }
 
 - (void)saveBundlesIndex:(id)sender
 {
-	cache.cleanup(bundlesPaths);
-	if(cache.dirty())
-	{
-		cache.save_capnp(bundlesIndexPath);
-		cache.set_dirty(false);
-	}
+	[_indexCache save];
 	_needsSaveBundlesIndex = NO;
 }
 
@@ -350,48 +279,13 @@ static NSString* SafeBasename (NSString* name)
 
 - (void)setEventId:(uint64_t)anEventId forPath:(NSString*)aPath
 {
-	cache.set_event_id_for_path(anEventId, to_s(aPath));
+	[_indexCache setEventId:anEventId forPath:aPath];
 	self.needsSaveBundlesIndex = YES;
-}
-
-- (void)updateWatchList:(std::set<std::string> const&)newWatchList
-{
-	struct callback_t : fs::event_callback_t
-	{
-		void set_replaying_history (bool flag, std::string const& observedPath, uint64_t eventId)
-		{
-			[BundlesManager.sharedInstance setEventId:eventId forPath:[NSString stringWithCxxString:observedPath]];
-		}
-
-		void did_change (std::string const& path, std::string const& observedPath, uint64_t eventId, bool recursive)
-		{
-			[BundlesManager.sharedInstance reloadPath:[NSString stringWithCxxString:path] recursive:recursive];
-			[BundlesManager.sharedInstance setEventId:eventId forPath:[NSString stringWithCxxString:observedPath]];
-		}
-	};
-
-	static callback_t callback;
-
-	std::vector<std::string> pathsAdded, pathsRemoved;
-	std::set_difference(watchList.begin(), watchList.end(), newWatchList.begin(), newWatchList.end(), back_inserter(pathsRemoved));
-	std::set_difference(newWatchList.begin(), newWatchList.end(), watchList.begin(), watchList.end(), back_inserter(pathsAdded));
-
-	watchList = newWatchList;
-
-	for(auto path : pathsRemoved)
-	{
-		fs::unwatch(path, &callback);
-	}
-
-	for(auto path : pathsAdded)
-	{
-		fs::watch(path, &callback, cache.event_id_for_path(path) ?: FSEventsGetCurrentEventId(), 1);
-	}
 }
 
 - (void)erasePath:(NSString*)aPath
 {
-	if(cache.erase(to_s(aPath)))
+	if([_indexCache erasePath:aPath])
 	{
 		self.needsCreateBundlesIndex = YES;
 		self.needsSaveBundlesIndex   = YES;
@@ -405,50 +299,10 @@ static NSString* SafeBasename (NSString* name)
 
 - (void)reloadPath:(NSString*)aPath recursive:(BOOL)flag
 {
-	if(cache.reload(to_s(aPath), flag))
+	if([_indexCache reloadPath:aPath recursive:flag])
 	{
 		self.needsCreateBundlesIndex = YES;
 		self.needsSaveBundlesIndex   = YES;
-	}
-}
-
-namespace
-{
-	static std::string const kFieldChangedItems = "changed";
-	static std::string const kFieldDeletedItems = "deleted";
-	static std::string const kFieldMainMenu     = "mainMenu";
-
-	static plist::dictionary_t prune_dictionary (plist::dictionary_t const& plist)
-	{
-		static auto const DesiredKeys = new std::set<std::string>{ bundles::kFieldName, bundles::kFieldKeyEquivalent, bundles::kFieldTabTrigger, bundles::kFieldScopeSelector, bundles::kFieldSemanticClass, bundles::kFieldContentMatch, bundles::kFieldGrammarFirstLineMatch, bundles::kFieldGrammarScope, bundles::kFieldGrammarInjectionSelector, bundles::kFieldDropExtension, bundles::kFieldGrammarExtension, bundles::kFieldSettingName, bundles::kFieldHideFromUser, bundles::kFieldIsDeleted, bundles::kFieldIsDisabled, bundles::kFieldRequiredItems, bundles::kFieldUUID, bundles::kFieldIsDelta, kFieldMainMenu, kFieldDeletedItems, kFieldChangedItems };
-
-		plist::dictionary_t res;
-		for(auto pair : plist)
-		{
-			if(DesiredKeys->find(pair.first) == DesiredKeys->end() && pair.first.find(bundles::kFieldSettingName) != 0)
-				continue;
-
-			if(pair.first == bundles::kFieldSettingName)
-			{
-				if(plist::dictionary_t const* dictionary = boost::get<plist::dictionary_t>(&pair.second))
-				{
-					plist::array_t settings;
-					for(auto const& settingsPair : *dictionary)
-						settings.push_back(settingsPair.first);
-					res.emplace(pair.first, settings);
-				}
-			}
-			else if(pair.first == kFieldChangedItems)
-			{
-				if(plist::dictionary_t const* dictionary = boost::get<plist::dictionary_t>(&pair.second))
-					res.emplace(pair.first, prune_dictionary(*dictionary));
-			}
-			else
-			{
-				res.insert(pair);
-			}
-		}
-		return res;
 	}
 }
 
@@ -515,18 +369,19 @@ namespace
 	// LEGACY locations used by 2.0-beta.12.22 and earlier
 	[self moveAvianBundles];
 
-	for(auto path : bundles::locations())
-		bundlesPaths.push_back(path::join(path, "Bundles"));
-	bundlesIndexPath = path::join(path::home(), "Library/Caches/com.j23software.TextMate-NG/BundlesIndex.binary");
-	cache.set_content_filter(&prune_dictionary);
+	_indexCache = [[BundlesIndexCache alloc] init];
 
-	// The migration that used to live here — reading the pre-2.0-alpha.9467 plist
-	// bundle index and rewriting it as capnp — was dropped with the 2026-07-26 move
-	// to com.j23software.*. It only ever fired on a file written by an old MacroMates
-	// build under the *old* caches dir, and nothing in this app writes a .plist index,
-	// so at the new path it was unreachable. No loss: this index is a pure cache and
-	// createBundlesIndex: rebuilds it just below.
-	cache.load_capnp(bundlesIndexPath);
+	// What the fs::event_callback_t did, which was to message the shared
+	// instance. `self` is that instance; a weak reference keeps the cache from
+	// owning its owner.
+	__weak BundlesManager* weakSelf = self;
+	_indexCache.pathDidChange = ^(NSString* path, NSString* observedPath, uint64_t eventId, BOOL recursive){
+		[weakSelf reloadPath:path recursive:recursive];
+		[weakSelf setEventId:eventId forPath:observedPath];
+	};
+	_indexCache.replayingHistoryDidChange = ^(BOOL flag, NSString* observedPath, uint64_t eventId){
+		[weakSelf setEventId:eventId forPath:observedPath];
+	};
 
 	_needsCreateBundlesIndex = YES;
 	[self createBundlesIndex:self];
@@ -555,7 +410,7 @@ namespace
 			bundle.category          = item[@"category"];
 			bundle.htmlURL           = [NSURL URLWithString:item[@"html_url"]];
 			bundle.contactName       = item[@"contactName"];
-			bundle.contactEmail      = to_ns(decode::rot13(to_s(item[@"contactEmailRot13"])));
+			bundle.contactEmail      = [BundlesManagerSupport rot13:item[@"contactEmailRot13"]];
 			bundle.summary           = item[@"description"];
 			bundle.recommended       = [item[@"isDefault"] boolValue];
 			bundle.mandatory         = [item[@"isMandatory"] boolValue];
@@ -644,9 +499,9 @@ namespace
 		}
 
 		NSString* bundlesDir = [installDir stringByAppendingPathComponent:@"Bundles"];
-		for(auto const& entry : path::entries(to_s(bundlesDir), "*.tm[Bb]undle"))
+		for(NSString* name in [BundlesManagerSupport bundleDirectoryNamesInDirectory:bundlesDir])
 		{
-			NSString* bundlePath = [bundlesDir stringByAppendingPathComponent:to_ns(entry->d_name)];
+			NSString* bundlePath = [bundlesDir stringByAppendingPathComponent:name];
 			if(Bundle* bundle = [bundlesByPath objectForKey:bundlePath])
 			{
 				[bundlesByPath removeObjectForKey:bundlePath];
@@ -664,13 +519,11 @@ namespace
 				bundle.category     = bundle.category     ?: @"Orphaned";
 				bundle.name         = bundle.name         ?: info[@"name"];
 				bundle.contactName  = bundle.contactName  ?: info[@"contactName"];
-				bundle.contactEmail = bundle.contactEmail ?: to_ns(decode::rot13(to_s(info[@"contactEmailRot13"])));
+				bundle.contactEmail = bundle.contactEmail ?: [BundlesManagerSupport rot13:info[@"contactEmailRot13"]];
 				bundle.summary      = bundle.summary      ?: info[@"description"];
 
-				NSDateFormatter* dateFormatter = [[NSDateFormatter alloc] init];
-				dateFormatter.dateFormat = @"yyyy-MM-dd HH:mm:ss ZZZZZ";
-				if(NSString* str = to_ns(path::get_attr(to_s(bundlePath), kBundleAttributeUpdated)))
-					bundle.lastUpdated = [dateFormatter dateFromString:str];
+				if(NSDate* updated = [BundlesManagerSupport updatedDateForBundleAtPath:bundlePath])
+					bundle.lastUpdated = updated;
 
 				res[bundle.identifier] = bundle;
 

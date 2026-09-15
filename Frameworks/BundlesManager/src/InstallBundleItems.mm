@@ -1,5 +1,5 @@
 #import "InstallBundleItems.h"
-#import "BundlesManager.h"
+#import "BundlesManagerCxx.h"
 #import <OakAppKit/NSAlert Additions.h>
 #import <OakFoundation/NSString Additions.h>
 #import <bundles/bundles.h>

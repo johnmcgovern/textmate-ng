@@ -23,7 +23,7 @@
 #import <crash/info.h>
 #import <buffer/indexed_map.h>
 #import <BundleMenu/BundleMenu.h>
-#import <BundlesManager/BundlesManager.h>
+#import <BundlesManager/BundlesManagerCxx.h> // -findBundleForInstall:
 #import <Preferences/Keys.h>
 #import <bundles/bundles.h>
 #import <cf/cf.h>

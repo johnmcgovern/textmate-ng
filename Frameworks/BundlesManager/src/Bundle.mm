@@ -1,9 +1,7 @@
 #import "Bundle.h"
 #import "BundlesManager.h"
+#import "BundlesManagerSupport.h"
 #import <SoftwareUpdate/SoftwareUpdate.h> // OakCompareVersionStrings()
-#import <ns/ns.h>
-#import <text/decode.h>
-#import <regexp/format_string.h>
 
 @implementation Bundle
 - (BOOL)isEqual:(id)other    { return [other isKindOfClass:[self class]] && [self.identifier isEqual:[other identifier]]; }
@@ -36,11 +34,7 @@
 
 - (NSString*)textSummary
 {
-	std::string str = to_s(self.summary);
-	str = format_string::replace(str, "\\A\\s+|<[^>]*>|\\s+\\z", "");
-	str = format_string::replace(str, "\\s+", " ");
-	str = decode::entities(str);
-	return to_ns(str);
+	return [BundlesManagerSupport textSummaryForString:self.summary];
 }
 
 - (BOOL)hasUpdate

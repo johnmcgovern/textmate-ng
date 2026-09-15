@@ -1,9 +1,11 @@
 #import "Bundle.h"
-#import <bundles/item.h>
 
 extern NSString* const kUserDefaultsDisableBundleUpdatesKey;
 extern NSString* const kUserDefaultsLastBundleUpdateCheckKey;
 
+// -findBundleForInstall:, which answers through a bundles::item_ptr, is declared
+// in BundlesManagerCxx.h (rule 37) so that this header is C++-free and the
+// bridging headers that import it stay so.
 @interface BundlesManager : NSObject
 @property (class, readonly) BundlesManager* sharedInstance;
 
@@ -13,6 +15,5 @@ extern NSString* const kUserDefaultsLastBundleUpdateCheckKey;
 - (void)uninstallBundle:(Bundle*)aBundle;
 - (void)loadBundlesIndex;
 - (void)installBundleItemsAtPaths:(NSArray*)somePaths;
-- (BOOL)findBundleForInstall:(bundles::item_ptr*)res;
 - (void)reloadPath:(NSString*)aPath;
 @end

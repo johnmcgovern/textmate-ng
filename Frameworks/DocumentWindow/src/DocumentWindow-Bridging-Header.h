@@ -19,8 +19,8 @@
 #import <OakAppKit/OakUIConstructionFunctions.h>
 
 // Bundle and BundleGrammar (pure ObjC), and BundlesManager for -installBundles:.
-// BundlesManager.h also declares one `bundles::item_ptr*` method, which the
-// importer drops — nothing here calls it.
+// The one `bundles::item_ptr*` method lives in BundlesManagerCxx.h now, so this
+// header is C++-free.
 #import <BundlesManager/Bundle.h>
 #import <BundlesManager/BundlesManager.h>
 

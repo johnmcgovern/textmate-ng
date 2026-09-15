@@ -6,8 +6,9 @@
 // Prelude first (C/C++ layers + Cocoa only, never prelude.m/.mm — see
 // CommitWindow-Bridging-Header.h): the OakAppKit headers below assume it.
 //
-// Deliberately absent: EncodingView.h, the hand-written declaration of a class
-// this module defines in Swift (rule 23, rule 43).
+// Deliberately absent: EncodingView.h and OakDocumentController.h, the
+// hand-written declarations of classes this module defines in Swift (rule 23,
+// rule 43).
 #include "../../../Shared/PCH/prelude.cc"
 #import <Cocoa/Cocoa.h>
 
@@ -22,3 +23,13 @@
 // The encoding pop-up: a hand declaration of an OakAppKit Swift class, which is
 // fine to consume across the boundary (only subclassing is not, rule 56).
 #import <OakAppKit/OakEncodingPopUpButton.h>
+
+// For OakDocumentController.swift: the registry and the walk, the C++ pieces
+// behind ObjC faces (rule 25); the option keys (rule 19); and the C++-free part
+// of OakDocument's private surface — the path initializer and the untitled
+// number (rule 11). OakDocument.h itself carries C++ the importer drops, as it
+// does for the seven other bridging headers that import it.
+#import "OakDocumentRegistry.h"
+#import "OakDocumentWalk.h"
+#import "OakDocumentControllerConstants.h"
+#import "OakDocument Internal.h"

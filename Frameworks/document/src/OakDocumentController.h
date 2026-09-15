@@ -1,3 +1,12 @@
+// Hand-declared (rule 23): this class is defined in OakDocumentController.swift,
+// except for the two window wrappers below the category line, which are
+// OakDocumentControllerCxx.mm's (rule 37) and DocumentWindow's.
+//
+// It must stay out of this framework's bridging header, where it would collide
+// with the generated document-Swift.h (rule 43). Its ObjC++ consumers and the
+// four bridging headers that import it are unchanged. Nothing checks this file
+// against the Swift at build time; the selectors are pinned by
+// tests/t_document_controller.mm (rule 18).
 #import <text/types.h>
 #import "OakDocumentControllerConstants.h"
 

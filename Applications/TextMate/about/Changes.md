@@ -2,6 +2,40 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-15 (v2026.9-alpha.26)
+
+**Nothing you look at has changed.** Eighteen commits since alpha.25, and not one
+of them is a feature or a visible fix. If you are on alpha.24 or later this should
+arrive on its own.
+
+What is in it:
+
+* **Three more parts of the application are Swift now**, rewritten from the
+  Objective-C++ they had been since the original TextMate: the bundle manager
+  (what Settings ▸ Bundles lists, and what installs, updates and removes bundles),
+  the "Unknown Encoding" sheet that appears when a file's bytes decode as nothing
+  the application recognises, and the document registry that Find in Folder and
+  Go to File walk through. Each was pinned by tests before it moved — sixty-one
+  new ones, in code that had none — and each was exercised in the running
+  application afterwards.
+* **The build server now says which tools it uses** instead of taking whatever it
+  was given. It builds with one Swift release behind the machine that makes these
+  releases, on purpose, and that is written down where it is decided.
+
+**Why a release with nothing in it.** Three rewrites in one day is the largest
+amount of code this fork has moved between releases, and every one of them touches
+something you use without noticing — the bundle list, an encoding prompt, the
+order files come back in a search. Shipping them alone, with nothing else to
+suspect, is how a problem in one of them gets found quickly and blamed correctly.
+
+**Where to look if something is off.** Settings ▸ Bundles: the list fills, and
+installing or removing a bundle still works. A file in an odd encoding: the sheet
+names the file, highlights the lines it could not read, and enables Open only for
+an encoding that decodes every byte. Find in Folder and Go to File: the same files
+in the same order as before, with excluded folders still excluded. New documents
+still count "untitled", "untitled 2", and reuse a number once its document is
+closed. Nothing here goes near the editor itself.
+
 ## 2026-09-14 (v2026.9-alpha.25)
 
 **If you are running alpha.24, leave this one alone and let it arrive.** It should

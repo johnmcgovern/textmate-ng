@@ -5,6 +5,7 @@
 #import <ns/ns.h>
 #import <io/path.h>
 #import <io/entries.h>
+#import <os/activity.h>
 
 static char const* kBundleAttributeUpdated = "org.textmate.bundle.updated";
 
@@ -58,5 +59,10 @@ static char const* kBundleAttributeUpdated = "org.textmate.bundle.updated";
 + (void)installBundleItemsAtPaths:(NSArray*)somePaths
 {
 	InstallBundleItems(somePaths);
+}
+
++ (void)runInUpdateBundleIndexActivity:(void(^)(void))block
+{
+	os_activity_initiate("Update bundle index", OS_ACTIVITY_FLAG_DEFAULT, block);
 }
 @end

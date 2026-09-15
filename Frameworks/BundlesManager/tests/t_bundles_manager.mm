@@ -373,6 +373,28 @@ void test_previous_bundles_are_reused_by_identifier ()
 	OAK_ASSERT(fixture_t::find(bundles, fixture.rails) != existing);
 }
 
+// A binding on a reused bundle follows the parser's refresh of its fields. This
+// is the pin the others cannot be: every other test sets a property from ObjC,
+// where NSObject's automatic KVO fires whether or not the Swift declared
+// `dynamic` — but the parser sets `name` from *Swift*, and only `dynamic`
+// makes that set notify. Without it the Preferences table shows last week's
+// names after every index update, with the whole suite green.
+void test_reparsing_notifies_bindings_on_reused_bundles ()
+{
+	fixture_t fixture;
+	Bundle* existing = [[Bundle alloc] initWithIdentifier:fixture.ruby];
+	existing.name = @"stale name";
+
+	NSTextField* field = [[NSTextField alloc] initWithFrame:NSZeroRect];
+	[field bind:NSValueBinding toObject:existing withKeyPath:@"name" options:nil];
+	OAK_ASSERT_EQ(std::string(field.stringValue.UTF8String), std::string("stale name"));
+
+	fixture.parse(@{ fixture.ruby: existing });
+	OAK_ASSERT_EQ(std::string(field.stringValue.UTF8String), std::string("Ruby"));
+
+	[field unbind:NSValueBinding];
+}
+
 // No remote index at all — first launch, or offline forever — still yields the
 // local and on-disk bundles.
 void test_a_missing_remote_index_is_an_empty_one ()

@@ -7,13 +7,18 @@
 // The selectors here are pinned by t_software_update.mm (rule 18) — nothing
 // checks a hand declaration against the Swift at build time, and a drift is an
 // unrecognized selector at runtime.
+//
+// The completion blocks' nullability is the Swift definition's: (Bool, Error?)
+// and (URL?, Error?). Under NS_ASSUME_NONNULL an unmarked NSError* imports as a
+// non-optional Error, and BundlesManager.swift reading one that is nil would
+// trap, so the two are marked (rule 44).
 NS_ASSUME_NONNULL_BEGIN
 
 @interface OakDownloadManager : NSObject
 @property (class, readonly) OakDownloadManager* sharedInstance;
 @property (nonatomic) NSString* userAgentString;
-- (void)downloadFileAtURL:(NSURL*)serverURL replacingFileAtURL:(NSURL*)localFileURL publicKeys:(NSDictionary<NSString*, NSString*>*)publicKeys completionHandler:(void(^)(BOOL wasUpdated, NSError* error))completionHandler;
-- (id <NSProgressReporting>)downloadArchiveAtURL:(NSURL*)serverURL forReplacingURL:(nullable NSURL*)localURL publicKeys:(NSDictionary<NSString*, NSString*>*)publicKeys completionHandler:(void(^)(NSURL* extractedArchiveURL, NSError* error))completionHandler;
+- (void)downloadFileAtURL:(NSURL*)serverURL replacingFileAtURL:(NSURL*)localFileURL publicKeys:(NSDictionary<NSString*, NSString*>*)publicKeys completionHandler:(void(^)(BOOL wasUpdated, NSError* _Nullable error))completionHandler;
+- (id <NSProgressReporting>)downloadArchiveAtURL:(NSURL*)serverURL forReplacingURL:(nullable NSURL*)localURL publicKeys:(NSDictionary<NSString*, NSString*>*)publicKeys completionHandler:(void(^)(NSURL* _Nullable extractedArchiveURL, NSError* _Nullable error))completionHandler;
 @end
 
 NS_ASSUME_NONNULL_END

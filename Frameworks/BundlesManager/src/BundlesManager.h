@@ -1,7 +1,14 @@
+// Hand-declared (rule 23): this class is defined in BundlesManager.swift.
+//
+// It must stay out of this framework's bridging header, where it would collide
+// with the generated -Swift.h (rule 43). Its ObjC++ consumers import it
+// unchanged, and so do the bridging headers of TextMate, BundleEditor,
+// DocumentWindow and Preferences — consuming a Swift class of another module
+// through its declaration is the established pattern (rule 56 forbids only
+// subclassing). Nothing checks this file against the Swift at build time; the
+// selectors are pinned by tests/t_bundles_manager.mm (rule 18).
 #import "Bundle.h"
-
-extern NSString* const kUserDefaultsDisableBundleUpdatesKey;
-extern NSString* const kUserDefaultsLastBundleUpdateCheckKey;
+#import "BundlesManagerConstants.h"
 
 // -findBundleForInstall:, which answers through a bundles::item_ptr, is declared
 // in BundlesManagerCxx.h (rule 37) so that this header is C++-free and the

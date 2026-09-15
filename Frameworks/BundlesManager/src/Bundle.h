@@ -1,3 +1,7 @@
+// Hand-declared (rule 23): both classes are defined in Bundle.swift. Kept out
+// of this framework's bridging header (rule 43); consumers import it unchanged.
+// The selectors, including the five `getter =` spellings, are pinned by
+// tests/t_bundle.mm (rule 18, rule 64).
 @class BundleGrammar;
 
 // Swift maps NSBundle to `Bundle`, so this class — a tmbundle in the bundle

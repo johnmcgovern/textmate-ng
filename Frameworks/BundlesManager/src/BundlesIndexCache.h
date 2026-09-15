@@ -15,14 +15,16 @@
 // callbacks — and the blocks — arrive there too.
 #import <Foundation/Foundation.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface BundlesIndexCache : NSObject
 // Reads bundles::locations(), computes the index path under ~/Library/Caches,
 // installs the content filter and loads the capnp cache if there is one.
 - (instancetype)init;
 
 // fs::event_callback_t::did_change and ::set_replaying_history, forwarded.
-@property (nonatomic, copy) void(^pathDidChange)(NSString* path, NSString* observedPath, uint64_t eventId, BOOL recursive);
-@property (nonatomic, copy) void(^replayingHistoryDidChange)(BOOL flag, NSString* observedPath, uint64_t eventId);
+@property (nonatomic, copy, nullable) void(^pathDidChange)(NSString* path, NSString* observedPath, uint64_t eventId, BOOL recursive);
+@property (nonatomic, copy, nullable) void(^replayingHistoryDidChange)(BOOL flag, NSString* observedPath, uint64_t eventId);
 
 // create_bundle_index over the bundle paths, bundles::set_index with the result,
 // and the watch list brought up to date with the cache's heads.
@@ -38,3 +40,5 @@
 
 - (void)setEventId:(uint64_t)anEventId forPath:(NSString*)aPath;
 @end
+
+NS_ASSUME_NONNULL_END

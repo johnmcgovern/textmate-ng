@@ -2,6 +2,42 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-16 (v2026.9-alpha.28)
+
+**The regular-expression engine is nine years newer.** Eight commits since
+alpha.27, and this one is the reason for the release. If you are on alpha.24 or
+later this should arrive on its own.
+
+What is in it:
+
+* **Onigmo, the engine behind every grammar, every Find, and every snippet
+  transform, moves from a 2015 snapshot to its current upstream.** Nothing about
+  it had been touched since the original TextMate pinned it. In between, its
+  maintainers fixed two published vulnerabilities and a handful of crashes and
+  hangs that a crafted pattern or file could trigger. You should notice nothing,
+  with one exception its maintainers document: in a pattern, `[[:punct:]]` now
+  matches symbols such as `$` and `+` as well as punctuation, as Ruby has done
+  since 2.4. A grammar that relied on the old, narrower meaning would colour
+  those characters differently.
+* **Four latent defects fixed in the parser, the regexp layer and a tree type**,
+  found by running the whole test suite under memory and undefined-behaviour
+  checkers for the first time. None had a visible symptom; each was the kind of
+  thing that becomes a crash on a different day. That checker now runs weekly.
+* **Two small pieces rewritten in Swift** — the history list behind Find's
+  recent folders and glob field, and the store behind the clipboard history.
+  Neither looks or behaves differently. The clipboard store gained one
+  correction on the way: a yes/no value had been written as text since the
+  original; nothing reads one.
+
+**Why a release with one thing in it.** A regex engine change touches every
+file you open. Shipping it alone, with nothing else to suspect, is how a grammar
+that colours differently gets blamed on the right change.
+
+**Where to look if something is off.** Any file you know well: the colouring
+should be exactly as it was. Find with a regular expression, and a snippet that
+transforms what you typed. If a symbol character is coloured differently than
+before, it is the `[[:punct:]]` change above, and the grammar is where to look.
+
 ## 2026-09-15 (v2026.9-alpha.27)
 
 **Two small things you can see, and one you can't.** Eight commits since

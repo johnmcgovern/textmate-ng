@@ -53,7 +53,7 @@
 #import "AppControllerSupport.h"
 #import "TxMtURLSupport.h"
 #import "OakMainMenu.h"
-#import "Favorites.h"
+#import <OakFilterList/Favorites.h>
 
 // Two free-function headers. Rule 61 measured that both the calls and their
 // default arguments reach Swift under SWIFT_OBJC_INTEROP_MODE=objcxx.

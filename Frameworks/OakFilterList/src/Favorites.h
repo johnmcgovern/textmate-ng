@@ -1,4 +1,4 @@
-#import <OakFilterList/OakChooser.h>
+#import "OakChooser.h"
 
 @interface FavoriteChooser : OakChooser
 @property (class, readonly) FavoriteChooser* sharedInstance;

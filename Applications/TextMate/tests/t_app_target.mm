@@ -34,7 +34,7 @@ void test_app_target_own_classes_are_reachable ()
 	// One from each of four source files, including the Swift one — a bundle that
 	// compiled the ObjC++ but not the Swift would pass a narrower check.
 	std::string missing;
-	for(NSString* name in @[ @"AboutWindowController", @"AppController", @"FavoriteChooser", @"TMSwiftInterop" ])
+	for(NSString* name in @[ @"AboutWindowController", @"AppController", @"AboutBundlesSupport", @"TMSwiftInterop" ])
 	{
 		if(!NSClassFromString(name))
 			missing += to_s(name) + " ";

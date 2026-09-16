@@ -8,8 +8,6 @@
 #import "../src/AppController.h"
 #import "../src/AppControllerSupport.h"
 #import "../src/TxMtURLSupport.h"
-#import "../src/Favorites.h"
-#import "../src/FavoritesSupport.h"
 #import "../src/TMPlugInController.h"
 #import <Cocoa/Cocoa.h>
 
@@ -27,11 +25,6 @@
 - (void)updateShowTabMenu:(NSMenu*)aMenu;
 - (NSArray*)toolbarDefaultItemIdentifiers:(NSToolbar*)aToolbar;
 - (NSArray*)toolbarAllowedItemIdentifiers:(NSToolbar*)aToolbar;
-@end
-
-@interface FavoriteChooser (Testing)
-@property (nonatomic) NSArray* sourceListLabels;
-@property (nonatomic) NSUInteger sourceIndex;
 @end
 
 @interface TMPlugInController (Testing)
@@ -60,7 +53,7 @@
 
 // Hand declarations for the two Swift classes in MainMenu.swift, rather than
 // importing the generated TextMate-Swift.h: this header already declares
-// AboutWindowController, FavoriteChooser and TMPlugInController by hand, and
+// AboutWindowController and TMPlugInController by hand, and
 // importing the generated header alongside them gives every one of those two
 // interfaces (rule 43). AppController.mm reaches them through TextMate-Swift.h
 // in its own translation unit, which is unaffected.

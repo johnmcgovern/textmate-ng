@@ -10,8 +10,17 @@
 // port has to keep reachable from ObjC, and gives them their real BOOL return rather than
 // the `id` the compiler infers for an undeclared selector.
 #import "../src/BundleItemChooser.h"
+#import "../src/Favorites.h"
+#import "../src/FavoritesSupport.h"
 
 @interface BundleItemChooser (Testing)
 - (BOOL)canAccept;
 - (BOOL)canEdit;
+@end
+
+// FavoriteChooser's two source-list members, declared in its class extension.
+// Moved here with the class on 2026-09-15 (it lived in the app until then).
+@interface FavoriteChooser (Testing)
+@property (nonatomic) NSArray* sourceListLabels;
+@property (nonatomic) NSUInteger sourceIndex;
 @end

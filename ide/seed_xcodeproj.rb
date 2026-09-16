@@ -1382,31 +1382,27 @@ specs.select { |t| kind(t) == :lib }.each { |t| all_libs.add_dependency(targets[
 
 project.save
 
-# Tests that fail the first time they are ever executed. None of these suites had
-# a build rule before (see Pass 4), so these are long-dormant failures, not
-# regressions — but leaving them unskipped would make the CI test step permanently
-# red and therefore useless as a regression signal. Skipping them keeps "green =
-# nothing got worse" true; fixing them is tracked separately, and each line says
-# what is actually wrong so nobody has to re-diagnose it.
+# Tests to exclude from the AllTests scheme by name. Empty since 2026-09-15:
+# the twelve skipped when the suites were revived (2026-07-26) are all fixed or
+# self-skipping now, each in its own file with the reason beside it —
+#
+#   scm t_hg / t_svn          print a skip and return when the tool is absent
+#                             (it is, here and on the CI image)
+#   scm t_git                 fixture inits with `-b master` instead of inheriting
+#                             init.defaultBranch
+#   buffer test_spelling 1-3  recheck after wait_for_repair(), which disables
+#                             spell checking for the duration (10.12 workaround)
+#   file t_type               fixture grammars via test::bundle_index_t
+#   file test_export_filter   a binary-export fixture command (a digest is not text)
+#   file test_save_translit   asserts Æ → AE and ASCII-only; libiconv's table for
+#                             ø and … is the platform's
+#   regexp /capitalize        real bug fixed: \w is ASCII-only under Ruby syntax
+#   settings t_track_paths    pumps the run loop instead of sleeping, so the
+#                             vnode sources on the main queue can deliver
+#
+# The mechanism stays: a new long-dormant failure is skipped here by name with
+# its reason, so that "green = nothing got worse" keeps meaning that.
 SKIPPED_TESTS = {
-  # Depend on tools that need not be installed (`hg`/`svn` are absent here).
-  "scm_t_hgTests/test_basic_status"           => "requires hg",
-  "scm_t_svnTests/test_basic_status"          => "requires svn",
-  # git stopped defaulting new repositories to `master`; the fixture expects it.
-  "scm_t_gitTests/test_variables"             => "expects branch 'master', git now inits 'main'",
-  # Assert against the host's live NSSpellChecker and its 'en' dictionary.
-  "buffer_t_bufferTests/test_spelling"        => "depends on system spellchecker",
-  "buffer_t_bufferTests/test_spelling_2"      => "depends on system spellchecker",
-  "buffer_t_bufferTests/test_spelling_3"      => "depends on system spellchecker",
-  # Resolve a grammar, so they need installed bundles — which is exactly what
-  # default-bundles provisioning supplies. Recheck once `bl` can reach its server.
-  "file_t_typeTests/test_file_type"           => "needs installed grammars (DefaultBundles)",
-  "file_t_typeTests/test_create_glob"         => "needs installed grammars (DefaultBundles)",
-  # Genuine behaviour mismatches in code under test — real bugs or stale fixtures.
-  "file_t_saveTests/test_save_translit"       => "transliteration output differs",
-  "file_t_saveTests/test_export_filter"       => "export filter did not run",
-  "regexp_t_format_stringTests/test_format_string" => "/capitalize on a non-ASCII first char",
-  "settings_t_track_pathsTests/test_track_file"    => "path tracker range assertion",
 }.freeze
 
 # One shared scheme so `xcodebuild test -scheme AllTests` works without opening

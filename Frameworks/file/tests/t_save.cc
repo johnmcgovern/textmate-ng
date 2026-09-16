@@ -2,6 +2,24 @@
 #include <io/path.h>
 #include <text/hexdump.h>
 #include <test/jail.h>
+#include <test/bundle_index.h>
+
+// test_export_filter needs a bundle command with an export semantic class,
+// which only an installed bundle would supply. A fixture provides one that
+// hashes the document, scoped to the file's extension through attr.rev-path.
+// It is a *binary* export filter: the digest is raw bytes, and a text export
+// filter's output goes through the encoder next, which refuses them as
+// invalid UTF-8 — a save that fails with no message, which is how this was
+// found. Binary export runs after encoding, and writes what it is given.
+void setup_export_filter ()
+{
+	test::bundle_index_t index;
+	// The command needs a real newline after the shebang: written as \n inside
+	// the plist it stays two characters, and execve refuses "#!/bin/sh\nopenssl…"
+	// as an interpreter path with "Exec format error".
+	index.add(bundles::kItemTypeCommand, "{ name = 'SHA-1 on save'; semanticClass = 'callback.document.binary-export'; scope = 'attr.rev-path.sha1'; input = document; inputFormat = text; outputLocation = replaceDocument; outputFormat = text; command = '#!/bin/sh\nopenssl dgst -sha1 -binary'; }");
+	index.commit();
+}
 
 struct stall_t : file::save_callback_t
 {
@@ -24,6 +42,10 @@ struct stall_t : file::save_callback_t
 
 	void did_save (std::string const& path, io::bytes_ptr content, encoding::type const& encoding, bool success, std::string const& message, oak::uuid_t const& filter)
 	{
+		// A failed save says why here and nowhere else; print it so a failing test
+		// names the cause instead of "Assertion failed: didSave".
+		if(!success)
+			fprintf(stderr, "save of %s failed: %s\n", path.c_str(), message.c_str());
 		if(_success)
 			*_success = success;
 		_should_wait = false;
@@ -110,7 +132,18 @@ void test_save_translit ()
 	cb->wait();
 
 	OAK_ASSERT_EQ(success, true);
-	OAK_ASSERT_EQ(path::content(path), "AEblegrod...\n");
+
+	// What //TRANSLIT makes of ø and … is libiconv's table, and Apple's has
+	// changed since this expected "AEblegrod...": today it writes "AEblegro......"
+	// and reports four invalid characters. What is ours to assert is that the
+	// save succeeded through transliteration (without it, an ASCII save of this
+	// content fails — see test_save_encoding_failure), that Æ became AE, and
+	// that nothing non-ASCII reached the file.
+	std::string const saved = path::content(path);
+	OAK_ASSERT(saved.compare(0, 7, "AEblegr") == 0);
+	OAK_ASSERT(saved.back() == '\n');
+	for(char ch : saved)
+		OAK_ASSERT((unsigned char)ch < 0x80);
 }
 
 void test_save_encoding_failure ()

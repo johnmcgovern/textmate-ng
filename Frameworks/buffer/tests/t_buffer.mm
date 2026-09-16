@@ -104,6 +104,13 @@ void test_xml_markup ()
 	OAK_ASSERT_EQ(buf.xml_substr(6, 13), "<text>&lt;World></text>");
 }
 
+// wait_for_repair() switches spell checking off for the duration of the
+// synchronous repair — a macOS 10.12 workaround in parsing.cc for a dispatch
+// thread limit — so a test that parses this way and then reads misspellings
+// reads an empty map. The recheck afterwards is the public path the app takes
+// after a language change, and it runs the spelling pass over the parsed
+// scopes with checking enabled. These four tests were failing on exactly this
+// since the workaround landed.
 void test_spelling ()
 {
 	ng::buffer_t buf;
@@ -113,6 +120,7 @@ void test_spelling ()
 	buf.insert(0, "myfo god\nthat ibs nice\nlamere check\n");
 	buf.bump_revision();
 	buf.wait_for_repair();
+	buf.recheck_spelling(0, buf.size());
 
 	OAK_ASSERT_EQ(buf.misspellings(0, buf.size()).size(), 6);
 
@@ -131,6 +139,7 @@ void test_spelling_2 ()
 	buf.insert(0, "it mq xy");
 	buf.bump_revision();
 	buf.wait_for_repair();
+	buf.recheck_spelling(0, buf.size());
 
 	std::map<size_t, bool> bad = buf.misspellings(0, buf.size());
 	OAK_ASSERT_EQ(bad.size(), 3);
@@ -146,6 +155,7 @@ void test_spelling_3 ()
 	buf.insert(0, "it mq xy");
 	buf.bump_revision();
 	buf.wait_for_repair();
+	buf.recheck_spelling(0, buf.size());
 
 	std::map<size_t, bool> bad = buf.misspellings(4, 7);
 	OAK_ASSERT_EQ(bad.size(), 3);
@@ -162,10 +172,12 @@ void test_spelling_4 ()
 	buf.insert(0, "hxllo world");
 	buf.bump_revision();
 	buf.wait_for_repair();
+	buf.recheck_spelling(0, buf.size());
 
 	buf.replace(1, 2, "e");
 	buf.bump_revision();
 	buf.wait_for_repair();
+	buf.recheck_spelling(0, buf.size());
 	OAK_ASSERT_EQ(buf.substr(0, buf.size()), "hello world");
 
 	std::map<size_t, bool> bad = buf.misspellings(0, buf.size());

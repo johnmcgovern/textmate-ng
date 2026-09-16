@@ -3,6 +3,25 @@
 #include <test/jail.h>
 #include <regexp/glob.h>
 #include <settings/settings.h>
+#include <test/bundle_index.h>
+
+// Both tests resolve grammars, which only installed bundles would supply. A
+// fixture index provides one grammar per scope the assertions name, with the
+// extensions and first-line match the real bundles carry. path::rank prefers
+// the longest extension at a '.', '_' or '/' boundary, which is what makes
+// foo_spec.rb RSpec rather than Ruby and CMakeLists.txt CMake rather than text.
+void setup_grammars ()
+{
+	test::bundle_index_t index;
+	index.add(bundles::kItemTypeGrammar, "{ name = 'XML Property List'; scopeName = 'source.xml.plist'; firstLineMatch = '^<[?]xml'; }");
+	index.add(bundles::kItemTypeGrammar, "{ name = 'Property List';     scopeName = 'source.plist';       fileTypes = ( plist ); }");
+	index.add(bundles::kItemTypeGrammar, "{ name = 'Ruby';              scopeName = 'source.ruby';        fileTypes = ( rb ); }");
+	index.add(bundles::kItemTypeGrammar, "{ name = 'RSpec';             scopeName = 'source.ruby.rspec';  fileTypes = ( 'spec.rb' ); }");
+	index.add(bundles::kItemTypeGrammar, "{ name = 'CMake';             scopeName = 'source.cmake';       fileTypes = ( 'CMakeLists.txt' ); }");
+	index.add(bundles::kItemTypeGrammar, "{ name = 'Git Config';        scopeName = 'source.config.git';  fileTypes = ( '.git/config' ); }");
+	index.add(bundles::kItemTypeGrammar, "{ name = 'Plain Text';        scopeName = 'text.plain';         fileTypes = ( txt ); }");
+	index.commit();
+}
 
 void test_file_type ()
 {

@@ -2532,6 +2532,39 @@ The bundle count: 40 `.xctest` suites started and passed in this run's log.
 The afternoon note says 41; that figure was counted from a different grep,
 not from a bundle that has since gone — the test total is unchanged.
 
+## Session 2026-09-15, late — About ▸ Bundles: diagnosed, not a bug in the port
+
+"A heading, one grey bar" had been carried since 2026-09-02 as pre-existing
+and cosmetic. It is pre-existing, and it is not cosmetic: it is the page
+working exactly as upstream wrote it over data that has gone stale.
+
+Measured, not reasoned (rule 22), with an offscreen `WKWebView` probe that
+loads `About/Bundles.html` the way the controller does (`load(URLRequest)`,
+`drawsBackground` false) and asks the page what it sees:
+
+- The stylesheet loads either way (two sheets, `h1` at 2.4rem, body painted
+  `#1e1e1e` in dark mode). `loadFileURL(_:allowingReadAccessTo:)` changes
+  nothing. The "translucency" note was not reproduced headlessly and is not
+  what this is about.
+- `setJSON` works: given one commit it renders a month heading and a row.
+- `RemoveOldCommits` keeps only commits whose date begins with one of the
+  last three calendar years (2024–2026). Across the 35 installed bundles
+  that carry a `Changes.json`, **0 of 276 commits** do; the newest is
+  2022-05-20 (JavaScript.tmbundle). Every bundle reaches the page with
+  `commits: []`, and an empty list drew an empty `<article>` — the grey bar.
+
+The fix is in the page, not the controller: `setJSON` now writes "None of
+the installed bundles has changed in the last two years." into the article
+when nothing survives, and a real payload replaces it (probed both ways).
+The controller's two-year window is upstream's and is left alone; the
+bundle index at `REST_API/bundles` is what has not moved since 2022, which
+is a fact about the index, not about this app.
+
+**Rule 8 owed**: John was at the machine, so the page was verified through
+the probe against the built `Resources/About/Bundles.html`, not in the
+running app. Open About ▸ Bundles on the next idle window and read the
+sentence.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

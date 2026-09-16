@@ -17,6 +17,10 @@
   .bundle_name:after {
     content: ': ';
   }
+  .empty {
+    margin: 0;
+    color: rgba(0, 0, 0, 0.6);
+  }
   </style>
   <script type="text/javascript">
   var mainContainer = null;
@@ -111,6 +115,17 @@
     commits.sort(function(a, b) {
       return b.date - a.date;
     });
+
+    // The controller drops every commit older than two calendar years before
+    // the JSON gets here, so an empty list means "nothing recent", not "no
+    // bundles". Say so, rather than leave an empty box under the heading.
+    if (commits.length == 0) {
+      var empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.appendChild(document.createTextNode('None of the installed bundles has changed in the last two years.'));
+      mainContainer.appendChild(empty);
+      return;
+    }
 
     // generate the HTML
     var currentGroup = null;

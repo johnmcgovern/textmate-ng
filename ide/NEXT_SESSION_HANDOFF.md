@@ -2834,6 +2834,52 @@ Apple's clang has) when a target goes quiet; more grammars than C; the
 XML/binary plist path is Apple's parser and is not fuzzed on purpose. Then
 the `nonisolated(unsafe)` audit, warnings to zero, a crash collector.
 
+## Session 2026-09-16, evening — the nonisolated(unsafe) audit: 66 sites, five shapes, none racy
+
+All 66 sites read, each classified, none found racy. Rule 26 now carries
+the five shapes and what each must say. What changed in code:
+
+- **Five main-thread-only tables gained a Debug-only `assert(Thread.isMainThread)`**
+  at their accessor: OakAbbreviations' instances, OakPasteboard's instances,
+  the pasteboard chooser table, FileItem's scheme registry, and the
+  pasteboard database connection. Release compiles `assert` out, so the
+  shipped contract is exactly the ObjC++'s; the suite (Debug) now enforces
+  it. TMFileReference's map table already had a `precondition` (the ObjC++
+  had an NSAssert) and its image cache a lock; FileItemObserver's registry
+  is reached only from `@MainActor` functions.
+- **Two comments in BundlesManager said a crossing landed on "the download
+  manager's queue".** Measured: OakDownloadManager creates its URLSession
+  with `delegateQueue: .main`, and every completion — including the archive
+  task's — is invoked from a session delegate callback. So the install
+  result array (`res`, an NSMutableArray written per download) is written
+  only on the main queue, and the ObjC++'s `dispatch_async(main)` after it
+  is a hop from main to main. Had that queue been concurrent, that array
+  would have been the one real race in the tree; it is not, and the
+  comments now say why.
+- **Three outlets in DocumentWindowController** (`window`, `tabBarView`,
+  `textView`) carried the annotation with no comment; they are for
+  `deinit`, which clears their delegates as `-dealloc` did.
+
+### The census
+
+| Shape | Sites | Examples |
+| --- | --- | --- |
+| identity (KVO context, association key) | 6 | OakChooser, BundleItemChooser, FFTextFieldViewController, HOBrowserView, CommitWindow, NSMenuItem's keys |
+| `static let sharedInstance`, class not `@MainActor` | 11 | BundlesManager, SoftwareUpdate, OakDownloadManager, OakDocumentController, KEventManager, FSEventsManager, SCMManager, CrashReporter, TMPlugInController, BundleInstallHelper, OakPasteboardDatabase |
+| mutable static/global, main-only by contract | 9 | the five above, plus TMFileReference ×2, FileItemObserver, OakPasteboardDatabase.db |
+| closure capture crossing a queue | 12 | BundlesManager ×8, SoftwareUpdate ×6 (counting each `let`), FileChooser's read-only options |
+| instance var for a `@MainActor` deinit | 5 | DocumentWindowController ×3, SUDownloadViewController, OakSavePanel |
+| local under `MainActor.assumeIsolated` | 3 | AppController's tokens and window list |
+
+(Counts overlap the 66 by a few where a comment line matched the grep.)
+
+**What this does not claim.** The classes behind the eleven singletons
+each state their own contract in their header comment; the audit checked
+that the comment exists and that the queues it names are the ones the code
+uses, not that every method of every class is safe on every queue. The
+Debug assertions are the enforcement that scales: a caller on the wrong
+thread now fails the suite instead of racing.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

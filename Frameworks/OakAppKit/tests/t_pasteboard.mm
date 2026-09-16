@@ -99,7 +99,7 @@ void test_pasteboard_database_round_trips_a_blob ()
 	OAK_ASSERT_EQ([rows.firstObject[@"len"] integerValue], 5);
 }
 
-void test_pasteboard_database_binds_a_boxed_bool_as_text_and_double_as_real ()
+void test_pasteboard_database_binds_a_boxed_bool_as_integer_and_double_as_real ()
 {
 	// Measured against the ObjC++, and not what it meant to do. The dispatch table
 	// is keyed by @encode, and the frameworks compile with GCC_CHAR_IS_UNSIGNED_CHAR
@@ -107,13 +107,14 @@ void test_pasteboard_database_binds_a_boxed_bool_as_text_and_double_as_real ()
 	// char — and no entry for "c" ever exists. Foundation boxes @YES with objCType "c" (it is built with a signed
 	// char), so a boxed BOOL misses the table and takes the fallback: bound as the
 	// text "1". SQLite's arithmetic coerces it, which is why nothing noticed; no
-	// caller binds a boolean. The port keys its table by the letters themselves and
-	// binds "c" as an integer; that assertion changes with it.
+	// caller binds a boolean. The Swift store keys its table by the letters
+	// themselves and binds "c" as an integer, which is what the ObjC++ meant; this
+	// pin said "text" against the ObjC++ and says "integer" now.
 	OakPasteboardDatabase* db = OakPasteboardDatabase.sharedInstance;
 	NSArray* rows = [db executeQuery:@"SELECT :b AS flag, typeof(:b) AS flagType, :r * 2 AS twice, typeof(:r) AS realType;" variables:@{ @":b": @YES, @":r": @(2.5) }];
 	OAK_ASSERT_EQ(rows.count, 1);
 	OAK_ASSERT_EQ([rows.firstObject[@"flag"] integerValue], 1);
-	OAK_ASSERT_EQ(std::string([[rows.firstObject[@"flagType"] description] UTF8String]), std::string("text"));
+	OAK_ASSERT_EQ(std::string([[rows.firstObject[@"flagType"] description] UTF8String]), std::string("integer"));
 	OAK_ASSERT_EQ([rows.firstObject[@"twice"] doubleValue], 5.0);
 	OAK_ASSERT_EQ(std::string([[rows.firstObject[@"realType"] description] UTF8String]), std::string("real"));
 }

@@ -1,11 +1,11 @@
-// The SQLite store behind OakPasteboard, wrapped so the pasteboard can become Swift.
-// All the C++ — the sqlite3 C API, the @encode→sqlite3_bind std::function dispatch
-// table, ColumnsAsDictionary — lives in the .mm; the API here is C++-free: a query
-// string plus an NSDictionary of `:name` → NSString / NSData / NSNumber / NSNull(=NULL).
-//
-// This is the DWScopeContext / SCMSupport pattern: an ObjC-shaped object owns the
-// C++ lifetime (the process-wide sqlite3* handle) and OakPasteboard holds only the
-// object. Deliberately free of C++ so a Swift bridging header can import it.
+// Hand-written declaration of the Swift OakPasteboardDatabase
+// (OakPasteboardDatabase.swift), the SQLite store behind OakPasteboard, for
+// t_pasteboard.mm, which pins it (rule 18). It began as a C++ boundary so the
+// pasteboard could become Swift; its only C++ turned out to be a dispatch table,
+// and the sqlite3 C API is Swift's to call, so the boundary is Swift as well.
+// Kept out of the bridging header: Swift defines the class (rule 43). The API:
+// a query string plus a dictionary of `:name` → NSString / NSData / NSNumber /
+// NSNull(=NULL).
 #import <Foundation/Foundation.h>
 
 @interface OakPasteboardDatabase : NSObject

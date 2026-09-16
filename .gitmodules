@@ -9,7 +9,7 @@
 	url = https://github.com/textmate/dialog.git
 [submodule "vendor/Onigmo/vendor"]
 	path = vendor/Onigmo/vendor
-	url = https://github.com/textmate/Onigmo.git
+	url = https://github.com/k-takata/Onigmo.git
 [submodule "vendor/kvdb/vendor"]
 	path = vendor/kvdb/vendor
 	url = https://github.com/textmate/kvdb.git

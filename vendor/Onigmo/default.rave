@@ -1,9 +1,9 @@
 target "${dirname}" {
-	headers     vendor/oniguruma.h
+	headers     vendor/onigmo.h
 
-	add FLAGS   "-I${dir} -I${dir}/vendor"
+	add FLAGS   "-I${dir} -I${dir}/vendor -I${dir}/vendor/enc/unicode"
 	add C_FLAGS "-Wno-incompatible-pointer-types -Wno-char-subscripts"
 
-	sources     src/*.c vendor/{enc/{ascii,euc_jp,iso8859_1,sjis,unicode,utf*},{reg*,st}}.c
+	sources     src/*.c vendor/{enc/{ascii,us_ascii,euc_jp,iso_8859_1,shift_jis,unicode,utf_*},{reg*,st}}.c
 	tests       tests/t_*.cc
 }

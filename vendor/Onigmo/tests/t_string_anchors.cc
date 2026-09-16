@@ -1,4 +1,4 @@
-#include <Onigmo/oniguruma.h>
+#include <Onigmo/onigmo.h>
 
 #define ONIG_OPTION_BACKWARD (ONIG_OPTION_MAXBIT << 1)
 

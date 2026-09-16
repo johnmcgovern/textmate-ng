@@ -1,7 +1,7 @@
 #ifndef ONIG_REGEXP_H_UMTUKY6I
 #define ONIG_REGEXP_H_UMTUKY6I
 
-#include <Onigmo/oniguruma.h>
+#include <Onigmo/onigmo.h>
 #include <oak/debug.h>
 
 #define ONIG_OPTION_NOTGPOS (ONIG_OPTION_MAXBIT << 1)

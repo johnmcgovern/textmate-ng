@@ -1,5 +1,7 @@
-/* config.h.  Generated from config.h.in by configure.  */
-/* config.h.in.  Generated from configure.in by autoheader.  */
+/* Hand-maintained for the vendored Onigmo (upstream k-takata/Onigmo, 6.2.0
+   line), for arm64 macOS. Upstream generates this with autoconf, which this
+   tree does not run; the keys are the ones its sources test for. Rewritten
+   2026-09-16 when the pin moved from the 2015 fork to upstream head. */
 
 /* Define to one of `_getb67', `GETB67', `getb67' for Cray-2 and Cray-YMP
    systems. This function is required for `alloca.c' support on those systems.
@@ -11,6 +13,9 @@
 
 /* Define to 1 if you have `alloca', as a function or macro. */
 #define HAVE_ALLOCA 1
+
+/* Define to 1 if the compiler has __builtin_assume_aligned. */
+#define HAVE_BUILTIN___BUILTIN_ASSUME_ALIGNED 1
 
 /* Define to 1 if you have <alloca.h> and it should be used (not on Ultrix).
    */
@@ -72,31 +77,37 @@
 /* #undef NO_MINUS_C_MINUS_O */
 
 /* Name of package */
-#define PACKAGE "onig"
+#define PACKAGE "onigmo"
 
 /* Define to the address where bug reports for this package should be sent. */
 #define PACKAGE_BUGREPORT ""
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "onig"
+#define PACKAGE_NAME "onigmo"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "onig 5.13.5"
+#define PACKAGE_STRING "onigmo 6.2.0"
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "onig"
+#define PACKAGE_TARNAME "onigmo"
 
 /* Define to the home page for this package. */
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "5.13.5"
+#define PACKAGE_VERSION "6.2.0"
 
 /* The size of `int', as computed by sizeof. */
 #define SIZEOF_INT 4
 
 /* The size of `long', as computed by sizeof. */
 #define SIZEOF_LONG 8
+
+/* The size of `long long', as computed by sizeof. */
+#define SIZEOF_LONG_LONG 8
+
+/* The size of `void*', as computed by sizeof. */
+#define SIZEOF_VOIDP 8
 
 /* The size of `short', as computed by sizeof. */
 #define SIZEOF_SHORT 2
@@ -121,14 +132,11 @@
 /* Define if enable CR+NL as line terminator */
 /* #undef USE_CRNL_AS_LINE_TERMINATOR */
 
-/* Define if enable the default multithread system */
-#define USE_DEFAULT_MULTI_THREAD_SYSTEM 1
-
-/* Define if enbale multithread support */
-#define USE_MULTI_THREAD_SYSTEM 1
+/* USE_MULTI_THREAD_SYSTEM and USE_DEFAULT_MULTI_THREAD_SYSTEM were removed
+   upstream between 5.13 and 6.0; nothing in the 6.x sources tests them. */
 
 /* Version number of package */
-#define VERSION "5.13.5"
+#define VERSION "6.2.0"
 
 /* Define to empty if `const' does not conform to ANSI C. */
 /* #undef const */

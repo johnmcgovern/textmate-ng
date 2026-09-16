@@ -1,4 +1,4 @@
-#include <Onigmo/oniguruma.h>
+#include <Onigmo/onigmo.h>
 
 OnigRegex pattern (char const* ptrn, OnigOptionType options = ONIG_OPTION_NONE)
 {

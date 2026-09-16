@@ -2565,6 +2565,54 @@ the probe against the built `Resources/About/Bundles.html`, not in the
 running app. Open About ▸ Bundles on the next idle window and read the
 sentence.
 
+## Session 2026-09-15, night — alpha.27 is published
+
+`v2026.9-alpha.27` (`76f887d4`, build 20260915.10) is on GitHub Releases:
+notarized, stapled, and verified from the outside — downloaded over HTTPS,
+quarantined, `spctl` accepted, staple valid; three assets (zip 16.0 MB,
+tbz 12.2 MB, dSYMs 52.2 MB); the live manifest decodes to alpha.27 with the
+payload's SHA-256 (`c80b1602…`), the 15.0 floor and an expiry of
+2026-10-21. Gate: `bin/rehearse-update` 6/6 (good at alpha.27 → alpha.28,
+five refusals). Same sequence as alpha.26, in the same order.
+
+**Rule 8's field check of the updater is now possible**: alpha.26 installs
+see alpha.27 offered. Nobody has watched one do it yet.
+
+### The smoke pass, by accessibility, on this build
+
+John was at the machine and asked for the pass to run anyway; it ran with
+TextMate-NG frontmost and no keystrokes, and nothing stray arrived (the app
+quit with no save prompt). Verified: all six Settings panes (Files,
+Projects, Bundles, Variables, Software Update, Terminal); Find in Folder
+appears; Open Quickly with 1374 rows and its three scopes; Open Recent
+Project 9 recent / 0 favourites with the status line; About ▸ Bundles shows
+the new sentence; Check for Update shows the prerelease verdict with a
+"Downgrade to 2026.9-alpha.26" button; the Bundle Editor window (1200×700,
+split view) appears; the Unknown Encoding sheet appears on a stray-byte file
+with Open enabled for ISO-8859-1 and Cancel dismissing it. Not verified:
+HTML output, the commit window, gutter numbers (not reachable by
+accessibility), and the Bundle Editor's row count — reading its tree makes
+System Events return "AppleEvent handler failed", so "appears" is all this
+pass can say about it.
+
+Three things about driving this app that cost a run each:
+
+- **`goToFile:` is disabled while the Find window is key.** Open Quickly
+  did nothing until the document window was raised first.
+- **The Software Update verdict is a dialog with an empty title and no
+  close button**; dismiss it with its OK button, or it sits under everything
+  that follows.
+- **The Bundle Editor's window is titled "Untitled"** (no item selected),
+  and some element in its tree fails `role`; treat that title as the editor,
+  not as a stray document.
+
+### Numbers
+
+| | |
+| --- | --- |
+| Published releases | 22 (alpha.7 … alpha.27); 0 commits unreleased after this handoff |
+| Full suite | 1159 tests, 40 bundles (unchanged; notes only since the last run) |
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

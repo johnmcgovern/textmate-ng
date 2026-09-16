@@ -1,10 +1,10 @@
 import AppKit
 
 // Ported from OakChooser.mm (2026-08-20). The filter-list base class: a floating panel
-// with a linked search field over a table, subclassed by SymbolChooser, FileChooser and
-// BundleItemChooser (still ObjC++) and by FavoriteChooser in the app — so the class and
-// everything a subclass touches is @objc, reached through the hand-declaration in
-// OakChooser.h, and its contract is pinned by t_chooser.mm (rule 18).
+// with a linked search field over a table, subclassed by SymbolChooser, FileChooser,
+// BundleItemChooser and FavoriteChooser (all Swift now, all in this framework) — so the
+// class and everything a subclass touches is @objc, reached through the hand-declaration
+// in OakChooser.h, and its contract is pinned by t_chooser.mm (rule 18).
 //
 // Two decisions carry the port:
 //

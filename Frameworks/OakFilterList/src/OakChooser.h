@@ -1,7 +1,8 @@
-// Hand-written ObjC declaration of the Swift OakChooser (OakChooser.swift), for its four
-// still-ObjC++ subclasses: SymbolChooser, FileChooser and BundleItemChooser in this
-// framework, FavoriteChooser (Favorites.mm) in the app — so it is a public header. Kept
-// out of the bridging header (Swift defines the class); the contract, including that the
+// Hand-written ObjC declaration of the Swift OakChooser (OakChooser.swift). Its four
+// subclasses — SymbolChooser, FileChooser, BundleItemChooser and FavoriteChooser — are
+// all Swift in this framework now; the header remains for the ObjC++ that drives the
+// choosers (OakDocumentView.mm, the app's menu handlers) and for the tests. Kept out of
+// the bridging header (Swift defines the class); the contract, including that the
 // base's internal calls reach subclass overrides of the three hooks at the bottom, is
 // pinned by t_chooser.mm (rule 18).
 @interface OakChooser : NSWindowController

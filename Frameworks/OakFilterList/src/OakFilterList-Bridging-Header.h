@@ -48,3 +48,8 @@
 // and its own C++ boundary (which brings TMScopeContext with it).
 #import <OakAppKit/OakKeyEquivalentView.h>
 #import "BundleItemChooserSupport.h"
+
+// Favorites.swift: its C++ boundary (the Favorites folder walk and the ranking, which
+// brings FavoritesItem with it) and the recent-projects database it reads directly.
+#import "FavoritesSupport.h"
+#import <kvdb/kvdb.h>

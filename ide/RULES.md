@@ -668,6 +668,12 @@ knew.
     | B | `final`, over `OakChooser` | traps |
     | C | non-`final`, over `OakScopeBarViewController` | traps |
 
+    **Resolved for `FavoriteChooser` on 2026-09-15** the first way: the class
+    moved into OakFilterList (one commit, still ObjC++, all pins green) and
+    was then ported (`Favorites.swift`). Same binding, same observation, no
+    trap — the module was the whole difference, as measured. The rule stands
+    for the next class in that shape.
+
     So neither of the two narrower explanations holds. **It is not `final`** — A
     traps without it, which also means this is *not* the alpha.16 heap-corruption
     bug `dc66d10d` fixed, despite landing in the same runtime handler (that one

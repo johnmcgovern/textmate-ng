@@ -2471,6 +2471,56 @@ commit's message. Two are worth carrying:
 One product bug fell out: `/capitalize` on a word starting with a non-ASCII
 letter (`\w` is ASCII-only under Onigmo's Ruby syntax; `[[:word:]]` is not).
 
+## Session 2026-09-15, evening — FavoriteChooser is Swift, and rule 56 has its first exit
+
+Two commits, the two-commit method with the extraction already done back on
+2026-08-31. Full suite **1159/1159 across 41 bundles**, 0 restarts.
+
+1. **Move** (`fc2aac13`): `Favorites.{h,mm}` and `FavoritesSupport.{h,mm}`
+   from `Applications/TextMate/src/` into `Frameworks/OakFilterList/src/`,
+   `t_favorites.mm` with them, still ObjC++. The rave gained `kvdb` and
+   `src/Favorites.h` in its headers; the app's bridging header imports
+   `<OakFilterList/Favorites.h>`; the app-target class list in
+   `t_app_target.mm` names `AboutBundlesSupport` where it named
+   `FavoriteChooser`. The 10 pins went green without a change to a single
+   assertion, which is the point of moving before porting.
+2. **Port**: `Favorites.swift`, a faithful translation of the 303-line
+   ObjC++. `+initialize` became the `registerDefaults()` closure in
+   `sharedInstance` (rule 24, SoftwareUpdate's shape); `-doCommandBySelector:`,
+   `-keyDown:`, `-insertText:` and the four key-binding methods are the
+   `override func` forms OakPasteboardChooser.swift already uses; the
+   remove-button template image is `NSImage(size:flipped:drawingHandler:)`.
+   `Favorites.h` is now the rule-23 hand declaration for the app's menu
+   handler; the bridging header gained `FavoritesSupport.h` and
+   `<kvdb/kvdb.h>`. OakChooser has four subclasses and every one is Swift.
+
+**Rule 56 is resolved for this class, and the rule stands.** The scope bar
+binds to `sourceIndex` on self exactly as before, in the module where the
+superclass lives, and nothing traps. The note is on the rule in RULES.md.
+The next class in that shape — a Swift subclass of a Swift class seen through
+a hand header from another module — gets the same treatment: move first.
+
+One translation point worth carrying: **Swift does not run `didSet` from
+the declaring class's own initializer.** The ObjC++ seeded `_sourceIndex` with
+`NSNotFound` so that `self.sourceIndex = …` in `-init` went through the
+setter and loaded the list. The Swift spells the two loads out after the
+assignment; a port that keeps the sentinel and trusts the observer ships an
+empty list until the first `showWindow:` reloads it.
+
+Mutation checked (rule 40): swapping the two labels fails
+`test_favorites_chooser_surface` and nothing else.
+
+Release build and rule 8 (System Events, idle > 10 min, no instance
+running): File ▸ Open Recent Project… opens the window; nine recent projects
+with the status line showing the selected one's path and "9 items"; the
+scope bar's two radio buttons switch to Favorites (zero rows — there is no
+`~/Library/Application Support/TextMate/Favorites` on this machine) and
+back; `openProjectSourceIndex` reads 0 afterwards; the app quit cleanly.
+
+The bundle count: 40 `.xctest` suites started and passed in this run's log.
+The afternoon note says 41; that figure was counted from a different grep,
+not from a bundle that has since gone — the test total is unchanged.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

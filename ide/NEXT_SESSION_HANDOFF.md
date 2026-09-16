@@ -2613,6 +2613,72 @@ Three things about driving this app that cost a run each:
 | Published releases | 22 (alpha.7 … alpha.27); 0 commits unreleased after this handoff |
 | Full suite | 1159 tests, 40 bundles (unchanged; notes only since the last run) |
 
+## Session 2026-09-15, late night — the last two portable leaves: OakHistoryList and OakPasteboardDatabase
+
+Four commits, two ports, pins first each time. Full suite **1181/1181 across
+41 bundles** (OakFoundation's bundle is new), 0 restarts.
+
+1. **OakHistoryList** (`929fb2f2` pins, `e9bb3f62` port): 148 lines of ObjC
+   with no C++, whose only consumers were Swift already. OakFoundation's
+   first Swift file, first test bundle, and first bridging header (prelude
+   plus OakFoundation.h). The variadic initializer is gone — uncallable and
+   unwritable from Swift, uncalled since the array spelling. Two things the
+   pins settled: a name with a dot stores as an entry inside a dictionary
+   under the part before the first dot (Find's per-project glob history),
+   and setting `head` notifies `list` once and `head` twice — the explicit
+   pair in the add plus the runtime's automatic pair around the setter.
+   The fixture's first prefix had a dot in it and went through the
+   dictionary path; the comment on the prefix says so.
+2. **OakPasteboardDatabase** (`42ddd9ff` pins, `4aae6236` port): the
+   SQLite store, extracted on 2026-08-20 as a C++ boundary so OakPasteboard
+   could go Swift. Its C++ was a `std::map` from `@encode` strings to bind
+   lambdas; the sqlite3 C API is Swift's (`import SQLite3`). The boundary is
+   Swift now and OakPasteboard.swift sees the class in its own module; the
+   hand header stays for the pins. Text and blobs bind with
+   SQLITE_TRANSIENT, because Swift's temporary buffers do not make the
+   promise an autoreleased UTF8String did.
+
+**One defect found by pinning, measured before it was believed (rule 22).**
+A boxed BOOL bound as the *text* "1" in the ObjC++. The dispatch table was
+keyed by `@encode`, the frameworks compile with `GCC_CHAR_IS_UNSIGNED_CHAR`
+(ide/seed_xcodeproj.rb), so `@encode(char)` is "C" — the same as unsigned
+char — and the table never had a "c" entry; Foundation boxes `@YES` as "c".
+SQLite's arithmetic coerces text, which is why the old "41 + 1 = 42" pin
+proved nothing about integer binding and why nothing ever noticed. No
+caller binds a boolean. The Swift table is keyed by the letters and binds
+"c" as an integer; the pin said "text" in the pins commit and "integer" in
+the port commit, each green against its own side. A stderr probe in the
+bind loop is what found the missing key; the probe printing every
+`@encode` is what named the flag. Two runs, no theorising.
+
+**What the mutations said.** ObjC++ side: overflow end, empty-list guard,
+head notification, load truncation (history); NULL as text, result shape,
+blob as text (store) — each caught by its own pin. Swift side: forgetting
+the store fails three history pins; `dynamic` dropped from `head` fails
+none (every writer reaches the setter through the runtime, and there is no
+Swift-internal writer — recorded, not papered over); the store's shape,
+NULL and boolean entries each fail their pin. One Swift "mutation" that
+skipped the NSNull branch failed nothing because an unbound parameter is
+NULL anyway — the mutation was wrong, not the pin, and the second try
+(bind text) was caught.
+
+**Rule 8 owed for both**: John was at the machine all evening. Find in
+Folder's glob pop-up and recent-folders list (history), and the clipboard
+history panel ⌃⌥⌘V (store) — on the next idle window, or by hand.
+
+**Numbers, measured (find -print0).** Swift 34303 lines in 119 files
+(Frameworks + app); ObjC++ in Frameworks 19717. OakAppKit 1282 `.mm` in 20
+files, 76% Swift; OakFoundation 100 `.mm` in 3 files, 59%. What is left in
+OakAppKit is the free-function files and the boundaries kept on purpose.
+
+**There is no next port of this kind.** The survey that chose these two
+looked at every remaining `.mm` over 140 lines; each other one is declined
+where its decision was made (OakTheme: C++ on both sides; OakToolTip: a
+free function with no Swift caller; GutterView: rule 20; RMateServer,
+ODBEditorSuite, mate: C++ programs; the engine's face). The Swift work
+changes kind from here: the `nonisolated(unsafe)` audit, the updater's
+field check, the CI pin when the xcode-27 image leaves preview.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

@@ -2679,6 +2679,78 @@ ODBEditorSuite, mate: C++ programs; the engine's face). The Swift work
 changes kind from here: the `nonisolated(unsafe)` audit, the updater's
 field check, the CI pin when the xcode-27 image leaves preview.
 
+## Session 2026-09-16 — the port is over; the first hardening pass
+
+The direction changed from translation to trust. Three commits, each the
+first of its kind in this tree.
+
+### The suite under ASan and UBSan, for the first time (`d43e82ce`)
+
+`xcodebuild test … -enableAddressSanitizer YES -enableUndefinedBehaviorSanitizer YES`
+needs no seed change. The first run reported five things in code the port
+never touched, four of them fixed at their cause:
+
+| Site | What | Fix |
+| --- | --- | --- |
+| parse.cc:521 | `first + anchor` with anchor at SIZE_T_MAX, a pointer before the buffer, to compare with `last` | compare offsets |
+| parse::stack_t | `zw_begin_match` never initialised; UBSan read 190 as a bool | initialised false |
+| regexp::search(pattern, std::string const&) | match keeps a pointer into the string; a temporary made a dangling match (stack-use-after-scope in t_match) | rvalue overload `= delete`; the test names its string |
+| oak::basic_tree_t | std::reverse_iterator over an iterator whose operator* returns a member reference; dereferences a stepped-back copy | the tree's own reverse_iterator, positioned on its element |
+| Onigmo regparse.c:355 | signed overflow in the name-table hash | gone with the upgrade below |
+
+Every production caller of the string overload passes a named string; no
+production code iterates a tree backwards. The two "worked by accident"
+cases (the dangling match, the reverse iterator) read dead stack that
+still held the value until the sanitizer poisoned it. **The suite had
+been walking past all five for years.** The sanitized full suite is
+1181/1181 across 41 bundles with zero reports now, and takes about three
+times as long as the plain one.
+
+`.github/workflows/sanitizers.yml` (`8b3f235b`) runs it weekly (Mondays
+09:00 UTC) and on demand, failing on any report line, restart or trap.
+It has not yet run on the runner as this is written; dispatch it once.
+
+### Onigmo: 2015 fork → upstream head (`53b7c7e2`)
+
+The regex engine was pinned at a July 2015 commit of `textmate/Onigmo`,
+**585 commits behind `k-takata/Onigmo` with zero fork-only commits** — a
+fast-forward, measured with a second remote before anything moved.
+Upstream fixed after the pin: CVE-2017-9226, CVE-2017-9228, out-of-bounds
+reads in `set_bm_skip` and `parse_char_class`, a use-after-free on a
+back-reference pattern, a stack overflow on nested repeats, an `onig_new`
+crash, two infinite loops. The submodule now points at the maintained
+repository at `1d7ee87` (2024-06-15); `.gitmodules` changed with it, and a
+fresh clone (CI included) fetches from there.
+
+The build shims (`vendor/Onigmo/{default.rave,config.h,src/setup.c}`)
+were hand-adapted: the header is `onigmo.h`, the encoding files were
+renamed, the Unicode tables moved into `enc/unicode/` and that directory
+is on the include path, `config.h` gained the sizes and the builtin 6.x
+tests for. No autotools on this machine, so `config.h` stays hand-kept;
+the keys the sources test for are listed in the Onigmo commit's message.
+`USE_MULTI_THREAD_SYSTEM` is gone upstream — a compiled regex has no
+mutable state since 6.0, which is what makes Find's background searches
+safe without it. Grammar-visible changes upstream records: `[[:punct:]]`
+includes symbols now (Ruby 2.4), `\uHHHH`, four-byte UTF-8 max, the
+absent operator. **Rule 8 owed**: syntax highlighting across a few
+grammars in the running app. John's own TextMate-NG instance was running
+the whole time and a second instance was not launched beside it. The
+parse and regexp bundles are the headless witness.
+
+### What the pass did not do, and the order for next time
+
+- **Fuzz harnesses** for the plist reader, the encoding detector, the
+  grammar parser and the bundle index: still none. Twenty lines each with
+  libFuzzer; the corpus is the fixtures the tests already have.
+- **The `nonisolated(unsafe)` audit** (66 sites): classify each as
+  single-threaded by construction, lock-guarded, or racy.
+- **Warnings to zero** on the Swift and the hand headers (281
+  deprecated-declarations, 49 nonnull, 29 undeclared-selector in a Release
+  build), then warnings-as-errors there.
+- **A crash collector**, so the shipped client has somewhere to post.
+- **kvdb** is also pinned at 2015; it only sees the app's own data, and
+  its upstream is TextMate's own, so there is nothing to move to.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

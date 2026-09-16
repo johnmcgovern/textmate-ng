@@ -2451,6 +2451,26 @@ either.
 | Published releases | 21 (alpha.7 … alpha.26); 0 commits unreleased after this handoff |
 | Full suite | 1147 tests, 41 bundles (unchanged; notes only) |
 
+## Session 2026-09-15, afternoon — the skip list is empty
+
+Two commits. Full suite **1159/1159 across 41 bundles**, 0 restarts, and the
+seed's `SKIPPED_TESTS` is `{}` for the first time since the suites were
+revived on 2026-07-26. Twelve tests, twelve diagnoses, no deletions; the
+fates are written in the seed beside the empty list and in the second
+commit's message. Two are worth carrying:
+
+- **`wait_for_repair()` disables spell checking while it runs** (the 10.12
+  workaround in parsing.cc). Any test that parses synchronously and then reads
+  misspellings reads nothing; call `recheck_spelling` after. Found by
+  instrumenting the pass, after a headless probe showed NSSpellChecker itself
+  fine — rule 22 again.
+- **A save that fails with no message is the encoder refusing bytes.** The
+  save callback in t_save.cc prints the message now. A text export filter's
+  output is encoded next; anything binary belongs to the binary-export event.
+
+One product bug fell out: `/capitalize` on a word starting with a non-ASCII
+letter (`\w` is ASCII-only under Onigmo's Ruby syntax; `[[:word:]]` is not).
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

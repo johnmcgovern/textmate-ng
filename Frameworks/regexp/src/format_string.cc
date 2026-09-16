@@ -143,7 +143,10 @@ struct expand_visitor : boost::static_visitor<void>
 	static std::string capitalize (std::string const& src)
 	{
 		static regexp::pattern_t const words  = "\\A\\p{^Lower}+\\z|\\b\\p{Upper}\\p{^Upper}+?\\b";
-		static regexp::pattern_t const upcase = "^([\\W\\d]*)(\\w[-\\w]*)|\\b((?!(?:else|from|over|then|when)\\b)\\w[-\\w]{3,}|\\w[-\\w]*[\\W\\d]*$)";
+		// [[:word:]] rather than \w: under Onigmo's Ruby syntax \w and \W are
+		// ASCII-only, so "æblegrød" capitalized as "æBlegrød" — the æ counted as a
+		// non-word prefix and \u landed on the b. The POSIX class is Unicode-aware.
+		static regexp::pattern_t const upcase = "^([[:^word:]\\d]*)([[:word:]][-[:word:]]*)|\\b((?!(?:else|from|over|then|when)\\b)[[:word:]][-[:word:]]{3,}|[[:word:]][-[:word:]]*[[:^word:]\\d]*$)";
 		return format_string::replace(format_string::replace(src, words, "${0:/downcase}"), upcase, "${1:?$1\\u$2:\\u$0}");
 	}
 

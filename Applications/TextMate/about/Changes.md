@@ -2,6 +2,37 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-15 (v2026.9-alpha.27)
+
+**Two small things you can see, and one you can't.** Eight commits since
+alpha.26, the second release today. If you are on alpha.24 or later this should
+arrive on its own.
+
+What is in it:
+
+* **A snippet that capitalises a word now capitalises it when the word starts
+  with an accented letter.** "étoile" became "étoile"; it becomes "Étoile". The
+  rule that finds the first letter of a word only knew the unaccented alphabet.
+* **About ▸ Bundles says why it is empty.** It lists changes to your installed
+  bundles from the last two years, and the newest change to any of them is from
+  2022 — so it showed a heading over an empty box. It now says so in a sentence.
+  The bundles themselves are unchanged.
+* **Open Recent Project is Swift now**, rewritten from the Objective-C++ it had
+  been since the original TextMate, and moved beside the window it is built on.
+  It looks and behaves as before: the two lists, the filter, the remove button
+  on each row. It was pinned by tests before it moved and exercised in the
+  running application afterwards.
+* **Twelve tests that had been switched off since July are back on.** Each was
+  either fixed or taught to say why it cannot run on a given machine. None of
+  that is visible; it is here because the list of things not being checked is
+  now empty, and that is worth stating once.
+
+**Where to look if something is off.** File ▸ Open Recent Project…: both lists
+fill, typing filters them, the ⌫ key and the small button remove a row, and the
+list you left it on is the one it opens to next time. A snippet with a
+capitalised mirror of something you type. About ▸ Bundles: one sentence rather
+than an empty box.
+
 ## 2026-09-15 (v2026.9-alpha.26)
 
 **Nothing you look at has changed.** Eighteen commits since alpha.25, and not one

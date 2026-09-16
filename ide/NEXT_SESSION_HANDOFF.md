@@ -2751,6 +2751,35 @@ parse and regexp bundles are the headless witness.
 - **kvdb** is also pinned at 2015; it only sees the app's own data, and
   its upstream is TextMate's own, so there is nothing to move to.
 
+## Session 2026-09-16, afternoon — alpha.28 is published
+
+`v2026.9-alpha.28` (`561e7d99`, build 20260916.5) is on GitHub Releases:
+notarized, stapled, verified from the outside (quarantined download,
+`spctl` accepted, staple valid, live manifest decoding to alpha.28 with
+the payload's SHA-256). Gate: `bin/rehearse-update` 6/6 at alpha.28 →
+alpha.29. The reason to release was the Onigmo upgrade; the notes name
+the one grammar-visible change (`[[:punct:]]`).
+
+**The updater's field check has happened.** John's own TextMate-NG at the
+start of this session was `/Applications/TextMate-NG.app`, alpha.27,
+running with `-showReleaseNotes YES` — the updater's own relaunch flag —
+and its Info.plist was written at 22:37 on 2026-09-15, minutes after
+alpha.27 was published. So an alpha.26 install was offered alpha.27,
+installed it and relaunched, unattended, on a real machine. First time
+that path has been seen outside the rehearsal.
+
+**Smoke pass on the alpha.28 build**, John having quit his instance for
+it: all six Settings panes; Find in Folder; Open Quickly (22 rows, the
+regexp/src project); Open Recent Project (9 rows, then 10 with the row
+selected and its path in the status line — the first reading showed the
+item count first, which is accessibility ordering, re-measured before
+tagging); About ▸ Bundles sentence; the update verdict with "Downgrade to
+2026.9-alpha.27"; the Bundle Editor; the Unknown Encoding sheet; a source
+file open and coloured for John to glance at, since accessibility cannot
+read colour. Quit cleanly, twice.
+
+Nothing unreleased after this handoff.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

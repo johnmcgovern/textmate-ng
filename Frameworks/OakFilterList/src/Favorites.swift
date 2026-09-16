@@ -181,7 +181,11 @@ class FavoriteChooser: OakChooser {
 				NSSortDescriptor(key: "value.lastRecentlyUsed", ascending: false),
 				NSSortDescriptor(key: "key.lastPathComponent", ascending: true, selector: #selector(NSString.localizedCompare(_:))),
 			]
-			for case let pair as [String: Any] in (sharedProjectStateDB.allObjects() as NSArray).sortedArray(using: descriptors) {
+			// -allObjects returns nil, not an empty array, when the table is empty — a
+			// fresh install, or a CI runner, where the ObjC++ nil-messaged its way to
+			// an empty list (rule 33). Force-unwrapping it here trapped on the runner.
+			let allObjects = (sharedProjectStateDB.allObjects() as NSArray?) ?? []
+			for case let pair as [String: Any] in allObjects.sortedArray(using: descriptors) {
 				if let key = pair["key"] as? String, access((key as NSString).fileSystemRepresentation, F_OK) == 0 {
 					items.append(FavoritesItem(path: key, isLink: false, isRemovable: true))
 				}

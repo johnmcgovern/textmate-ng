@@ -2510,6 +2510,17 @@ empty list until the first `showWindow:` reloads it.
 Mutation checked (rule 40): swapping the two labels fails
 `test_favorites_chooser_surface` and nothing else.
 
+**CI caught what this machine could not (rule 33).** The port's first run on
+the runner trapped in `loadItems`: KVDB's `-allObjects` returns **nil**, not
+an empty array, when the table is empty — measured with a twelve-line probe
+against the vendored source — and the ObjC++ had nil-messaged through
+`sortedArrayUsingDescriptors:` to an empty list. The Swift force-unwrapped
+the implicitly-unwrapped `NSArray!`. This machine has nine recent projects,
+so every local run passed; the runner's `RecentProjects.db` is fresh. Fixed
+with `as NSArray? ?? []` and a comment. The lesson generalises: **any IUO
+from an un-annotated vendored header is a rule-33 site**, and the local
+suite only covers the populated case.
+
 Release build and rule 8 (System Events, idle > 10 min, no instance
 running): File ▸ Open Recent Project… opens the window; nine recent projects
 with the status line showing the selected one's path and "9 items"; the

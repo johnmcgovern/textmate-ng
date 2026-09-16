@@ -1,0 +1,81 @@
+name: Sanitizers
+
+# The full test suite under Address Sanitizer and Undefined Behavior Sanitizer.
+#
+# Not on every push: a sanitized run of the suite is about three times the plain
+# one, and the plain CI run is the signal people wait on. Weekly, and on demand
+# from the Actions tab, is enough to catch a memory error in a path the suite
+# already exercises before it reaches a release. The first run of this, done
+# locally on 2026-09-16, found four defects in code the suite had been walking
+# past for years (a pointer computed before a buffer, an uninitialised bool, a
+# match holding a pointer into a dead temporary, and a reverse iterator
+# dereferencing a copy) plus a signed overflow in the vendored regex engine's
+# hash — none of which any test had failed on.
+#
+# Same toolchain and setup as build.yml; keep the two in step when one moves.
+
+on:
+  schedule:
+    # Mondays 09:00 UTC.
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  sanitized-tests:
+    runs-on: macos-26
+    # A sanitized suite takes ~20 min locally; leave room for a slower runner.
+    timeout-minutes: 75
+
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      RUBYOPT: "-EUTF-8"
+
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        submodules: recursive
+    - name: Setup
+      run: |
+        brew untap aws/tap || true
+        brew install boost capnp google-sparsehash ragel multimarkdown
+        gem install --user-install xcodeproj -v 1.28.1
+    - name: Generate TextMate.xcodeproj
+      run: |
+        mkdir -p ide/gen
+        ruby ide/extract_specs.rb > ide/gen/specs.json
+        ruby ide/seed_xcodeproj.rb
+    - name: Test under ASan and UBSan
+      # Both sanitizers halt the test process on a report, so a finding shows up
+      # as a restart as well as a report line; check for all three signals and
+      # print the report lines, deduplicated, so the finding is readable from the
+      # summary without opening the log.
+      run: |
+        set -o pipefail
+        test_status=0
+        xcodebuild test -project TextMate.xcodeproj -scheme AllTests -configuration Debug \
+          -enableAddressSanitizer YES -enableUndefinedBehaviorSanitizer YES 2>&1 | tee /tmp/test.log || test_status=$?
+        failed=0
+        if grep -q "runtime error:" /tmp/test.log; then
+          echo "::error::Undefined Behavior Sanitizer reported:"
+          grep -oE '[A-Za-z0-9_/.-]+\.(cc|c|mm|m|h|swift):[0-9]+:[0-9]+: runtime error: .*' /tmp/test.log | sort | uniq -c || true
+          failed=1
+        fi
+        if grep -q "ERROR: AddressSanitizer" /tmp/test.log; then
+          echo "::error::Address Sanitizer reported:"
+          grep -A12 "ERROR: AddressSanitizer" /tmp/test.log | head -60 || true
+          failed=1
+        fi
+        if grep -q "Restarting after unexpected exit, crash, or test timeout" /tmp/test.log; then
+          echo "::error::A test process crashed. The tests that were running when it died:"
+          grep -B2 "Restarting after unexpected exit" /tmp/test.log | grep "Test Case" || true
+          failed=1
+        fi
+        if grep -q "Fatal error:" /tmp/test.log; then
+          echo "::error::A Swift runtime trap occurred during the tests:"
+          grep "Fatal error:" /tmp/test.log | sort -u || true
+          failed=1
+        fi
+        if [ "$failed" = 1 ]; then exit 1; fi
+        exit $test_status

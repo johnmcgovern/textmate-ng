@@ -2,7 +2,10 @@
 
 void test_match ()
 {
-	regexp::match_t const match = regexp::search("(\\w+)\\s+(\\w+)", " foo bar fud");
+	// Named, not a literal: the match points into the string it searched, and the
+	// std::string overload now refuses a temporary (see regexp.h).
+	std::string const subject = " foo bar fud";
+	regexp::match_t const match = regexp::search("(\\w+)\\s+(\\w+)", subject);
 	OAK_ASSERT(match);
 	OAK_ASSERT_EQ(match[0], "foo bar");
 	OAK_ASSERT_EQ(match[1], "foo");

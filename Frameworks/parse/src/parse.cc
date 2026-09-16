@@ -518,7 +518,10 @@ namespace parse
 
 			collect_rules(first, last, i, firstLine, stack, rules, match_cache);
 		}
-		stack->anchor = first + stack->anchor == last ? 0 : SIZE_T_MAX;
+		// Compared as offsets, not pointers: when the anchor is the SIZE_T_MAX
+		// sentinel, `first + anchor` wrapped to one before the buffer — undefined,
+		// and what UBSan reported from six parse tests on 2026-09-16.
+		stack->anchor = stack->anchor == size_t(last - first) ? 0 : SIZE_T_MAX;
 		return stack;
 	}
 

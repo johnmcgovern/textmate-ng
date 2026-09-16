@@ -77,6 +77,12 @@ namespace regexp
 	std::string escape (std::string ptrn);
 	match_t search (pattern_t const& ptrn, char const* first, char const* last, char const* from = NULL, char const* to = NULL, OnigOptionType options = ONIG_OPTION_NONE);
 	match_t search (pattern_t const& ptrn, std::string const& str);
+	// A match_t keeps a pointer into `str`, so a temporary string is a dangling
+	// match the moment the full expression ends — what Address Sanitizer found in
+	// t_match on 2026-09-16 (a stack-use-after-scope, the temporary being short
+	// enough to live inline). Every production caller passes a named string; this
+	// makes the compiler refuse the other kind.
+	match_t search (pattern_t const& ptrn, std::string&& str) = delete;
 
 } /* regexp */
 

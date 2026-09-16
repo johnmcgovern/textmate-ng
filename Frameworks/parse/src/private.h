@@ -66,7 +66,7 @@ namespace parse
 
 	struct stack_t
 	{
-		stack_t (rule_t* rule, scope::scope_t const& scope, stack_ptr const& parent = stack_ptr()) : parent(parent), rule(rule), scope(scope), anchor(0) { }
+		stack_t (rule_t* rule, scope::scope_t const& scope, stack_ptr const& parent = stack_ptr()) : parent(parent), rule(rule), scope(scope), anchor(0), zw_begin_match(false) { }
 
 		stack_ptr parent;
 

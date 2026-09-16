@@ -188,7 +188,61 @@ namespace oak
 			basic_tree_t* _tree;
 		};
 
-		typedef std::reverse_iterator<iterator> reverse_iterator;
+		// Not std::reverse_iterator: that adaptor dereferences by copying the
+		// underlying iterator, stepping the copy back and returning *copy — and
+		// this iterator's operator* returns a reference to its own _info member,
+		// so the reference outlived the copy. It happened to read the dead stack
+		// slot correctly until Address Sanitizer poisoned it (2026-09-16, the
+		// reverse half of t_basic_tree_numeric). This one keeps its iterator
+		// positioned *on* the element it refers to, so *it is a reference into
+		// this object; end() stands for rend.
+		struct reverse_iterator : std::iterator<std::bidirectional_iterator_tag, value_type>
+		{
+			explicit reverse_iterator (iterator const& base) : _it(base)
+			{
+				if(_it == _it._tree->begin())
+						_it = _it._tree->end();
+				else	--_it;
+			}
+
+			iterator base () const
+			{
+				iterator res = _it;
+				if(res == res._tree->end())
+					return res._tree->begin();
+				return ++res;
+			}
+
+			bool operator== (reverse_iterator const& rhs) const { return _it == rhs._it; }
+			bool operator!= (reverse_iterator const& rhs) const { return _it != rhs._it; }
+
+			value_type& operator*  ()             { return *_it;  }
+			value_type* operator-> ()             { return &*_it; }
+			value_type const& operator*  () const { return *_it;  }
+			value_type const* operator-> () const { return &*_it; }
+
+			reverse_iterator& operator++ ()
+			{
+				if(_it == _it._tree->begin())
+						_it = _it._tree->end();
+				else	--_it;
+				return *this;
+			}
+
+			reverse_iterator& operator-- ()
+			{
+				if(_it == _it._tree->end())
+						--_it; // from end() to the last element, as iterator::operator-- does
+				else	++_it;
+				return *this;
+			}
+
+			reverse_iterator operator++ (int) { reverse_iterator tmp(*this); ++(*this); return tmp; }
+			reverse_iterator operator-- (int) { reverse_iterator tmp(*this); --(*this); return tmp; }
+
+		private:
+			iterator _it;
+		};
 
 		iterator begin ()                    { node_t* res = _root; while(!res->_left->is_null()) res = res->_left; return iterator(res, this); }
 		iterator end ()                      { return iterator(node_t::null_ptr(), this); }

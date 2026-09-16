@@ -1,6 +1,7 @@
 name: Sanitizers
 
-# The full test suite under Address Sanitizer and Undefined Behavior Sanitizer.
+# The full test suite under Address Sanitizer and Undefined Behavior Sanitizer,
+# then bin/fuzz for a couple of minutes per parser target.
 #
 # Not on every push: a sanitized run of the suite is about three times the plain
 # one, and the plain CI run is the signal people wait on. Weekly, and on demand
@@ -79,3 +80,17 @@ jobs:
         fi
         if [ "$failed" = 1 ]; then exit 1; fi
         exit $test_status
+    - name: Fuzz the parsers
+      # bin/fuzz builds tm_fuzz with both sanitizers, assembles a corpus from the
+      # committed seeds (the runner has no bundles installed), and runs each of
+      # the four targets. A finding is a non-zero exit with the input preserved
+      # under build/fuzz/out; upload it so it can be replayed locally with
+      # `tm_fuzz <target> --replay`.
+      run: bin/fuzz 120
+    - name: Preserve fuzz findings
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-findings
+        path: build/fuzz/out/
+        if-no-files-found: ignore

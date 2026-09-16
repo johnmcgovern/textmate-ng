@@ -1,0 +1,8 @@
+{
+	"name" = "Continue Block Comment";
+	"scope" = "source.c comment.block, source.c++ comment.block, source.objc comment.block, source.objc++ comment.block";
+	"content" = "${TM_CURRENT_LINE/(.*\\*\\/$)|.*?(\\/\\*(?!.*\\*\\/)).*|.*/(?1:\n:\n(?2: )* )/}";
+	"hideFromUser" = :true;
+	"keyEquivalent" = "";
+	"uuid" = "F3EFAE6A-0978-4E1A-A3D7-4D16EE3EA079";
+}

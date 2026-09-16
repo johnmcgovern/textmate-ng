@@ -1,0 +1,12 @@
+{
+	"output" = "insertAsSnippet";
+	"input" = "none";
+	"bundleUUID" = "4675A940-6227-11D9-BFB1-000D93589AF6";
+	"keyEquivalent" = "~";
+	"scope" = "source.c++";
+	"uuid" = "093DA4F2-D97F-4309-B869-6970C090A539";
+	"fallbackInput" = "line";
+	"beforeRunningCommand" = "nop";
+	"command" = "#!/usr/bin/env ruby18\nrequire \"#{ENV['TM_SUPPORT_PATH']}/lib/exit_codes\"\nrequire \"#{ENV['TM_SUPPORT_PATH']}/lib/escape\"\nrequire \"#{ENV['TM_BUNDLE_SUPPORT']}/c_completion2\"\n\nres = CppCompletion.new.print\nprint res";
+	"name" = "C & C++ Library Completions";
+}

@@ -1,0 +1,11 @@
+{
+	"output" = "afterSelectedText";
+	"input" = "selection";
+	"scope" = "dyn.caret.end & (source.c++ | source.objc++)";
+	"tabTrigger" = ":";
+	"uuid" = "1B7326BB-6A85-4ED2-A0D7-51619763D98F";
+	"fallbackInput" = "line";
+	"beforeRunningCommand" = "nop";
+	"command" = "#!/usr/bin/env ruby18 -wKU\n\nline = STDIN.read\n\nif line =~ /\\((.*)\\)(\\s?)/ # extract parameters\n\tline, ws = $1, $2\n\tline.gsub!(/<.*?>/, '')              # remove template args\n\tline.gsub!(/\\(.*?\\)/, '')            # remove (…), e.g. ‘type const& var = type()’\n\tline = line.split(',').map { |e| e.gsub(/.*?(\\w+)(\\s+=.*)?$/, '\\1(\\1)') }.join(', ')\n\tprint ' ' if ws.empty?\n\tprint ': ' + line\nend\n";
+	"name" = "Insert Call to Constructors";
+}

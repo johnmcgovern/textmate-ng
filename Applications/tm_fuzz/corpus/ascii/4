@@ -1,0 +1,24 @@
+{
+	"uuid" = "24966EE2-1BC4-4995-B39F-F6F9461184F5";
+	"outputCaret" = "interpolateByLine";
+	"version" = "2";
+	"requiredCommands" = (
+		{
+			"locations" = (
+				"/usr/local/bin/clang-format",
+			);
+			"moreInfoURL" = "http://clang.llvm.org/docs/ClangFormat.html";
+			"command" = "clang-format";
+			"variable" = "TM_CLANG_FORMAT";
+		},
+	);
+	"outputLocation" = "replaceDocument";
+	"scope" = "source.c, source.objc, source.c++, source.objc++";
+	"outputFormat" = "text";
+	"inputFormat" = "text";
+	"input" = "document";
+	"keyEquivalent" = "^H";
+	"beforeRunningCommand" = "nop";
+	"command" = "#!/bin/bash\nif ! \"${TM_CLANG_FORMAT}\" -style=\"${TM_CLANG_FORMAT_STYLE:-file}\" -assume-filename=\"${TM_FILEPATH}\"; then\n\t. \"$TM_SUPPORT_PATH/lib/bash_init.sh\"\n\texit_show_tool_tip\nfi\n";
+	"name" = "Reformat Document";
+}

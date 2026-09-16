@@ -1,0 +1,7 @@
+{
+	"scope" = "source.c, source.objc, source.c++, source.objc++";
+	"content" = "enum ${1:name} { $0 };";
+	"tabTrigger" = "enum";
+	"name" = "Enumeration";
+	"uuid" = "DD10B510-1C36-45E0-A378-527401EE55B1";
+}

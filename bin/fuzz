@@ -1,0 +1,106 @@
+#!/bin/zsh
+# Build tm_fuzz with Address and Undefined Behavior Sanitizers, assemble a corpus
+# from what this machine has, and run every target for a while.
+#
+# Usage: bin/fuzz [seconds-per-target] [target ...]
+#   default 120 s per target, all four targets.
+#
+# Corpus (build/fuzz/corpus/*, regenerated each run):
+#   ascii     — every property list under the installed bundles (binary and XML
+#               ones are converted to the ASCII form by the tool itself)
+#   encoding  — source and text files from this tree, plus UTF-16/32 and Latin-1
+#               renderings of a few of them
+#   text      — C sources from this tree, for the C grammar
+#
+# A finding aborts the tool; its input is left at build/fuzz/out/current.<target>
+# and this script stops with that path. Reproduce with
+#   build/Debug/tm_fuzz <target> --replay build/fuzz/out/current.<target> [--grammar …]
+# An exit with a sanitizer report is a memory or undefined-behaviour finding. An
+# exit with *no* report is a Debug ASSERT: OakBadAssertion logs to the unified
+# log and _exits, so read it with
+#   log show --last 10m --predicate 'process == "tm_fuzz"' --style compact
+# or run the replay under lldb with a breakpoint on _exit. Release compiles
+# assertions out, so such a finding is "what does this input do without the
+# check" — usually an out-of-bounds read the sanitizer will show once the
+# assertion is gone.
+set -e
+setopt null_glob
+cd "${0:h}/.."
+
+seconds=${1:-120}
+shift 2>/dev/null || true
+targets=("$@")
+[[ ${#targets} -eq 0 ]] && targets=(ascii encoding grammar grammar-plist)
+
+export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+# Every undefined-behaviour report is a finding, not a log line: halt on it, with a
+# stack, and let ASan abort so the exit status says so.
+export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
+export ASAN_OPTIONS=abort_on_error=1
+
+echo "==> building tm_fuzz with ASan and UBSan"
+xcodebuild -project TextMate.xcodeproj -target tm_fuzz -configuration Debug -parallelizeTargets \
+	OTHER_CFLAGS='$(inherited) -fsanitize=address,undefined -fno-omit-frame-pointer' \
+	OTHER_CPLUSPLUSFLAGS='$(inherited) -fsanitize=address,undefined -fno-omit-frame-pointer' \
+	OTHER_LDFLAGS='$(inherited) -fsanitize=address,undefined' \
+	build > build/fuzz-build.log 2>&1 || { echo "build failed; see build/fuzz-build.log"; exit 1; }
+tool=build/Debug/tm_fuzz
+[[ -x $tool ]] || { echo "no $tool after build"; exit 1; }
+
+corpus=build/fuzz/corpus
+out=build/fuzz/out
+rm -rf "$corpus"
+mkdir -p "$corpus"/{ascii,encoding,text} "$out"
+
+bundles=~/Library/Application\ Support/TextMate/Managed/Bundles
+echo "==> assembling corpus"
+# The committed seeds first (Applications/tm_fuzz/corpus: a dozen bundle items as
+# ASCII property lists and the C grammar as XML), so a machine with no bundles
+# installed — the CI runner — still has something to mutate. Installed bundles
+# widen it when they are there.
+n=0
+for f in Applications/tm_fuzz/corpus/ascii/*; do
+	cp "$f" "$corpus/ascii/seed-$n"; n=$((n+1))
+done
+n=0
+find "$bundles" -type f \( -name '*.tmLanguage' -o -name '*.tmPreferences' -o -name '*.tmCommand' -o -name '*.tmSnippet' -o -name '*.plist' \) -size -64k 2>/dev/null | head -400 | while read -r f; do
+	cp "$f" "$corpus/ascii/$n"; n=$((n+1))
+done
+n=0
+for f in README.md Applications/TextMate/about/Changes.md $(ls Frameworks/*/src/*.cc | head -40); do
+	[[ -f $f ]] && cp "$f" "$corpus/encoding/$n" && n=$((n+1))
+done
+for f in $(ls "$corpus/encoding" | head -6); do
+	for enc in UTF-16LE UTF-16BE UTF-32LE ISO-8859-1 SHIFT_JIS; do
+		iconv -f UTF-8 -t $enc "$corpus/encoding/$f" > "$corpus/encoding/$f.$enc" 2>/dev/null || rm -f "$corpus/encoding/$f.$enc"
+	done
+done
+printf 'plain line\nodd bytes: \xe9\xe8\xfc \xff\xfe here\n' > "$corpus/encoding/latin1-odd"
+n=0
+for f in $(ls vendor/Onigmo/vendor/*.c vendor/Onigmo/vendor/enc/*.c Frameworks/*/src/*.c 2>/dev/null | head -60); do
+	cp "$f" "$corpus/text/$n"; n=$((n+1))
+done
+echo "    ascii: $(ls "$corpus/ascii" | wc -l | tr -d ' ')  encoding: $(ls "$corpus/encoding" | wc -l | tr -d ' ')  text: $(ls "$corpus/text" | wc -l | tr -d ' ')"
+
+# The installed C grammar (the C bundle keeps it as C.plist) when there is one,
+# else the committed XML copy of it.
+grammar="$bundles/C.tmbundle/Syntaxes/C.plist"
+[[ -f $grammar ]] || grammar=Applications/tm_fuzz/corpus/grammar/C.tmLanguage
+echo "    grammar: $grammar"
+
+rc=0
+for t in $targets; do
+	echo "==> $t for ${seconds}s"
+	case $t in
+		ascii)         c=$corpus/ascii;    extra=() ;;
+		encoding)      c=$corpus/encoding; extra=() ;;
+		grammar)       c=$corpus/text;     extra=(--grammar "$grammar") ;;
+		grammar-plist) c=$corpus/text;     extra=(--grammar "$grammar") ;;
+		*) echo "unknown target $t"; exit 2 ;;
+	esac
+	if ! "$tool" "$t" --corpus "$c" --out "$out" --seconds "$seconds" "${extra[@]}"; then
+		echo "!!! finding in $t; input preserved at $out/current.$t"
+		rc=1
+	fi
+done
+exit $rc

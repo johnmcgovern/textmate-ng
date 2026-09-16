@@ -2780,6 +2780,60 @@ read colour. Quit cleanly, twice.
 
 Nothing unreleased after this handoff.
 
+## Session 2026-09-16, afternoon — the fuzzer, and what it found in five minutes
+
+Two commits after alpha.28: `48b3d920` (five parser fixes with pins) and
+`f0beb5d8` (tm_fuzz, bin/fuzz, the seed corpus, the weekly fuzz step).
+Full suite **1188/1188 across 41 bundles**, 0 restarts.
+
+### tm_fuzz
+
+`Applications/tm_fuzz` is a mutational fuzzer, a command-line tool built
+with `-fsanitize=address,undefined` by `bin/fuzz`. Four targets: `ascii`
+(plist::parse_ascii then to_s), `encoding` (the classifier over every
+charset, the transcoder from eleven), `grammar` (the C grammar over mutated
+text), `grammar-plist` (a mutated grammar over fixed text). No libFuzzer:
+Apple's clang has no fuzzer runtime and there is no Homebrew LLVM, so this
+mutates corpus entries at random and lets the sanitizers turn an error into
+an abort. A finding leaves the input at `build/fuzz/out/current.<target>`;
+`tm_fuzz <target> --replay FILE [--grammar FILE]` reproduces it. Each run is
+under `alarm`, so a hang is a finding. `bin/fuzz [seconds] [target…]`
+assembles the corpus from the committed seeds
+(`Applications/tm_fuzz/corpus`, so the runner has something) plus the
+installed bundles, and runs every target.
+
+**A Debug ASSERT is a finding with no report**: OakBadAssertion logs to the
+unified log and `_exit`s. bin/fuzz's header says how to read it; lldb with a
+breakpoint on `_exit` is quicker. Release compiles assertions out, so such
+a finding means "what does this input do without the check", which is the
+question that matters.
+
+### The five findings, all in the first five minutes
+
+| Where | What | Fix |
+| --- | --- | --- |
+| `plist::get<T>` | asserted on a value not of type T; the values come from files | returns T's default in Debug as it did in Release; `get_key_path` for callers that must know |
+| `parse_key` (ascii.rl) | a key that is an array or dictionary reached that assertion | asks through `get_key_path`; numeric keys still convert (t_simple pins it), structured keys fail the parse |
+| `plist::schema_t` (grammar loader) | a grammar with a string where its `patterns` array should be — the same assertion | fixed by the first row |
+| `utf8::iterator_t::fetch`, `utf8::to_ch` | asserted on a cut-short sequence; shifted by -1 for 0xFE/0xFF | lenient decoding: one-byte character, or the bytes seen; `is_valid` bounded |
+| `plist::convert_dictionary` | zero-length VLA for an empty dictionary | vectors |
+
+Pinned in `t_ascii_robustness.cc` and `t_utf8.cc`. The first version of the
+`parse_key` fix refused numeric keys and failed two pins in t_simple — the
+existing pins caught a fix that was too strict, which is what they are for.
+
+After the fixes, two minutes per target is clean: ascii 509k runs,
+encoding 31k, grammar 2.3k, grammar-plist 27k (three minutes). The
+Sanitizers workflow now runs `bin/fuzz 120` after the sanitized suite and
+uploads findings; dispatched once after this push to prove the step.
+
+### Next in this line
+
+Coverage feedback (`-fsanitize-coverage=inline-8bit-counters`, which
+Apple's clang has) when a target goes quiet; more grammars than C; the
+XML/binary plist path is Apple's parser and is not fuzzed on purpose. Then
+the `nonisolated(unsafe)` audit, warnings to zero, a crash collector.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

@@ -186,6 +186,21 @@ see.
     inside `MainActor.assumeIsolated`; a mutable static that matches an
     unsynchronised ObjC++ original is `nonisolated(unsafe)`.
 
+    **Every `nonisolated(unsafe)` is one of five shapes, and says which**
+    (audit of all 66 sites, 2026-09-16 — none was racy):
+
+    | Shape | What makes it safe | What the site must carry |
+    | --- | --- | --- |
+    | an identity (KVO context, association key) | only its address is used | nothing beyond the comment |
+    | `static let sharedInstance` of a non-`@MainActor` class | `let` initialisation is thread-safe; the *class* states its own contract | the class comment names the queues its methods run on |
+    | a mutable static or global that is main-thread-only by contract | the contract | `assert(Thread.isMainThread)` at the accessor — Debug-only, so Release keeps the ObjC++ contract — or a lock, or a `precondition` where the ObjC++ had an NSAssert |
+    | a closure capture crossing a queue | the closure's body only touches what is safe on the queue it lands on | the comment names that queue, *measured* (OakDownloadManager's session delegate queue is main; that fact settled three sites) |
+    | an instance var read from a `@MainActor` class's `deinit` | deinit is nonisolated; the read is what `-dealloc` did | the comment says "for deinit" |
+
+    A sixth shape does not exist yet and should not: a mutable static reached
+    from more than one queue without a lock. If one appears, it gets the lock
+    (TMFileReference's image cache is the example), not the annotation.
+
 27. **Preserve ObjC ownership exactly — do not "improve" a weak/strong choice.**
     `URLObserverClient.urlObserver` was strong in the ObjC++ (no `weak`), because
     the shared observer is only weakly held by its registry and the client — held

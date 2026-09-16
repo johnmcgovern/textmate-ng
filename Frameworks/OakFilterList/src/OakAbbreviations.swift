@@ -17,10 +17,14 @@ class OakAbbreviations: NSObject {
 	private static let abbreviationKey   = "short"
 	private static let expandedStringKey = "long"
 
+	// Main-thread-only by contract, not by isolation: every caller is a chooser
+	// panel. The Debug assertion below is what enforces it (concurrency audit,
+	// 2026-09-16); Release compiles it out and keeps the ObjC++'s contract.
 	nonisolated(unsafe) private static var sharedInstances: [String: OakAbbreviations] = [:]
 
 	@objc(abbreviationsForName:)
 	static func abbreviations(forName name: String) -> OakAbbreviations {
+		assert(Thread.isMainThread, "OakAbbreviations is main-thread-only")
 		if let existing = sharedInstances[name] {
 			return existing
 		}

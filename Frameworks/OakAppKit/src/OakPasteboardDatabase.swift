@@ -189,6 +189,10 @@ class OakPasteboardDatabase: NSObject {
 	}
 
 	private var database: OpaquePointer? {
+		// One connection, main-thread-only by contract: OakPasteboard is main-thread-
+		// only, and the terminate observer runs on the posting thread, which is
+		// main. Enforced in Debug (concurrency audit, 2026-09-16).
+		assert(Thread.isMainThread, "OakPasteboardDatabase is main-thread-only")
 		if Self.db == nil {
 			// =========================
 			// = Delete CoreData files =

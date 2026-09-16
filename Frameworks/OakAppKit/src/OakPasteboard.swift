@@ -146,6 +146,7 @@ class OakPasteboard: NSObject, OakPasteboardIdleObserving {
 	nonisolated(unsafe) private static var sharedInstances: [String: OakPasteboard] = [:]
 
 	private static func pasteboard(name: String, systemPasteboard pboard: NSPasteboard, avoidsDuplicates flag: Bool) -> OakPasteboard {
+		assert(Thread.isMainThread, "OakPasteboard's instances are main-thread-only") // concurrency audit, 2026-09-16; Debug only
 		_ = registerOnce
 		if let existing = sharedInstances[name] {
 			return existing

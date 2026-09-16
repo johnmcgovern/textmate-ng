@@ -64,6 +64,8 @@ private extension OakPasteboardEntry {
 	}
 }
 
+// Main-thread-only by contract (a window controller per pasteboard); the
+// assertion in the accessor enforces it in Debug (concurrency audit, 2026-09-16).
 nonisolated(unsafe) private var SharedChoosers: [String: OakPasteboardChooser] = [:]
 
 @objc(OakPasteboardChooser)
@@ -86,7 +88,8 @@ class OakPasteboardChooser: NSWindowController, NSWindowDelegate, NSTextFieldDel
 
 	@objc(sharedChooserForPasteboard:)
 	static func sharedChooser(for pboard: OakPasteboard) -> OakPasteboardChooser {
-		SharedChoosers[pboard.name] ?? OakPasteboardChooser(pasteboard: pboard)
+		assert(Thread.isMainThread, "OakPasteboardChooser's shared table is main-thread-only") // concurrency audit, 2026-09-16; Debug only
+		return SharedChoosers[pboard.name] ?? OakPasteboardChooser(pasteboard: pboard)
 	}
 
 	@objc(initWithPasteboard:)

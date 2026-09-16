@@ -43,12 +43,14 @@ class FileItem: NSObject, QLPreviewItem {
 
 	@objc(registerClass:forURLScheme:)
 	class func register(_ klass: AnyClass, forURLScheme urlScheme: String) {
+		assert(Thread.isMainThread, "FileItem's scheme registry is main-thread-only") // concurrency audit, 2026-09-16; Debug only
 		schemeToClass[urlScheme] = klass
 	}
 
 	@objc(classForURL:)
 	class func classForURL(_ url: NSURL) -> AnyClass? {
 		_ = registerBuiltinClasses
+		assert(Thread.isMainThread, "FileItem's scheme registry is main-thread-only")
 		return schemeToClass[url.scheme ?? ""]
 	}
 

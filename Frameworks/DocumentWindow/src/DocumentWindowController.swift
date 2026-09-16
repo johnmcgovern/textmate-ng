@@ -109,6 +109,9 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 	// = Properties =
 	// ==============
 
+	// nonisolated(unsafe), with tabBarView and textView below, so that deinit —
+	// which is nonisolated on a main-actor class — can clear their delegates, as
+	// -dealloc did. Every other access is from the main actor.
 	@objc nonisolated(unsafe) var window: NSWindow!
 
 	@objc var identifier: UUID? {

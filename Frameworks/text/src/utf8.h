@@ -9,21 +9,25 @@ namespace utf8
 	{
 		ASSERT(!str.empty());
 
-		uint32_t value = str[0];
+		uint32_t value = (unsigned char)str[0];
 		size_t mb_length = 1;
 
 		if((value & 0xC0) == 0xC0) // multi-byte
 		{
-			ASSERT((value & 0xFE) != 0xFE);
-			while(value & (1 << (7-mb_length)))
+			// Lenient, as iterator_t::fetch is: a lead byte that announces more
+			// bytes than the string has, or is followed by a non-continuation byte,
+			// is returned as the byte itself (fuzzer, 2026-09-16).
+			while(mb_length < 8 && (value & (1 << (7-mb_length))))
 				++mb_length;
-			ASSERT(str.size() >= mb_length);
+			if(mb_length > 6 || str.size() < mb_length)
+				return (unsigned char)str[0];
 
 			value = value & ((1 << (7-mb_length))-1);
-			for(ssize_t i = 1; i < mb_length; ++i)
+			for(size_t i = 1; i < mb_length; ++i)
 			{
-				value = (value << 6) | (str[i] & 0x3F);
-				ASSERT((str[i] & 0xC0) == 0x80);
+				if(((unsigned char)str[i] & 0xC0) != 0x80)
+					return (unsigned char)str[0];
+				value = (value << 6) | ((unsigned char)str[i] & 0x3F);
 			}
 		}
 		return value;
@@ -76,6 +80,13 @@ namespace utf8
 		ssize_t length () const                   { fetch(); return mb_length; }
 
 	private:
+		// Lenient, not asserting: this iterator runs over strings that came from
+		// files — property lists, bundle items, documents — and an assertion here
+		// ends the process. An invalid lead byte (0xFE, 0xFF) is a one-byte
+		// character; a sequence cut short by a non-continuation byte is the bytes
+		// seen so far, and iteration resumes at the byte that broke it. Found by
+		// the fuzzer on 2026-09-16: a bundle item with one stray byte in a string
+		// took the process down in plist::to_s.
 		void fetch () const
 		{
 			_Iter it = base_iterator;
@@ -84,15 +95,21 @@ namespace utf8
 
 			if((value & 0xC0) == 0xC0) // multi-byte
 			{
-				ASSERT((value & 0xFE) != 0xFE);
-				while(value & (1 << (7-mb_length)))
-					++mb_length;
+				ssize_t expected = 1;
+				while(expected < 8 && (value & (1 << (7-expected))))
+					++expected;
 
-				value = value & ((1 << (7-mb_length))-1);
-				for(ssize_t i = 1; i < mb_length; ++i)
+				if(expected > 6) // 0xFE or 0xFF: not a lead byte
+					return;
+
+				value = value & ((1 << (7-expected))-1);
+				for(ssize_t i = 1; i < expected; ++i)
 				{
-					value = (value << 6) | (*++it & 0x3F);
-					ASSERT((*it & 0xC0) == 0x80);
+					uint32_t const next = *++it;
+					if((next & 0xC0) != 0x80)
+						break;
+					value = (value << 6) | (next & 0x3F);
+					mb_length = i + 1;
 				}
 			}
 		}
@@ -133,8 +150,11 @@ namespace utf8
 				}
 				else if((ch & 0x80) == 0x80)
 				{
+					// Bounded: for 0xFF every bit is set, and the unbounded loop shifted
+					// by -1 before the `> 6` check below could reject it (UBSan, from the
+					// fuzzer's first minute, 2026-09-16).
 					size_t numBytes = 1;
-					while(ch & (1 << (7-numBytes)))
+					while(numBytes < 8 && (ch & (1 << (7-numBytes))))
 						++numBytes;
 
 					if(numBytes > 6)

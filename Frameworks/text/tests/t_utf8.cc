@@ -109,3 +109,39 @@ void test_sanitize ()
 	OAK_ASSERT_EQ(sanitize("\xF0\xA0"),           "");
 	OAK_ASSERT_EQ(sanitize("\xF0"),               "");
 }
+
+// The iterator over bytes that are not UTF-8. Written against the fuzzer's
+// finding of 2026-09-16: a lead byte with every bit set shifted by -1 (undefined),
+// and a sequence cut short by a non-continuation byte asserted — which, in a
+// Debug build, ends the process, and in Release read past the sequence.
+
+void test_iterator_treats_0xFF_as_one_byte ()
+{
+	std::string const str = "a\xFF" "b";
+	auto it = utf8::make(str.data());
+	OAK_ASSERT_EQ(it.length(), 1);
+	++it;
+	OAK_ASSERT_EQ(it.length(), 1); // the 0xFF itself
+	OAK_ASSERT_EQ(*it, 0xFF);
+	++it;
+	OAK_ASSERT_EQ(*it, 'b');
+}
+
+void test_iterator_stops_a_truncated_sequence_at_the_byte_that_broke_it ()
+{
+	// 0xE2 announces three bytes; only one continuation follows, then 'x'.
+	std::string const str = "\xE2\x82x";
+	auto it = utf8::make(str.data());
+	OAK_ASSERT_EQ(it.length(), 2);
+	++it;
+	OAK_ASSERT_EQ(*it, 'x');
+}
+
+void test_is_valid_rejects_0xFF_without_undefined_behaviour ()
+{
+	std::string const str = "ok\xFF";
+	OAK_ASSERT(!utf8::is_valid(str.begin(), str.end()));
+	std::string const lone = "\xC3";
+	OAK_ASSERT(!utf8::is_valid(lone.begin(), lone.end()));
+}
+

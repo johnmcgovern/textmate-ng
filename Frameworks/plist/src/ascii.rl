@@ -148,11 +148,22 @@ static bool parse_array (char const*& p, char const* pe, plist::any_t& res)
 
 static bool parse_key (char const*& p, char const* pe, plist::any_t& res)
 {
+	// A key is whatever converts to a string: a string, or a number ("{ 42 = 1; }"
+	// is a dictionary keyed by "42", and t_simple pins it). An array, dictionary
+	// or data as a key is a malformed list. plist::get<std::string> asserted on
+	// those — which in Debug ends the process — so the same conversion is asked
+	// through get_key_path, which reports failure instead (fuzzer, 2026-09-16).
 	plist::any_t tmp;
 	if(!parse_element(p, pe, tmp))
 		return false;
-	res = plist::get<std::string>(tmp);
-	return !boost::get<std::string>(res).empty();
+
+	plist::dictionary_t wrapper;
+	wrapper["key"] = tmp;
+	std::string key;
+	if(!plist::get_key_path(plist::any_t(wrapper), "key", key) || key.empty())
+		return false;
+	res = key;
+	return true;
 }
 
 static bool parse_dict (char const*& p, char const* pe, plist::any_t& res)

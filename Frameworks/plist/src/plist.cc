@@ -61,10 +61,13 @@ namespace plist
 	{
 		std::map<std::string, any_t>& ref = boost::get< std::map<std::string, any_t> >(res = std::map<std::string, any_t>());
 
+		// Vectors, not variable-length arrays: a VLA of length zero is undefined,
+		// and an empty dictionary is an ordinary thing to find in a property list
+		// (UBSan, from the fuzzer's first minute, 2026-09-16).
 		CFIndex len = CFDictionaryGetCount(dict);
-		CFPropertyListRef keys[len];
-		CFPropertyListRef values[len];
-		CFDictionaryGetKeysAndValues(dict, keys, values);
+		std::vector<CFPropertyListRef> keys(len), values(len);
+		if(len > 0)
+			CFDictionaryGetKeysAndValues(dict, keys.data(), values.data());
 		for(CFIndex i = 0; i < len; ++i)
 		{
 			std::map<std::string, any_t>::iterator it = ref.emplace(cf::to_s((CFStringRef)keys[i]), any_t()).first;
@@ -364,11 +367,17 @@ namespace plist
 		return !item.empty() && boost::apply_visitor(convert_to_helper_t<bool>(flag), item) && flag;
 	}
 
+	// A value of the wrong type converts to T's default. It used to assert as
+	// well, which in a Debug build ends the process — and the values here come
+	// from files: a grammar with a string where its patterns array should be, a
+	// key that is an array. Release compiled the assertion out and returned the
+	// default; that is the behaviour in both now. A caller that needs to know
+	// whether the conversion happened uses get_key_path, which says.
+	// (Fuzzer, 2026-09-16: two of its first three findings were this assertion.)
 	template <typename T> T get (plist::any_t const& from)
 	{
 		T to;
-		bool res DB_VAR = boost::apply_visitor(convert_to_helper_t<T>(to), from);
-		ASSERT(res);
+		boost::apply_visitor(convert_to_helper_t<T>(to), from);
 		return to;
 	}
 

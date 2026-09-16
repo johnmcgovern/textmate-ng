@@ -39,6 +39,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
 export ASAN_OPTIONS=abort_on_error=1
 
 echo "==> building tm_fuzz with ASan and UBSan"
+mkdir -p build # a fresh checkout has none; the log below goes there before xcodebuild makes it
 xcodebuild -project TextMate.xcodeproj -target tm_fuzz -configuration Debug -parallelizeTargets \
 	OTHER_CFLAGS='$(inherited) -fsanitize=address,undefined -fno-omit-frame-pointer' \
 	OTHER_CPLUSPLUSFLAGS='$(inherited) -fsanitize=address,undefined -fno-omit-frame-pointer' \

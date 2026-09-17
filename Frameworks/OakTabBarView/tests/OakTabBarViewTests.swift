@@ -62,12 +62,16 @@ final class SpyTabDelegate: NSObject, OakTabBarViewDelegate {
 
 	// Any?, as the protocol declares `id`: the tab bar passes itself, menu items
 	// pass themselves, and the implementations look for the tab bar.
+	// The tab bar calls these on the main thread; the sender is not Sendable,
+	// and the capture says so before the hop (rule 26).
 	func performCloseTab(_ sender: Any?) {
-		closedTags.append(MainActor.assumeIsolated { (sender as? OakTabBarView)?.tag ?? -1 }) // the tab bar calls on the main thread
+		nonisolated(unsafe) let unsafeSender = sender
+		closedTags.append(MainActor.assumeIsolated { (unsafeSender as? OakTabBarView)?.tag ?? -1 })
 	}
 
 	func performCloseOtherTabsXYZ(_ sender: Any?) {
-		closedOtherTags.append(MainActor.assumeIsolated { (sender as? OakTabBarView)?.tag ?? -1 })
+		nonisolated(unsafe) let unsafeSender = sender
+		closedOtherTags.append(MainActor.assumeIsolated { (unsafeSender as? OakTabBarView)?.tag ?? -1 })
 	}
 
 	func tabBarView(_ aTabBarView: OakTabBarView, shouldSelect anIndex: UInt) -> Bool {

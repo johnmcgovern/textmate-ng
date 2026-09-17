@@ -2847,15 +2847,17 @@ the five shapes and what each must say. What changed in code:
   it. TMFileReference's map table already had a `precondition` (the ObjC++
   had an NSAssert) and its image cache a lock; FileItemObserver's registry
   is reached only from `@MainActor` functions.
-- **Two comments in BundlesManager said a crossing landed on "the download
-  manager's queue".** Measured: OakDownloadManager creates its URLSession
-  with `delegateQueue: .main`, and every completion — including the archive
-  task's — is invoked from a session delegate callback. So the install
-  result array (`res`, an NSMutableArray written per download) is written
-  only on the main queue, and the ObjC++'s `dispatch_async(main)` after it
-  is a hop from main to main. Had that queue been concurrent, that array
-  would have been the one real race in the tree; it is not, and the
-  comments now say why.
+- **The install result array in BundlesManager was the one place a real
+  race could have been.** Measured: OakDownloadManager has two sessions.
+  Archive downloads (`downloadArchive`, which the install uses) run on a
+  session created with `delegateQueue: .main`, and the completion is a
+  delegate callback — so `res`, an NSMutableArray written per download, is
+  written only on the main queue and never races. The index download
+  (`downloadFile`) uses `URLSession.shared`, whose completion runs on a
+  background queue; that path does what the ObjC++ did off-main (a file
+  date, a defaults write, a log line) and then hops to main. The comments
+  at both sites now say which session each is on. (First written as "both
+  main"; corrected the same day when the warnings pass reached that file.)
 - **Three outlets in DocumentWindowController** (`window`, `tabBarView`,
   `textView`) carried the annotation with no comment; they are for
   `deinit`, which clears their delegates as `-dealloc` did.
@@ -2879,6 +2881,67 @@ that the comment exists and that the queues it names are the ones the code
 uses, not that every method of every class is safe on every queue. The
 Debug assertions are the enforcement that scales: a caller on the wrong
 thread now fails the suite instead of racing.
+
+## Session 2026-09-16, evening — Swift warnings to zero, and then to errors
+
+The Release build emitted 121 unique Swift and hand-header warnings in the
+morning. A clean build emits 23 lines now, every one of them deliberate and
+listed below (deprecations kept on purpose, and FileBrowser's two), and
+`-warnings-as-errors` is on for every Swift target but one, so the count
+cannot drift back. What the 121 were, by kind,
+and what each became:
+
+| Kind | Count | Fix |
+| --- | --- | --- |
+| main-actor property or method reached from a nonisolated context | ~60 | `MainActor.assumeIsolated` in `deinit`, `observeValue`, NSFormatter and Quick Look overrides; `@MainActor` on the view-factory free functions (buttons, text fields, pop-ups, user scripts) |
+| non-Sendable capture in a `@Sendable` closure | ~12 | shape 4 of rule 26 where the value is read-only on the other queue; `@unchecked Sendable` on SoftwareUpdate, OakDownloadManager, CrashReporter and the archive task, whose comments already described the contract |
+| `var token` mutated after capture by a notification block | 5 | a small `ObserverToken` box (`@unchecked Sendable`), one copy in DocumentWindowController and one in the app, since the app's Swift cannot import a framework's |
+| deprecated AppKit | 14 | `icon(forFileType:)` → `icon(for: UTType)` (folder, item, data, or the extension's type); `openFile` → `open(URL)`; `.dark` → `.emphasized`; `alternateSelectedControlColor` → `selectedContentBackgroundColor`; the 10.10 accessibility attribute API on OakKeyEquivalentView → the NSAccessibility protocol methods; its pins moved to the same methods, because AppKit does *not* answer the old API from the new one (assumed, then measured: AXUnknown) |
+| implicitly-unwrapped values coerced to `Any` | 8 | unwrapped where the value cannot be nil, `as Any` where the dictionary wants the optional |
+| `@preconcurrency` on a conformance that has no effect | 13 | removed |
+| hand-header nullability | 12 | `NS_ASSUME_NONNULL` on BundlesManager.h and BundleEditor.h, `nullable`/`_Nonnull` where a parameter is; TerminalPreferences.h redeclared NSViewController's nullable initializer parameters as nonnull, which the flag turned into an importer error |
+| `std::iterator` as a base (deprecated in C++17) | 6 | the five member typedefs spelled out (basic_tree, indexed_map, storage, tokenize, utf8 ×2) |
+| explicit `Selector("…")` | 201 sites, mostly MainMenu | `NSSelectorFromString`, with a note: the actions are dispatched through the responder chain and are not declared in any header the file can see |
+| miscellaneous | 10 | `#selector` for one, a `?? nil` to flatten a double optional, `_ =` on unused results, `Bundle(for:)` on the class rather than its metaclass, a comma-operator expression in track_paths.h rewritten as statements |
+
+**Two things the pass corrected in the audit written hours earlier.**
+OakDownloadManager has two sessions: the archive downloads (the install
+path, and the `res` array) use one created with `delegateQueue: .main`;
+the index download uses `URLSession.shared`, whose completion is
+off-main and hops. The audit's BundlesManager comments had said "both
+main"; they say which now, and the audit section above is corrected. And
+three `nonisolated(unsafe)` annotations became *errors* under the flag —
+"unnecessary for a constant with Sendable type" — once their classes were
+marked Sendable; the annotation is only for what the compiler cannot
+prove, and the compiler says so.
+
+**What stays a warning, on purpose.** Deprecations are downgraded with
+`-Wwarning DeprecatedDeclaration` (SE-0443, Swift 6.2+): the synchronous
+`launchApplication` in OakOpenWithMenu (its comment says why), `isBezeled`
+on two progress indicators, `NSUserNotification` in CrashReporter, and
+**`SecTransform` in OakDownloadManager's signature check of bundle
+downloads** — deprecated since macOS 13 and "no longer supported"; its
+replacement is `SecKeyVerifySignature`, and that is a security-relevant
+follow-up with the bundle-download rehearsal as its witness. FileBrowser
+is compiled without the flag for two warnings with no group to downgrade:
+the outline data source returns `Any!` because
+t_file_browser_view_controller pins a nil answer out of range (rule 33),
+and `import TMFileReference` draws the compiler's "implicit import of
+bridging header" deprecation, which is about how TMFileReference is
+built. The seed's comment on `SWIFT_WARNINGS_AS_ERRORS_EXCEPT` carries
+this.
+
+**The incremental build hid modules.** The morning's inventory came from
+an incremental Release build and missed SoftwareUpdate, OakDownloadManager,
+CrashReporter, TMFileReference and the app target, all cached. The flag
+found them because it makes a cached module's warnings matter. Inventory
+from a clean build, always.
+
+**Rule 8 owed on the icon changes**: the file browser's folder icons and
+SCM rows, the tab bar's overflow menu icons, the Bundles preference pane's
+toolbar icon, and a menu item with a file icon (Open Recent). The key
+equivalent recorder's accessibility is pinned through the protocol
+methods; VoiceOver itself was not tried.
 
 ## Before cutting a release: the five-minute smoke pass
 

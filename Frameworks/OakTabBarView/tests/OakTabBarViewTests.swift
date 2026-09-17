@@ -63,11 +63,11 @@ final class SpyTabDelegate: NSObject, OakTabBarViewDelegate {
 	// Any?, as the protocol declares `id`: the tab bar passes itself, menu items
 	// pass themselves, and the implementations look for the tab bar.
 	func performCloseTab(_ sender: Any?) {
-		closedTags.append((sender as? OakTabBarView)?.tag ?? -1)
+		closedTags.append(MainActor.assumeIsolated { (sender as? OakTabBarView)?.tag ?? -1 }) // the tab bar calls on the main thread
 	}
 
 	func performCloseOtherTabsXYZ(_ sender: Any?) {
-		closedOtherTags.append((sender as? OakTabBarView)?.tag ?? -1)
+		closedOtherTags.append(MainActor.assumeIsolated { (sender as? OakTabBarView)?.tag ?? -1 })
 	}
 
 	func tabBarView(_ aTabBarView: OakTabBarView, shouldSelect anIndex: UInt) -> Bool {

@@ -55,6 +55,15 @@ private let kObservedKeyPaths = [
 // until the completion handler runs.
 @MainActor private var IsSavingOnResignActive = false
 
+// A notification token a @Sendable observer block can read and clear. The
+// block cannot capture a `var` it also mutates (the compiler warns, rightly:
+// nothing orders the write against the read); a box with reference semantics
+// is the honest shape — every use is on the main thread, where NSApp and the
+// documents post (rule 26).
+private final class ObserverToken: @unchecked Sendable {
+	var value: NSObjectProtocol?
+}
+
 @objc(DocumentWindowController)
 class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegate, NSMenuItemValidation, @preconcurrency OakTabBarViewDelegate, @preconcurrency OakTabBarViewDataSource, @preconcurrency FileBrowserDelegate, @preconcurrency OakTextViewDelegate, @preconcurrency OakUserDefaultsObserver {
 
@@ -340,10 +349,14 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 
 		NotificationCenter.default.removeObserver(self)
 
-		window?.delegate       = nil
-		tabBarView?.dataSource = nil
-		tabBarView?.delegate   = nil
-		textView?.delegate     = nil
+		// deinit is nonisolated; the teardown runs on the main thread, where the
+		// window controller dies (rule 26).
+		MainActor.assumeIsolated {
+			window?.delegate       = nil
+			tabBarView?.dataSource = nil
+			tabBarView?.delegate   = nil
+			textView?.delegate     = nil
+		}
 
 		// When option-clicking to close all windows then
 		// messages are sent to our window after windowWillClose:
@@ -848,6 +861,14 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 	// =====================
 
 	override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+		// KVO delivers on the thread of the change, which for every key path
+		// observed here is the main thread (rule 26).
+		MainActor.assumeIsolated {
+			observeValueOnMainActor(forKeyPath: keyPath)
+		}
+	}
+
+	private func observeValueOnMainActor(forKeyPath keyPath: String?) {
 		let document = selectedDocument
 		if keyPath == "selectedDocument.path" || keyPath == "selectedDocument.displayName" {
 			documentPath = document?.virtualPath ?? document?.path
@@ -1100,10 +1121,12 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 						let installer = SelectGrammarViewController()
 						installer.documentDisplayName = (document.path != nil || document.customName != nil) ? document.displayName : nil
 
-						var documentCloseObserver: NSObjectProtocol?
-						documentCloseObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name.OakDocumentWillClose, object: document, queue: nil) { [weak installer] _ in
-							installer?.dismissStrip()
-							if let observer = documentCloseObserver {
+						let documentCloseObserver = ObserverToken()
+						documentCloseObserver.value = NotificationCenter.default.addObserver(forName: NSNotification.Name.OakDocumentWillClose, object: document, queue: nil) { [weak installer] _ in
+							MainActor.assumeIsolated {
+								installer?.dismissStrip()
+							}
+							if let observer = documentCloseObserver.value {
 								NotificationCenter.default.removeObserver(observer)
 							}
 						}
@@ -1122,7 +1145,7 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 								}
 							}
 
-							if let observer = documentCloseObserver {
+							if let observer = documentCloseObserver.value {
 								NotificationCenter.default.removeObserver(observer)
 							}
 						}
@@ -1217,15 +1240,22 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 	private func saveDocuments(using iterator: IndexingIterator<[OakDocument]>, completionHandler callback: ((OakDocumentIOResult) -> Void)?) {
 		var iterator = iterator
 		if let document = iterator.next() {
+			// The alert notification is posted on the main thread, by the document
+			// about to show a sheet; the document is not Sendable, so the capture
+			// says so (rule 26).
+			nonisolated(unsafe) let unsafeDocument = document
 			let token = NotificationCenter.default.addObserver(forName: NSNotification.Name.OakDocumentWillShowAlert, object: document, queue: nil) { [self] _ in
-				if let i = _documents.firstIndex(of: document), document.isLoaded {
-					if document != selectedDocument {
-						selectedTabIndex = UInt(i)
-						selectedDocument = document
-					}
+				MainActor.assumeIsolated {
+					let document = unsafeDocument
+					if let i = _documents.firstIndex(of: document), document.isLoaded {
+						if document != selectedDocument {
+							selectedTabIndex = UInt(i)
+							selectedDocument = document
+						}
 
-					if NSApp.isActive && (window.isMiniaturized || !window.isKeyWindow) {
-						window.makeKeyAndOrderFront(self)
+						if NSApp.isActive && (window.isMiniaturized || !window.isKeyWindow) {
+							window.makeKeyAndOrderFront(self)
+						}
 					}
 				}
 			}
@@ -1405,7 +1435,7 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 	// ==============================
 
 	@objc func tryObtainIndexSet(from sender: Any?) -> IndexSet? {
-		let res: Any? = (sender as AnyObject?)?.responds(to: #selector(getter: NSMenuItem.representedObject)) == true ? (sender as AnyObject?)?.representedObject : sender
+		let res: Any? = (sender as AnyObject?)?.responds(to: #selector(getter: NSMenuItem.representedObject)) == true ? ((sender as AnyObject?)?.representedObject ?? nil) : sender
 		if let indexSet = res as? IndexSet {
 			return indexSet
 		} else if let indexSet = res as? NSIndexSet {
@@ -2341,26 +2371,30 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 		if NSApp.isActive {
 			// If we call ‘mate -w’ in quick succession there is a chance that we have a pending “re-activate the terminal app” when this code is executed, which will make ‘isActive’ return ‘YES’ but shortly after, our application will become inactive. For this reason, we monitor the NSApplicationDidResignActiveNotification for 200 ms and re-activate TextMate if we see the notification.
 
-			var token: NSObjectProtocol?
-			token = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: NSApp, queue: nil) { _ in
-				if let token = token {
-					NotificationCenter.default.removeObserver(token)
+			let token = ObserverToken()
+			token.value = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: NSApp, queue: nil) { _ in
+				if let observer = token.value {
+					NotificationCenter.default.removeObserver(observer)
 				}
-				NSApp.activate(ignoringOtherApps: true)
+				MainActor.assumeIsolated {
+					NSApp.activate(ignoringOtherApps: true)
+				}
 			}
 
 			DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-				if let token = token {
-					NotificationCenter.default.removeObserver(token)
+				if let observer = token.value {
+					NotificationCenter.default.removeObserver(observer)
 				}
 			}
 		} else {
-			var token: NSObjectProtocol?
-			token = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: NSApp, queue: nil) { [weak self] _ in
+			let token = ObserverToken()
+			token.value = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: NSApp, queue: nil) { [weak self] _ in
 				// If our window is not on the active desktop but another one is, the system gives focus to the wrong window.
-				self?.showWindow(nil)
-				if let token = token {
-					NotificationCenter.default.removeObserver(token)
+				MainActor.assumeIsolated {
+					self?.showWindow(nil)
+				}
+				if let observer = token.value {
+					NotificationCenter.default.removeObserver(observer)
 				}
 			}
 			NSApp.activate(ignoringOtherApps: true)

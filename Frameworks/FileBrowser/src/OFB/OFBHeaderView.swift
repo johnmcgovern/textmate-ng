@@ -12,7 +12,7 @@ import AppKit
 // be declared twice. Nothing checks the .h against this file at build time — the
 // selector-surface test does, at runtime.
 
-private func OakCreateImageButton(_ imageName: NSImage.Name) -> NSButton {
+@MainActor private func OakCreateImageButton(_ imageName: NSImage.Name) -> NSButton {
 	let res = NSButton(frame: .zero)
 	res.setButtonType(.momentaryChange)
 	res.isBordered = false
@@ -21,7 +21,7 @@ private func OakCreateImageButton(_ imageName: NSImage.Name) -> NSButton {
 	return res
 }
 
-private func OakCreateFolderPopUpButton() -> NSPopUpButton {
+@MainActor private func OakCreateFolderPopUpButton() -> NSPopUpButton {
 	let res = NSPopUpButton(frame: .zero, pullsDown: true)
 	res.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 	res.setContentHuggingPriority(.fittingSizeCompression, for: .horizontal)

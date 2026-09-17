@@ -12,7 +12,7 @@ import AppKit
 //
 // The class's ObjC face is the hand declaration in HOStatusBar.h (rule 23).
 
-private func OakCreateImageButton(_ image: NSImage?) -> NSButton {
+@MainActor private func OakCreateImageButton(_ image: NSImage?) -> NSButton {
 	let res = NSButton()
 	res.setButtonType(.momentaryChange)
 	res.isBordered    = false
@@ -21,7 +21,7 @@ private func OakCreateImageButton(_ image: NSImage?) -> NSButton {
 	return res
 }
 
-private func OakCreateTextField() -> NSTextField {
+@MainActor private func OakCreateTextField() -> NSTextField {
 	let res = NSTextField(frame: .zero)
 	res.isBordered      = false
 	res.isEditable      = false

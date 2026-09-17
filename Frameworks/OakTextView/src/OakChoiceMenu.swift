@@ -19,7 +19,7 @@ private enum Action {
 }
 
 @objc(OakChoiceMenu)
-class OakChoiceMenu: NSWindowController, @preconcurrency NSTableViewDataSource, @preconcurrency NSTableViewDelegate {
+class OakChoiceMenu: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
 	private static let notFound = UInt(bitPattern: NSNotFound)
 
 	private var tableView: NSTableView!

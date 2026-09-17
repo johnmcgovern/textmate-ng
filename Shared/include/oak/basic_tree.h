@@ -110,8 +110,21 @@ namespace oak
 		static bool eq (node_t* lhs, node_t* rhs) { return (lhs->is_null() && rhs->is_null()) || lhs == rhs; }
 
 	public:
-		struct iterator : std::iterator<std::bidirectional_iterator_tag, value_type>
+		struct iterator
+
 		{
+
+			// The typedefs std::iterator provided, spelled out: it is deprecated since C++17.
+
+			using iterator_category = std::bidirectional_iterator_tag;
+
+			using value_type        = value_type;
+
+			using difference_type   = std::ptrdiff_t;
+
+			using pointer           = value_type*;
+
+			using reference         = value_type&;
 			iterator (node_t* node, basic_tree_t* tree) : _node(node), _info(_KeyT(), _node->_relative_key, _node->_value), _tree(tree) { }
 
 			bool operator== (iterator const& rhs) const { return  eq(_node, rhs._node); }
@@ -196,8 +209,21 @@ namespace oak
 		// reverse half of t_basic_tree_numeric). This one keeps its iterator
 		// positioned *on* the element it refers to, so *it is a reference into
 		// this object; end() stands for rend.
-		struct reverse_iterator : std::iterator<std::bidirectional_iterator_tag, value_type>
+		struct reverse_iterator
+
 		{
+
+			// The typedefs std::iterator provided, spelled out: it is deprecated since C++17.
+
+			using iterator_category = std::bidirectional_iterator_tag;
+
+			using value_type        = value_type;
+
+			using difference_type   = std::ptrdiff_t;
+
+			using pointer           = value_type*;
+
+			using reference         = value_type&;
 			explicit reverse_iterator (iterator const& base) : _it(base)
 			{
 				if(_it == _it._tree->begin())

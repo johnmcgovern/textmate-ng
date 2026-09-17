@@ -181,7 +181,7 @@ class OakPasteboardDatabase: NSObject {
 			return appSupport.appendingPathComponent("PasteboardHistory.db")
 		}
 		catch {
-			MainActor.assumeIsolated {
+			_ = MainActor.assumeIsolated {
 				NSApp.presentError(error)
 			}
 			return nil

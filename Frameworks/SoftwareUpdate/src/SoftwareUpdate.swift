@@ -21,11 +21,17 @@ import os
 
 private let log = Logger()
 
+// @unchecked Sendable: the class is reached from the background activity
+// scheduler's queue, URLSession.shared's completion queue and the main thread,
+// and manages those crossings itself — every mutation of observed state hops
+// to the main queue with dispatch_async, as the ObjC++ did (see
+// checkForTestBuild). The conformance states that contract to the compiler
+// rather than annotating each capture of self (concurrency audit, 2026-09-16).
 @objc(SoftwareUpdate)
-class SoftwareUpdate: NSObject {
-	// nonisolated(unsafe) for the same reason as OakDownloadManager's: this is not
-	// a MainActor object, and the ObjC++ was a plain function-local static.
-	@objc nonisolated(unsafe) static let sharedInstance: SoftwareUpdate = {
+class SoftwareUpdate: NSObject, @unchecked Sendable {
+	// A plain static: the class is Sendable (see above), so the `let` needs no
+	// annotation; the ObjC++ was a function-local static.
+	@objc static let sharedInstance: SoftwareUpdate = {
 		registerDefaults()
 		return SoftwareUpdate()
 	}()
@@ -225,9 +231,12 @@ class SoftwareUpdate: NSObject {
 		// because `[anEvent type]` is that function's body and CFNetwork had taken
 		// the freed block. The header no longer has the default at all, so this can
 		// only be written the safe way now. Rule 65.
-		let currentEvent = NSApp.currentEvent
-		let isOptionDown = OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.option.rawValue, currentEvent)
-		let isShiftDown  = OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.shift.rawValue, currentEvent)
+		// A menu action, on the main thread; the class is not @MainActor, so the
+		// read of NSApp says so, and only the two Bools come out (rule 26).
+		let (isOptionDown, isShiftDown) = MainActor.assumeIsolated { () -> (Bool, Bool) in
+			let currentEvent = NSApp.currentEvent
+			return (OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.option.rawValue, currentEvent), OakIsAlternateKeyOrMouseEvent(NSEvent.ModifierFlags.shift.rawValue, currentEvent))
+		}
 
 		checkForTestBuild(isOptionDown) { manifest, error in
 			MainActor.assumeIsolated {
@@ -298,10 +307,9 @@ class SoftwareUpdate: NSObject {
 	@objc(checkForTestBuild:completionHandler:)
 	func checkForTestBuild(_ testBuild: Bool, completionHandler: @escaping (UpdateManifest?, Error?) -> Void) {
 		guard Thread.isMainThread else {
-			// nonisolated(unsafe) states the crossing the ObjC++ made implicitly with
-			// dispatch_async: neither SoftwareUpdate nor the handler is Sendable, and
-			// this is precisely the hop that makes everything after it main-thread.
-			nonisolated(unsafe) let unsafeSelf = self
+			// The hop that makes everything after it main-thread, as the ObjC++'s
+			// dispatch_async did; the handler is not Sendable and the capture says so.
+			let unsafeSelf = self
 			nonisolated(unsafe) let unsafeHandler = completionHandler
 			DispatchQueue.main.async {
 				unsafeSelf.checkForTestBuild(testBuild, completionHandler: unsafeHandler)
@@ -324,6 +332,10 @@ class SoftwareUpdate: NSObject {
 			var request = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 60)
 			request.setValue(OakDownloadManager.sharedInstance.userAgentString, forHTTPHeaderField: "User-Agent")
 
+			// The completion runs on URLSession.shared's queue; the handler is not
+			// Sendable, and the capture says so before the closure that carries it.
+			nonisolated(unsafe) let unsafeHandler = completionHandler
+			let unsafeSelf = self
 			let dataTask = URLSession.shared.dataTask(with: request) { data, response, error in
 				var error = error
 				var manifest: UpdateManifest?
@@ -363,10 +375,8 @@ class SoftwareUpdate: NSObject {
 				// Same crossing, same reason — and this is the one that has to stay:
 				// `checking` is KVO-observed by a @MainActor Swift getter through
 				// Cocoa Bindings, so setting it off the main thread traps (see above).
-				nonisolated(unsafe) let unsafeSelf = self
-				nonisolated(unsafe) let unsafeHandler = completionHandler
-				nonisolated(unsafe) let unsafeManifest = manifest
-				nonisolated(unsafe) let unsafeError = error
+				let unsafeManifest = manifest // Sendable: a value type
+				let unsafeError = error       // Sendable: any Error
 				DispatchQueue.main.async {
 					UserDefaults.standard.set(Date(), forKey: kUserDefaultsLastSoftwareUpdateCheckKey)
 					unsafeSelf.checking = false

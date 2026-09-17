@@ -52,7 +52,7 @@ private func RemoveOldCommits(_ src: [String: Any]) -> [String: Any] {
 }
 
 @objc(AboutWindowController)
-class AboutWindowController: NSWindowController, @preconcurrency NSWindowDelegate, @preconcurrency NSToolbarDelegate, @preconcurrency WKNavigationDelegate, @preconcurrency WKScriptMessageHandler {
+class AboutWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, WKNavigationDelegate, WKScriptMessageHandler {
 	@objc private(set) var segmentLabels: [String] = []
 	@objc var toolbar: NSToolbar?
 	@objc var segmentedControl: NSSegmentedControl!
@@ -311,7 +311,7 @@ class AboutWindowController: NSWindowController, @preconcurrency NSWindowDelegat
 		return "'\(escaped)'"
 	}
 
-	func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+	func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
 		if let url = navigationAction.request.url, url.scheme != "file", NSWorkspace.shared.open(url) {
 			decisionHandler(.cancel)
 		}

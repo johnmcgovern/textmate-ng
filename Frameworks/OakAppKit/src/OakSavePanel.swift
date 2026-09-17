@@ -9,7 +9,7 @@ import AppKit
 // here, and it is twelve lines.
 
 @objc(OakEncodingSaveOptionsViewController)
-class OakEncodingSaveOptionsViewController: NSViewController, @preconcurrency NSOpenSavePanelDelegate {
+class OakEncodingSaveOptionsViewController: NSViewController, NSOpenSavePanelDelegate {
 	@objc var encodingOptions: OakEncodingOptions
 	@objc var fileType: String?
 

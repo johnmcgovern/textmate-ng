@@ -33,7 +33,7 @@ private let kFoldingsColumnIdentifier  = "foldings"
 private let kUserDefaultsDisableLineNumbersKey = "DocumentView Disable Line Numbers"
 
 @objc(OakDocumentView)
-class OakDocumentView: NSView, NSAccessibilityGroup, @preconcurrency NSMenuItemValidation, @preconcurrency GutterViewDelegate, @preconcurrency GutterViewColumnDataSource, @preconcurrency GutterViewColumnDelegate, @preconcurrency OTVStatusBarDelegate {
+class OakDocumentView: NSView, NSAccessibilityGroup, NSMenuItemValidation, @preconcurrency GutterViewDelegate, @preconcurrency GutterViewColumnDataSource, @preconcurrency GutterViewColumnDelegate, @preconcurrency OTVStatusBarDelegate {
 	// Dispatched through the responder chain rather than declared anywhere, so
 	// #selector cannot name them.
 	private static let nop = NSSelectorFromString("nop:")
@@ -280,6 +280,14 @@ class OakDocumentView: NSView, NSAccessibilityGroup, @preconcurrency NSMenuItemV
 	}
 
 	override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+		// Every key path here is a text-view or document property that changes on
+		// the main thread (rule 26).
+		MainActor.assumeIsolated {
+			observeValueOnMainActor(forKeyPath: keyPath)
+		}
+	}
+
+	private func observeValueOnMainActor(forKeyPath keyPath: String?) {
 		if keyPath == "selectionString" {
 			let str = textView.value(forKey: "selectionString") as? String
 			gutterView.setHighlightedRangeString(str ?? "1")

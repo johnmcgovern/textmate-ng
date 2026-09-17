@@ -50,7 +50,7 @@ extension AppController {
 		}
 
 		if ordered.isEmpty {
-			aMenu.addItem(withTitle: "No Bundles Loaded", action: Selector(("nop:")), keyEquivalent: "")
+			aMenu.addItem(withTitle: "No Bundles Loaded", action: NSSelectorFromString("nop:"), keyEquivalent: "")
 		}
 	}
 
@@ -86,9 +86,9 @@ extension AppController {
 		])
 
 		// MIGRATION from 2.0.12 and earlier
-		nonisolated(unsafe) var token: NSObjectProtocol?
-		token = NotificationCenter.default.addObserver(forName: NSApplication.didFinishLaunchingNotification, object: NSApp, queue: nil) { _ in
-			if let token { NotificationCenter.default.removeObserver(token) }
+		let token = ObserverToken()
+		token.value = NotificationCenter.default.addObserver(forName: NSApplication.didFinishLaunchingNotification, object: NSApp, queue: nil) { _ in
+			if let observer = token.value { NotificationCenter.default.removeObserver(observer) }
 
 			if let savedThemeUUID = AppControllerSupport.globalThemeSetting() {
 				log.log("Remove old theme setting from Global.tmProperties: \(savedThemeUUID, privacy: .public)")
@@ -239,7 +239,7 @@ extension AppController {
 		}
 
 		if ordered.isEmpty {
-			aMenu.addItem(withTitle: "No Themes Loaded", action: Selector(("nop:")), keyEquivalent: "")
+			aMenu.addItem(withTitle: "No Themes Loaded", action: NSSelectorFromString("nop:"), keyEquivalent: "")
 			return
 		}
 
@@ -284,7 +284,7 @@ extension AppController {
 
 	@objc func spellingMenuNeedsUpdate(_ aMenu: NSMenu) {
 		for i in stride(from: aMenu.numberOfItems - 1, through: 0, by: -1) {
-			if aMenu.item(at: i)?.action == Selector(("takeSpellingLanguageFrom:")) {
+			if aMenu.item(at: i)?.action == NSSelectorFromString("takeSpellingLanguageFrom:") {
 				aMenu.removeItem(at: i)
 			}
 		}
@@ -307,11 +307,11 @@ extension AppController {
 		} as! [String]
 
 		let systemSpellingLanguage = spellChecker.automaticallyIdentifiesLanguages ? "Automatic by Language" : NameForLocaleIdentifier(spellChecker.language())
-		let menuItem = aMenu.addItem(withTitle: "System (\(systemSpellingLanguage))", action: Selector(("takeSpellingLanguageFrom:")), keyEquivalent: "")
+		let menuItem = aMenu.addItem(withTitle: "System (\(systemSpellingLanguage))", action: NSSelectorFromString("takeSpellingLanguageFrom:"), keyEquivalent: "")
 		menuItem.representedObject = ""
 
 		for lang in ordered {
-			let menuItem = aMenu.addItem(withTitle: displayNames[lang] ?? "", action: Selector(("takeSpellingLanguageFrom:")), keyEquivalent: "")
+			let menuItem = aMenu.addItem(withTitle: displayNames[lang] ?? "", action: NSSelectorFromString("takeSpellingLanguageFrom:"), keyEquivalent: "")
 			menuItem.representedObject = lang
 		}
 	}
@@ -319,7 +319,7 @@ extension AppController {
 	@objc func wrapColumnMenuNeedsUpdate(_ aMenu: NSMenu) {
 		aMenu.removeAllItems()
 
-		let action = Selector(("takeWrapColumnFrom:"))
+		let action = NSSelectorFromString("takeWrapColumnFrom:")
 		var menuItem: NSMenuItem
 
 		menuItem = aMenu.addItem(withTitle: "Use Window Frame", action: action, keyEquivalent: "")

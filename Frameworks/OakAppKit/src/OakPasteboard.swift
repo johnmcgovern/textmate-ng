@@ -523,11 +523,11 @@ class OakPasteboard: NSObject, OakPasteboardIdleObserving {
 		let newSelection = pasteboardSelector.show(atLocation: location)
 		let newEntries = pasteboardSelector.entries()
 
-		let keep = Set((newEntries as? [OakPasteboardEntry]) ?? [])
+		let keep = Set(newEntries)
 		let remove = entries.filter { !keep.contains($0) }
 		removeEntries(remove)
 
-		if newSelection != -1, let newEntries = newEntries as? [OakPasteboardEntry] {
+		if newSelection != -1 {
 			updatePasteboard(with: newEntries[newSelection])
 		}
 	}

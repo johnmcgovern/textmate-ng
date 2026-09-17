@@ -15,8 +15,11 @@ import UserNotifications
 //
 // CrashReporter.h stays hand-written, so AppController was not touched.
 
+// @unchecked Sendable, stating the contract the comment on sharedInstance
+// describes: the URLSession completions touch this object off the main queue,
+// and it is written for that (concurrency audit, 2026-09-16).
 @objc(CrashReporter)
-class CrashReporter: NSObject {
+class CrashReporter: NSObject, @unchecked Sendable {
 	// Deliberately NOT @MainActor, which would be a stronger contract than the
 	// ObjC++ had and a wrong one: the URLSession completion handlers below
 	// genuinely run off the main queue and touch this object. Marking the class
@@ -24,7 +27,7 @@ class CrashReporter: NSObject {
 	// protocols at all — their requirements are nonisolated — which is the same
 	// "crosses into main actor-isolated code" wall the OakTabBarView port hit
 	// with the accessibility marker protocols.
-	@objc nonisolated(unsafe) static let sharedInstance = CrashReporter()
+	@objc static let sharedInstance = CrashReporter() // a plain static: the class is Sendable
 
 	private static let crashReportsSentKey = "CrashReportsSent"
 	private static let reportsDirectory = ("~/Library/Logs/DiagnosticReports" as NSString).expandingTildeInPath

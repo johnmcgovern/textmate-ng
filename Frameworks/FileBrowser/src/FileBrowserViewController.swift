@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import CoreServices
 
 // FileBrowserViewController — the flip.
@@ -629,7 +630,7 @@ class FileBrowserViewController: NSViewController, NSMenuDelegate, NSOutlineView
 
 		for item in itemsToOpen {
 			if let path = item.resolvedURL.path {
-				NSWorkspace.shared.openFile(path)
+				NSWorkspace.shared.open(Foundation.URL(fileURLWithPath: path))
 			}
 		}
 
@@ -1156,14 +1157,14 @@ class FileBrowserViewController: NSViewController, NSMenuDelegate, NSOutlineView
 			if item?.URL?.scheme == "scm" {
 				let query = item?.URL?.query
 				if query?.hasSuffix("unstaged") == true || query?.hasSuffix("untracked") == true {
-					image = NSWorkspace.shared.icon(forFileType: NSFileTypeForHFSTypeCode(OSType(kGenericFolderIcon)))
+					image = NSWorkspace.shared.icon(for: .folder)
 				} else {
 					image = NSImage(named: "SCMTemplate", inSameBundleAsClass: NSClassFromString("OakFileBrowser"))
 				}
 			} else if item?.URL?.scheme == "computer" {
 				image = NSImage(named: NSImage.computerName)
 			} else {
-				image = NSWorkspace.shared.icon(forFileType: NSFileTypeForHFSTypeCode(OSType(kGenericFolderIcon)))
+				image = NSWorkspace.shared.icon(for: .folder)
 			}
 
 			let copied = image?.copy() as? NSImage

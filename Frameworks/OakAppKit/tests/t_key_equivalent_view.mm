@@ -27,7 +27,10 @@ static OakKeyEquivalentView* new_view ()
 // read out as no key equivalent, which is what these tests are about.
 static std::string displayed (OakKeyEquivalentView* view)
 {
-	NSString* value = [view accessibilityAttributeValue:NSAccessibilityValueAttribute];
+	// The NSAccessibility protocol methods, which the view implements since
+	// 2026-09-16 (the attribute API of 10.9 is deprecated, and AppKit does not
+	// answer it from the protocol methods — measured: it reported AXUnknown).
+	NSString* value = [view accessibilityValue];
 	return value ? to_s(value) : "";
 }
 
@@ -51,8 +54,8 @@ void test_default_state ()
 
 	OAK_ASSERT_EQ(view.eventString == nil, true);
 	OAK_ASSERT_EQ((bool)view.recording, false);
-	OAK_ASSERT_EQ(to_s((NSString*)[view accessibilityAttributeValue:NSAccessibilityRoleAttribute]), to_s(NSAccessibilityTextFieldRole));
-	OAK_ASSERT_EQ(to_s((NSString*)[view accessibilityAttributeValue:NSAccessibilityDescriptionAttribute]), "Key Equivalent");
+	OAK_ASSERT_EQ(to_s([view accessibilityRole]), to_s(NSAccessibilityTextFieldRole));
+	OAK_ASSERT_EQ(to_s([view accessibilityLabel]), "Key Equivalent");
 	OAK_ASSERT_EQ((bool)[view accessibilityIsIgnored], false);
 }
 
@@ -95,7 +98,7 @@ void test_recording_shows_placeholder ()
 
 	view.recording = YES;
 	OAK_ASSERT_EQ(displayed(view), "");
-	OAK_ASSERT_EQ([[view accessibilityAttributeValue:NSAccessibilityNumberOfCharactersAttribute] integerValue], 0);
+	OAK_ASSERT_EQ([view accessibilityNumberOfCharacters], 0);
 	// Recording does not clear what is already stored — abandoning the recording
 	// has to leave the old chord in place.
 	OAK_ASSERT_EQ(to_s(view.eventString), "@a");

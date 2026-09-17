@@ -13,6 +13,8 @@
 // -findBundleForInstall:, which answers through a bundles::item_ptr, is declared
 // in BundlesManagerCxx.h (rule 37) so that this header is C++-free and the
 // bridging headers that import it stay so.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface BundlesManager : NSObject
 @property (class, readonly) BundlesManager* sharedInstance;
 
@@ -24,3 +26,5 @@
 - (void)installBundleItemsAtPaths:(NSArray*)somePaths;
 - (void)reloadPath:(NSString*)aPath;
 @end
+
+NS_ASSUME_NONNULL_END

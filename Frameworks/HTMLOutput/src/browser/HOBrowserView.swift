@@ -22,7 +22,7 @@ private let log = Logger(subsystem: "com.j23software.TextMate-NG", category: "ht
 private let kUserDefaultsDefaultURLProtocolKey = "defaultURLProtocol"
 
 @objc(HOBrowserView)
-class HOBrowserView: NSView, @preconcurrency WKNavigationDelegate {
+class HOBrowserView: NSView, WKNavigationDelegate {
 	private nonisolated(unsafe) static var progressContext = 0
 
 	private var _webView: WKWebView!
@@ -112,7 +112,9 @@ class HOBrowserView: NSView, @preconcurrency WKNavigationDelegate {
 
 	override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
 		if context == &Self.progressContext {
-			_statusBar.progress = _webView.estimatedProgress
+			MainActor.assumeIsolated { // WebKit posts its progress on the main thread (rule 26)
+				_statusBar.progress = _webView.estimatedProgress
+			}
 		}
 		else {
 			super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
@@ -170,7 +172,7 @@ class HOBrowserView: NSView, @preconcurrency WKNavigationDelegate {
 		setUpdatesProgress(true)
 	}
 
-	func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+	func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
 		let requested = navigationAction.request.url
 		var url = requested
 

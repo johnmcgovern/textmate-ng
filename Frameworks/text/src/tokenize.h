@@ -6,8 +6,21 @@ namespace text
 	template <typename _ForwardIter, typename _CharT>
 	struct tokenize_helper_t
 	{
-		struct iterator : std::iterator<std::forward_iterator_tag, std::string, off_t>
+		struct iterator
+
 		{
+
+			// The typedefs std::iterator provided, spelled out: it is deprecated since C++17.
+
+			using iterator_category = std::forward_iterator_tag;
+
+			using value_type        = std::string;
+
+			using difference_type   = off_t;
+
+			using pointer           = value_type*;
+
+			using reference         = value_type&;
 			iterator (_ForwardIter const& first, _ForwardIter const& last, _CharT delimiter, bool atEnd = false) : first(first), current(first), last(last), delimiter(delimiter), at_end(atEnd)
 			{
 				while(current != last && *current != delimiter)

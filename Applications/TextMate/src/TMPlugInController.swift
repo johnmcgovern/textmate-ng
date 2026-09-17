@@ -44,6 +44,24 @@ class TMPlugInController: NSObject, TMPlugInControllerProtocol {
 	// the controller for its -version from wherever it likes.
 	@objc nonisolated(unsafe) static let sharedInstance = TMPlugInController()
 
+	// Every alert this controller shows runs on the main thread — plug-ins load
+	// at launch and install from an open panel — but the class is deliberately
+	// not @MainActor (see sharedInstance), so the hop is made explicit here once
+	// rather than at each of the eight sites (rule 26).
+	@MainActor private static func runAlert(_ messageText: String, _ informativeText: String, buttons: [String]) -> NSApplication.ModalResponse {
+		let alert = NSAlert()
+		alert.messageText     = messageText
+		alert.informativeText = informativeText
+		for title in buttons {
+			alert.addButton(withTitle: title)
+		}
+		return alert.runModal()
+	}
+
+	private static func alert(_ messageText: String, _ informativeText: String, buttons: [String]) -> NSApplication.ModalResponse {
+		return MainActor.assumeIsolated { runAlert(messageText, informativeText, buttons: buttons) }
+	}
+
 	private let plugIns = NSMutableDictionary()
 	// Get-only: an @objc stored property would export a setter the original
 	// never had outside its own class extension.
@@ -94,14 +112,7 @@ class TMPlugInController: NSObject, TMPlugInControllerProtocol {
 
 		let crashedDuringPlugInLoad = TMPlugInSupport.crashMarkerPath(forIdentifier: identifier)
 		if access(crashedDuringPlugInLoad, F_OK) == 0 {
-			let alert = NSAlert()
-			alert.messageText     = "Move “\(name ?? identifier)” plug-in to Trash?"
-			alert.informativeText = "Previous attempt of loading the plug-in caused abnormal exit. Would you like to move it to trash?"
-			for title in [ "Move to Trash", "Cancel", "Skip Loading" ] {
-				alert.addButton(withTitle: title)
-			}
-
-			let choice = alert.runModal()
+			let choice = Self.alert("Move “\(name ?? identifier)” plug-in to Trash?", "Previous attempt of loading the plug-in caused abnormal exit. Would you like to move it to trash?", buttons: ["Move to Trash", "Cancel", "Skip Loading"])
 			if choice == .alertFirstButtonReturn { // "Move to Trash"
 				try? FileManager.default.trashItem(at: URL(fileURLWithPath: aPath), resultingItemURL: nil)
 			}
@@ -163,21 +174,13 @@ class TMPlugInController: NSObject, TMPlugInControllerProtocol {
 		let plugInName   = (plugInBundle?.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? ((src as NSString).lastPathComponent as NSString).deletingPathExtension
 
 		if (plugInBundle?.object(forInfoDictionaryKey: "TMPlugInAPIVersion") as? NSNumber)?.intValue != TMPlugInController.kPlugInAPIVersion {
-			let alert = NSAlert()
-			alert.messageText     = "Cannot Install Plug-in"
-			alert.informativeText = "The \(plugInName) plug-in is not compatible with this version of TextMate."
-			alert.addButton(withTitle: "Continue")
-			alert.runModal()
+			_ = Self.alert("Cannot Install Plug-in", "The \(plugInName) plug-in is not compatible with this version of TextMate.", buttons: ["Continue"])
 			return
 		}
 
 		let blacklist = UserDefaults.standard.stringArray(forKey: TMPlugInController.kUserDefaultsDisabledPlugInsKey)
 		if let identifier = plugInBundle?.object(forInfoDictionaryKey: "CFBundleIdentifier") as? String, blacklist?.contains(identifier) == true {
-			let alert = NSAlert()
-			alert.messageText     = "Cannot Install Plug-in"
-			alert.informativeText = "The \(plugInName) plug-in should not be used with this version of TextMate because of stability problems."
-			alert.addButton(withTitle: "Continue")
-			alert.runModal()
+			_ = Self.alert("Cannot Install Plug-in", "The \(plugInName) plug-in should not be used with this version of TextMate because of stability problems.", buttons: ["Continue"])
 			return
 		}
 
@@ -185,23 +188,12 @@ class TMPlugInController: NSObject, TMPlugInControllerProtocol {
 			let newVersion = (plugInBundle?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? (plugInBundle?.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
 			let oldVersion = (Bundle(path: dst!)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? (Bundle(path: dst!)?.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
 
-			let alert = NSAlert()
-			alert.messageText     = "Plug-in Already Installed"
-			alert.informativeText = "Version \(oldVersion ?? "???") of “\(plugInName)” is already installed.\nDo you want to replace it with version \(newVersion ?? "???")?\n\nUpgrading a plug-in will require TextMate to be relaunched."
-			for title in [ "Replace", "Cancel" ] {
-				alert.addButton(withTitle: title)
-			}
-
-			let choice = alert.runModal()
+			let choice = Self.alert("Plug-in Already Installed", "Version \(oldVersion ?? "???") of “\(plugInName)” is already installed.\nDo you want to replace it with version \(newVersion ?? "???")?\n\nUpgrading a plug-in will require TextMate to be relaunched.", buttons: ["Replace", "Cancel"])
 			if choice == .alertFirstButtonReturn { // "Replace"
 				do {
 					try fm.removeItem(atPath: dst!)
 				} catch {
-					let alert = NSAlert()
-					alert.messageText     = "Install Failed"
-					alert.informativeText = "Couldn't remove old plug-in (“\((dst! as NSString).abbreviatingWithTildeInPath)”)"
-					alert.addButton(withTitle: "Continue")
-					alert.runModal()
+					_ = Self.alert("Install Failed", "Couldn't remove old plug-in (“\((dst! as NSString).abbreviatingWithTildeInPath)”)", buttons: ["Continue"])
 					dst = nil
 				}
 			} else if choice == .alertSecondButtonReturn { // "Cancel"
@@ -217,32 +209,18 @@ class TMPlugInController: NSObject, TMPlugInControllerProtocol {
 		do {
 			try fm.createDirectory(atPath: dstDir, withIntermediateDirectories: true, attributes: nil)
 		} catch {
-			let alert = NSAlert()
-			alert.messageText     = "Install Failed"
-			alert.informativeText = "It was not possible to create the plug-in folder (“\((dstDir as NSString).abbreviatingWithTildeInPath)”)"
-			alert.addButton(withTitle: "Continue")
-			alert.runModal()
+			_ = Self.alert("Install Failed", "It was not possible to create the plug-in folder (“\((dstDir as NSString).abbreviatingWithTildeInPath)”)", buttons: ["Continue"])
 			return
 		}
 
 		do {
 			try fm.copyItem(atPath: src, toPath: dst)
 		} catch {
-			let alert = NSAlert()
-			alert.messageText     = "Install Failed"
-			alert.informativeText = "The plug-in has not been installed."
-			alert.addButton(withTitle: "Continue")
-			alert.runModal()
+			_ = Self.alert("Install Failed", "The plug-in has not been installed.", buttons: ["Continue"])
 			return
 		}
 
-		let alert = NSAlert()
-		alert.messageText     = "Plug-in Installed"
-		alert.informativeText = "To activate “\(plugInName)” you will need to relaunch TextMate."
-		for title in [ "Relaunch", "Cancel" ] {
-			alert.addButton(withTitle: title)
-		}
-		if alert.runModal() == .alertFirstButtonReturn { // "Relaunch"
+		if Self.alert("Plug-in Installed", "To activate “\(plugInName)” you will need to relaunch TextMate.", buttons: ["Relaunch", "Cancel"]) == .alertFirstButtonReturn { // "Relaunch"
 			TMPlugInSupport.relaunchApplication()
 		}
 	}

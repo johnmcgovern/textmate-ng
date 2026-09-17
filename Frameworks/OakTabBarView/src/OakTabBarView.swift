@@ -4,6 +4,7 @@
 // Preferences.h). Ported from OakTabBarView.mm (2026-07-28), together with
 // OakTabView and OakTabFrame, which are mutually coupled and could not be split.
 import AppKit
+import UniformTypeIdentifiers
 import QuartzCore
 
 private let kUserDefaultsTabItemMinWidthKey = "tabItemMinWidth"
@@ -300,7 +301,7 @@ class OakTabBarView: NSView, NSDraggingSource {
 				item.image   = TMFileReference.image(for: URL(fileURLWithPath: path), size: NSMakeSize(16, 16))
 				item.toolTip = (path as NSString).abbreviatingWithTildeInPath
 			} else {
-				let icon = NSWorkspace.shared.icon(forFileType: NSFileTypeForHFSTypeCode(OSType(kUnknownFSObjectIcon)))
+				let icon = NSWorkspace.shared.icon(for: .item) // the generic icon, as kUnknownFSObjectIcon was
 				icon.size = NSMakeSize(16, 16)
 				item.image = icon
 			}
@@ -321,9 +322,9 @@ class OakTabBarView: NSView, NSDraggingSource {
 		_tag = idx // performCloseTab: asks for [sender tag]
 
 		let closeOther = isAlternateKeyOrMouseEvent()
-		if closeOther, delegate?.responds(to: Selector(("performCloseOtherTabsXYZ:"))) == true {
+		if closeOther, delegate?.responds(to: #selector(OakTabBarViewDelegate.performCloseOtherTabsXYZ(_:))) == true {
 			delegate?.performCloseOtherTabsXYZ?(self)
-		} else if delegate?.responds(to: Selector(("performCloseTab:"))) == true {
+		} else if delegate?.responds(to: #selector(OakTabBarViewDelegate.performCloseTab(_:))) == true {
 			freezeTabFramesLeftOfIndex = _tag
 			delegate?.performCloseTab?(self)
 		}
@@ -332,7 +333,7 @@ class OakTabBarView: NSView, NSDraggingSource {
 	@objc func didSingleClickTabView(_ tabView: OakTabView) {
 		guard let tabItem = tabView.tabItem, let index = tabItems.firstIndex(of: tabItem) else { return }
 		selectedTabIndex = UInt(index)
-		delegate?.tabBarView?(self, shouldSelect: UInt(index))
+		_ = delegate?.tabBarView?(self, shouldSelect: UInt(index))
 	}
 
 	@objc func didDoubleClickTabView(_ tabView: OakTabView) {

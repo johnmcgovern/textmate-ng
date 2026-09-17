@@ -12,6 +12,8 @@
 // header for the reason given there.
 #import <TMBundleModel/TMBundleItem.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface BundleEditor : NSWindowController <NSBrowserDelegate>
 @property (class, readonly) BundleEditor* sharedInstance;
 
@@ -26,3 +28,5 @@
 
 - (IBAction)browserSelectionDidChange:(id)sender;
 @end
+
+NS_ASSUME_NONNULL_END

@@ -233,7 +233,7 @@ class OakEncodingPopUpButton: NSPopUpButton, @preconcurrency OakUserDefaultsObse
 // =========================================
 
 @objc(OakCustomizeEncodingsWindowController)
-class OakCustomizeEncodingsWindowController: NSWindowController, @preconcurrency NSTableViewDataSource, @preconcurrency NSTableViewDelegate {
+class OakCustomizeEncodingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
 	@objc static let sharedInstance = OakCustomizeEncodingsWindowController()
 
 	private var encodings: [NSMutableDictionary] = []
@@ -250,8 +250,8 @@ class OakCustomizeEncodingsWindowController: NSWindowController, @preconcurrency
 		encodings = OakEncodingSupport.charsets().map { charset in
 			NSMutableDictionary(dictionary: [
 				"enabled": enabledEncodings.contains(charset.code),
-				"name":    charset.name,
-				"charset": charset.code,
+				"name":    charset.name as Any,
+				"charset": charset.code as Any,
 			])
 		}
 	}

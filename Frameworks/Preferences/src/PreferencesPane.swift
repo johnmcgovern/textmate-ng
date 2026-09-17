@@ -25,9 +25,9 @@ class PreferencesPane: NSViewController, PreferencesPaneProtocol {
 	@objc private(set) var toolbarItemImage: NSImage?
 
 	/// binding key → NSUserDefaults key
-	var defaultsProperties: [String: String] = [:]
+	nonisolated(unsafe) var defaultsProperties: [String: String] = [:]
 	/// binding key → `settings` (.tm_properties) key
-	var tmProperties: [String: String] = [:]
+	nonisolated(unsafe) var tmProperties: [String: String] = [:]
 
 	init(nibName: NSNib.Name?, label: String, image: NSImage?) {
 		toolbarItemImage = image
@@ -41,6 +41,8 @@ class PreferencesPane: NSViewController, PreferencesPaneProtocol {
 		fatalError("init(coder:) is not supported — panes are created programmatically")
 	}
 
+	// The two maps are `nonisolated`: KVC reaches these NSObject overrides from
+	// a nonisolated context, and the maps are Sendable and set once in init.
 	override func setValue(_ value: Any?, forUndefinedKey key: String) {
 		if let defaultsKey = defaultsProperties[key] {
 			UserDefaults.standard.set(value, forKey: defaultsKey)

@@ -10,7 +10,7 @@ import AppKit
 // FileBrowserViewController.mm reaches all six controls by name to set
 // targets/actions and the actions-menu delegate.
 
-private func OakCreateImageButton(_ image: NSImage?) -> NSButton {
+@MainActor private func OakCreateImageButton(_ image: NSImage?) -> NSButton {
 	let res = NSButton()
 	res.setButtonType(.momentaryChange)
 	res.isBordered = false

@@ -20,7 +20,7 @@ import CoreText
 // The class's ObjC face is the hand declaration in OTVStatusBar.h (rule 23), and
 // tests reach the private controls through OakTextViewTesting.h.
 
-private func OakCreateTextField(_ label: String) -> NSTextField {
+@MainActor private func OakCreateTextField(_ label: String) -> NSTextField {
 	let res = NSTextField(frame: .zero)
 	res.isBordered      = false
 	res.isEditable      = false
@@ -38,7 +38,7 @@ private func OakCreateTextField(_ label: String) -> NSTextField {
 	return res
 }
 
-private func OakCreateStatusBarPopUpButton(_ initialItemTitle: String? = nil, _ accessibilityLabel: String? = nil) -> NSPopUpButton {
+@MainActor private func OakCreateStatusBarPopUpButton(_ initialItemTitle: String? = nil, _ accessibilityLabel: String? = nil) -> NSPopUpButton {
 	let res: NSPopUpButton = OakCreatePopUpButton(false, initialItemTitle, nil)
 	res.font       = OakStatusBarFont()
 	res.isBordered = false
@@ -46,7 +46,7 @@ private func OakCreateStatusBarPopUpButton(_ initialItemTitle: String? = nil, _ 
 	return res
 }
 
-private func OakCreateImageToggleButton(_ image: NSImage, _ accessibilityLabel: String) -> NSButton {
+@MainActor private func OakCreateImageToggleButton(_ image: NSImage, _ accessibilityLabel: String) -> NSButton {
 	let res = NSButton()
 	res.setAccessibilityLabel(accessibilityLabel)
 	res.setButtonType(.toggle)
@@ -57,7 +57,7 @@ private func OakCreateImageToggleButton(_ image: NSImage, _ accessibilityLabel: 
 }
 
 @objc(OTVStatusBar)
-class OTVStatusBar: NSVisualEffectView, @preconcurrency NSMenuDelegate {
+class OTVStatusBar: NSVisualEffectView, NSMenuDelegate {
 	// None of these action selectors is declared in a header — they are dispatched
 	// through the responder chain or against `target` — so #selector cannot name
 	// them and NSSelectorFromString has to.

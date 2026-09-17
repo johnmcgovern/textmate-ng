@@ -18,7 +18,10 @@ extension NSImage {
 			return nil
 		}
 
-		let bundle = Bundle(for: type(of: aClass as AnyObject) as! AnyClass)
+		// The ObjC++ took `Class`; the Swift takes Any? so an instance works too,
+		// and a class object is used as itself rather than through its metaclass.
+		let cls: AnyClass = (aClass as? AnyClass) ?? type(of: aClass as AnyObject)
+		let bundle = Bundle(for: cls)
 		let name = "\(bundle.bundleIdentifier ?? "").\(aName)"
 
 		if let res = bundleImageCache[name] {

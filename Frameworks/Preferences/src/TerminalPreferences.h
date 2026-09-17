@@ -16,7 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
 // (the nib tests) resolves -init to NSViewController's, which chains to
 // -initWithNibName:bundle: and traps with "use of unimplemented initializer".
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
-- (instancetype)initWithNibName:(NSNibName)aNibName bundle:(NSBundle*)aBundle NS_UNAVAILABLE;
+- (instancetype)initWithNibName:(nullable NSNibName)aNibName bundle:(nullable NSBundle*)aBundle NS_UNAVAILABLE; // nullable, as NSViewController declares them; the header assumes nonnull
 - (instancetype)initWithCoder:(NSCoder*)aCoder NS_UNAVAILABLE;
 
 + (void)updateMateIfRequired;

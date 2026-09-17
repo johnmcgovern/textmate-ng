@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import os
 
 // One object per file URL, shared by everything that displays that file: it
@@ -242,7 +243,7 @@ class TMFileReference: NSObject {
 			var image: NSImage?
 
 			if scmStatus == TMSCMStatus.deleted {
-				image = NSWorkspace.shared.icon(forFileType: NSFileTypeForHFSTypeCode(OSType(kUnknownFSObjectIcon)))
+				image = NSWorkspace.shared.icon(for: .item) // the generic icon, as kUnknownFSObjectIcon was
 			} else if let url, url.isFileURL {
 				if !url.hasDirectoryPath {
 					// Longest-suffix first: "foo.tar.gz" should match a "tar.gz"
@@ -273,9 +274,9 @@ class TMFileReference: NSObject {
 			} else if url?.scheme == "computer" {
 				image = NSImage(named: NSImage.computerName)
 			} else if url?.hasDirectoryPath == true {
-				image = NSWorkspace.shared.icon(forFileType: NSFileTypeForHFSTypeCode(OSType(kGenericFolderIcon)))
+				image = NSWorkspace.shared.icon(for: .folder)
 			} else {
-				image = NSWorkspace.shared.icon(forFileType: NSFileTypeForHFSTypeCode(OSType(kGenericDocumentIcon)))
+				image = NSWorkspace.shared.icon(for: .data) // the generic document icon, as kGenericDocumentIcon was
 			}
 
 			image?.draw(in: dstRect, from: .zero, operation: .copy, fraction: 1)

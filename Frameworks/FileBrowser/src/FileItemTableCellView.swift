@@ -44,12 +44,16 @@ private final class FileItemFormatter: Formatter {
 		fatalError("init(coder:) has not been implemented")
 	}
 
+	// NSFormatter's methods are nonisolated; the cell asks on the main thread,
+	// and the formatter itself is not Sendable, so the hop names it (rule 26).
 	override func string(for obj: Any?) -> String? {
-		return (tableCellView?.objectValue as? FileItem)?.editingAndDisplayName.last as? String
+		nonisolated(unsafe) let formatter = self
+		return MainActor.assumeIsolated { (formatter.tableCellView?.objectValue as? FileItem)?.editingAndDisplayName.last as? String }
 	}
 
 	override func editingString(for obj: Any) -> String {
-		return ((tableCellView?.objectValue as? FileItem)?.editingAndDisplayName.first as? String) ?? ""
+		nonisolated(unsafe) let formatter = self
+		return MainActor.assumeIsolated { ((formatter.tableCellView?.objectValue as? FileItem)?.editingAndDisplayName.first as? String) ?? "" }
 	}
 
 	override func getObjectValue(_ obj: AutoreleasingUnsafeMutablePointer<AnyObject?>?, for string: String, errorDescription error: AutoreleasingUnsafeMutablePointer<NSString?>?) -> Bool {
@@ -260,10 +264,9 @@ class FileItemTableCellView: NSTableCellView, NSTextFieldDelegate {
 
 	override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
 		if keyPath == "objectValue.URL" {
-			if let url = change?[.newKey] as? NSURL {
-				fileReference = TMFileReference(url: url as URL)
-			} else {
-				fileReference = nil
+			let url = (change?[.newKey] as? NSURL) as URL? // a value, which can cross into the isolated closure
+			MainActor.assumeIsolated { // KVO from the binding, on the main thread
+				fileReference = url.map { TMFileReference(url: $0) }
 			}
 		} else {
 			super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)

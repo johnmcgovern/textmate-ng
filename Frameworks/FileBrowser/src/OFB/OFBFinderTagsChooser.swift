@@ -146,7 +146,7 @@ class OFBFinderTagsChooser: NSView {
 			let isRemovable = selectedTagsToRemove.contains(tag)
 
 			let button = OakRolloverButton(frame: .zero)
-			button.setAccessibilityLabel("\(isRemovable ? "Remove" : "Add") tag \(tag.displayName ?? "")")
+			button.setAccessibilityLabel("\(isRemovable ? "Remove" : "Add") tag \(tag.displayName)")
 
 			button.regularImage  = finderTagSwatchImage(size: NSMakeSize(SwatchButtonWidth, SwatchButtonWidth), labelColor: tag.labelColor, selected: isSelected, removable: isRemovable, mouseOver: false)
 			button.pressedImage  = finderTagSwatchImage(size: NSMakeSize(SwatchButtonWidth, SwatchButtonWidth), labelColor: tag.labelColor, selected: isSelected, removable: isRemovable, mouseOver: true)
@@ -169,8 +169,8 @@ class OFBFinderTagsChooser: NSView {
 			addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|-[tagTextField]|", options: [], metrics: nil, views: views))
 			addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|-[tagButtons]-(>=20)-|", options: [], metrics: nil, views: views))
 		} else {
-			addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[tagTextField]|", options: [], metrics: nil, views: ["tagTextField": tagTextField]))
-			addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|-[tagTextField]|", options: [], metrics: nil, views: ["tagTextField": tagTextField]))
+			addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[tagTextField]|", options: [], metrics: nil, views: ["tagTextField": tagTextField!]))
+			addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|-[tagTextField]|", options: [], metrics: nil, views: ["tagTextField": tagTextField!]))
 		}
 
 		setFrameSize(fittingSize)
@@ -193,9 +193,9 @@ class OFBFinderTagsChooser: NSView {
 		let tag = favoriteFinderTags[button.tag]
 		hoverTag = tag
 		if selectedTagsToRemove.contains(tag) {
-			tagTextField.stringValue = "Remove “\(tag.displayName ?? "")”"
+			tagTextField.stringValue = "Remove “\(tag.displayName)”"
 		} else {
-			tagTextField.stringValue = "Add “\(tag.displayName ?? "")”"
+			tagTextField.stringValue = "Add “\(tag.displayName)”"
 		}
 	}
 

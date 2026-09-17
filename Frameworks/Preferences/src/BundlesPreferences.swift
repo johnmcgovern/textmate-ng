@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 private let kTableColumnIdentifierInstalled   = NSUserInterfaceItemIdentifier("Installed")
 private let kTableColumnIdentifierBundleName  = NSUserInterfaceItemIdentifier("BundleName")
@@ -56,7 +57,7 @@ private let kTableColumnIdentifierDescription = NSUserInterfaceItemIdentifier("D
 
 		BundlesManager.sharedInstance.installBundles([bundle]) { [weak self] installed in
 			guard let self else { return }
-			let bundles = installed ?? []
+			let bundles = installed
 			let name = bundle.name ?? ""
 			if !bundle.isInstalled {
 				self.bundleInstallActivityText = "Error installing ‘\(name)’ bundle."
@@ -143,7 +144,7 @@ extension TMBundle {
 	}
 
 	override var toolbarItemImage: NSImage? {
-		NSWorkspace.shared.icon(forFileType: "tmbundle")
+		NSWorkspace.shared.icon(for: UTType(filenameExtension: "tmbundle") ?? .bundle)
 	}
 
 	init() {
@@ -167,7 +168,7 @@ extension TMBundle {
 
 	override func loadView() {
 		var categories = Set<String>()
-		for bundle in BundlesManager.sharedInstance.bundles ?? [] {
+		for bundle in BundlesManager.sharedInstance.bundles {
 			if let category = bundle.category {
 				categories.insert(category)
 			}

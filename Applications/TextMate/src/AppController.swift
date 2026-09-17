@@ -34,6 +34,14 @@ private let log = Logger(subsystem: "com.j23software.TextMate-NG", category: "sw
 // can never export one (rule 19), and after the flip every caller is Swift — the
 // two here and the three in AppControllerDocuments.swift — so it needs no ObjC
 // declaration at all and OakOpenDocuments.h is gone.
+// A notification token a @Sendable observer block can read and clear; the
+// block cannot capture a `var` it also mutates. Every use is on the main
+// thread, where NSApp posts (rule 26). DocumentWindowController has its own
+// copy: the app's Swift cannot import a framework's Swift.
+final class ObserverToken: @unchecked Sendable {
+	var value: NSObjectProtocol?
+}
+
 @MainActor
 func OakOpenDocuments(_ paths: [String], treatFilePackageAsFolder: Bool = false) {
 	let bundleExtensions = ["tmbundle", "tmcommand", "tmdragcommand", "tmlanguage", "tmmacro", "tmpreferences", "tmsnippet", "tmtheme"]
@@ -116,10 +124,10 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 				return index == -1 ? nil : menu.items[index]
 			}
 
-			let backMenuItem       = itemWithAction(fileBrowserMenu, Selector(("goBack:")))
-			let forwardMenuItem    = itemWithAction(fileBrowserMenu, Selector(("goForward:")))
-			let shiftLeftMenuItem  = itemWithAction(textMenu,        Selector(("shiftLeft:")))
-			let shiftRightMenuItem = itemWithAction(textMenu,        Selector(("shiftRight:")))
+			let backMenuItem       = itemWithAction(fileBrowserMenu, NSSelectorFromString("goBack:"))
+			let forwardMenuItem    = itemWithAction(fileBrowserMenu, NSSelectorFromString("goForward:"))
+			let shiftLeftMenuItem  = itemWithAction(textMenu,        NSSelectorFromString("shiftLeft:"))
+			let shiftRightMenuItem = itemWithAction(textMenu,        NSSelectorFromString("shiftRight:"))
 
 			guard let backMenuItem, let forwardMenuItem, let shiftLeftMenuItem, let shiftRightMenuItem else { return }
 
@@ -173,9 +181,9 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 		var foundBackAndForwardActions = false
 		var responder = NSApp.keyWindow?.firstResponder
 		while let current = responder, !foundBackAndForwardActions {
-			if current.responds(to: Selector(("shiftLeft:"))) {
+			if current.responds(to: NSSelectorFromString("shiftLeft:")) {
 				break
-			} else if current.responds(to: Selector(("goBack:"))) {
+			} else if current.responds(to: NSSelectorFromString("goBack:")) {
 				foundBackAndForwardActions = true
 			}
 			responder = current.nextResponder
@@ -361,9 +369,9 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 				}
 
 				if !changedWindows.isEmpty {
-					nonisolated(unsafe) var token: NSObjectProtocol?
-					token = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: NSApp, queue: nil) { _ in
-						if let token { NotificationCenter.default.removeObserver(token) }
+					let token = ObserverToken()
+					token.value = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: NSApp, queue: nil) { _ in
+						if let observer = token.value { NotificationCenter.default.removeObserver(observer) }
 						DispatchQueue.main.async {
 							MainActor.assumeIsolated {
 								for window in changedWindows {
@@ -421,7 +429,7 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 		// returned, which is an OakTextView today but is not typed as one here or
 		// there. Assigning nil to -stringValue would raise, so the optional binding
 		// also removes a latent crash on a target whose selection is unset.
-		if let target = NSApp.target(forAction: Selector(("selectionString"))) as AnyObject?,
+		if let target = NSApp.target(forAction: NSSelectorFromString("selectionString")) as AnyObject?,
 		   let selection = target.value(forKey: "selectionString") as? String {
 			goToLineTextField.stringValue = selection
 		}
@@ -430,7 +438,7 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 
 	@IBAction func performGoToLine(_ sender: Any?) {
 		goToLinePanel.orderOut(self)
-		NSApp.sendAction(Selector(("selectAndCenter:")), to: nil, from: goToLineTextField.stringValue)
+		NSApp.sendAction(NSSelectorFromString("selectAndCenter:"), to: nil, from: goToLineTextField.stringValue)
 	}
 
 	@IBAction func performSoftwareUpdateCheck(_ sender: Any?) {
@@ -470,11 +478,11 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 		chooser.action     = #selector(bundleItemChooserDidSelectItems(_:))
 		chooser.editAction = #selector(editBundleItem(_:))
 
-		let textView = NSApp.target(forAction: Selector(("scopeContext"))) as? NSView
+		let textView = NSApp.target(forAction: NSSelectorFromString("scopeContext")) as? NSView
 		chooser.scope        = AppControllerSupport.scopeContext(forTarget: textView)
 		chooser.hasSelection = AppControllerSupport.targetHasSelection(textView)
 
-		if let controller = NSApp.target(forAction: Selector(("selectedDocument"))) as? DocumentWindowController {
+		if let controller = NSApp.target(forAction: NSSelectorFromString("selectedDocument")) as? DocumentWindowController {
 			let doc = controller.selectedDocument
 			chooser.path      = doc?.path
 			chooser.directory = (doc?.path as NSString?)?.deletingLastPathComponent ?? doc?.directory
@@ -495,7 +503,7 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 	@objc func bundleItemChooserDidSelectItems(_ sender: Any?) {
 		for item in (sender as? OakChooser)?.selectedItems ?? [] {
 			if let uuid = (item as AnyObject).value(forKey: "uuid") {
-				NSApp.sendAction(Selector(("performBundleItemWithUUIDStringFrom:")), to: nil, from: ["representedObject": uuid])
+				NSApp.sendAction(NSSelectorFromString("performBundleItemWithUUIDStringFrom:"), to: nil, from: ["representedObject": uuid])
 			}
 		}
 	}
@@ -534,12 +542,12 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 				enabled = false
 			}
 		} else if item.action == #selector(orderFrontGoToLinePanel(_:)) {
-			enabled = NSApp.target(forAction: Selector(("setSelectionString:"))) != nil
-		} else if item.action == Selector(("performBundleItemWithUUIDStringFrom:")) {
+			enabled = NSApp.target(forAction: NSSelectorFromString("setSelectionString:")) != nil
+		} else if item.action == NSSelectorFromString("performBundleItemWithUUIDStringFrom:") {
 			let keyDelegate = NSApp.keyWindow?.delegate
-			let menuItemValidator: Any? = keyDelegate?.responds(to: Selector(("performBundleItem:"))) == true
+			let menuItemValidator: Any? = keyDelegate?.responds(to: NSSelectorFromString("performBundleItem:")) == true
 				? keyDelegate
-				: NSApp.target(forAction: Selector(("performBundleItem:")))
+				: NSApp.target(forAction: NSSelectorFromString("performBundleItem:"))
 			if let validator = menuItemValidator as? NSMenuItemValidation, (validator as AnyObject) !== self {
 				enabled = validator.validateMenuItem(item)
 			}

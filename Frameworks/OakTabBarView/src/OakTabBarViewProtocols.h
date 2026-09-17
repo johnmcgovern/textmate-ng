@@ -21,8 +21,12 @@
 // Methods sent to the delegate which the tab was dragged to
 - (BOOL)performDropOfTabItem:(NSUUID*)tabItemUUID fromTabBar:(OakTabBarView*)sourceTabBar index:(NSUInteger)dragIndex toTabBar:(OakTabBarView*)destTabBar index:(NSUInteger)droppedIndex operation:(NSDragOperation)operation;
 
-- (void)performCloseTab:(OakTabBarView*)sender;
-- (void)performCloseOtherTabsXYZ:(OakTabBarView*)sender;
+// `id`, not OakTabBarView*: the tab bar passes itself, but the same actions
+// arrive from menu items too, and the Swift implementations take Any? for that
+// reason. With the narrower type the compiler saw the optional requirements as
+// unsatisfied and warned that the implementations "nearly match".
+- (void)performCloseTab:(id)sender;
+- (void)performCloseOtherTabsXYZ:(id)sender;
 @end
 
 @protocol OakTabBarViewDataSource <NSObject>

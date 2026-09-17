@@ -99,7 +99,7 @@ private func canonicalURL(_ url: URL?, isDirectory: Bool = true) -> URL? {
 }
 
 @objc(OakOpenWithMenuDelegate)
-class OakOpenWithMenuDelegate: NSObject, @preconcurrency NSMenuDelegate {
+class OakOpenWithMenuDelegate: NSObject, NSMenuDelegate {
 	@objc private(set) var documentURLs: [URL]
 	private var _applications: [OakOpenWithApplicationInfo]?
 

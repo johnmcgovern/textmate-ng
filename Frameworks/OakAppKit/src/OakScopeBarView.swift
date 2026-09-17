@@ -5,7 +5,7 @@
 // binding plumbing that makes the selected index round-trip.
 import AppKit
 
-private func OakCreateScopeButton(_ label: String, _ tag: Int, _ action: Selector, _ target: AnyObject?, _ controlSize: NSControl.ControlSize) -> NSButton {
+@MainActor private func OakCreateScopeButton(_ label: String, _ tag: Int, _ action: Selector, _ target: AnyObject?, _ controlSize: NSControl.ControlSize) -> NSButton {
 	let res = NSButton(frame: .zero)
 	res.setAccessibilityRole(.radioButton)
 	res.bezelStyle                      = .recessed

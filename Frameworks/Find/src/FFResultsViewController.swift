@@ -94,9 +94,17 @@ class OakTableCellView: NSTableCellView {
 	}
 
 	override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-		if let keyPath, observeKeyPaths.contains(keyPath) {
-			setValue((object as? NSObject)?.value(forKey: keyPath), forKey: keyPath)
-		} else {
+		// KVO from the observed object's main-thread setters; the forwarded value
+		// is whatever it holds, which the type system cannot call Sendable (rule 26).
+		nonisolated(unsafe) let forwarded = (object as? NSObject).flatMap { keyPath.flatMap($0.value(forKey:)) }
+		let handled = MainActor.assumeIsolated { () -> Bool in
+			if let keyPath, observeKeyPaths.contains(keyPath) {
+				setValue(forwarded, forKey: keyPath)
+				return true
+			}
+			return false
+		}
+		if !handled {
 			super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
 		}
 	}
@@ -146,14 +154,14 @@ class OakSearchResultsMatchCellView: OakTableCellView {
 		let replacement = (item.readOnly || item.excluded || !showReplacementPreviews) ? item.replaceString : (replaceString ?? "")
 		var res = item.excerpt(withReplacement: replacement, font: textField?.font)
 
-		if backgroundStyle == .dark, let current = res {
+		if backgroundStyle == .emphasized, let current = res {
 			let str = NSMutableAttributedString(attributedString: current)
 			str.enumerateAttributes(in: NSRange(location: 0, length: str.length), options: NSAttributedString.EnumerationOptions.longestEffectiveRangeNotRequired) { (attrs: [NSAttributedString.Key: Any], range: NSRange, _) in
 				if attrs[.backgroundColor] != nil {
-					str.addAttribute(.backgroundColor, value: NSColor.tmMatchedTextSelectedBackground(), range: range)
+					str.addAttribute(.backgroundColor, value: NSColor.tmMatchedTextSelectedBackground()!, range: range)
 				}
 				if attrs[.underlineColor] != nil {
-					str.addAttribute(.underlineColor, value: NSColor.tmMatchedTextSelectedUnderline(), range: range)
+					str.addAttribute(.underlineColor, value: NSColor.tmMatchedTextSelectedUnderline()!, range: range)
 				}
 			}
 			str.addAttribute(.foregroundColor, value: NSColor.alternateSelectedControlTextColor, range: NSRange(location: 0, length: str.length))
@@ -391,9 +399,9 @@ class FFResultsViewController: NSViewController, NSOutlineViewDataSource, NSOutl
 		let contentView = NSView(frame: .zero)
 
 		let views: [String: Any] = [
-			"topDivider":     OakCreateNSBoxSeparator(),
+			"topDivider":     OakCreateNSBoxSeparator()!,
 			"scrollView":     scroll,
-			"bottomDividier": OakCreateNSBoxSeparator(),
+			"bottomDividier": OakCreateNSBoxSeparator()!,
 		]
 
 		OakAddAutoLayoutViewsToSuperview(views.values.compactMap { $0 as? NSView }, contentView)

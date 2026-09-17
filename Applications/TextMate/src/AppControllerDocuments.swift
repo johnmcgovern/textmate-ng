@@ -128,7 +128,7 @@ extension AppController {
 			}
 		} else if let selection {
 			for win in NSApp.orderedWindows {
-				var foundTextView = win.firstResponder?.tryToPerform(Selector(("setSelectionString:")), with: selection) ?? false
+				var foundTextView = win.firstResponder?.tryToPerform(NSSelectorFromString("setSelectionString:"), with: selection) ?? false
 				if !foundTextView {
 					var allViews = win.contentView?.subviews ?? []
 					var i = 0
@@ -138,8 +138,8 @@ extension AppController {
 					}
 
 					for view in allViews {
-						if view.responds(to: Selector(("setSelectionString:"))) {
-							view.perform(Selector(("setSelectionString:")), with: selection)
+						if view.responds(to: NSSelectorFromString("setSelectionString:")) {
+							view.perform(NSSelectorFromString("setSelectionString:"), with: selection)
 							win.makeFirstResponder(view)
 							foundTextView = true
 							break

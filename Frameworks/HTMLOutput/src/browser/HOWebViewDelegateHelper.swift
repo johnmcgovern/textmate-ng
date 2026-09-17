@@ -21,7 +21,7 @@ import WebKit
 // (rule 23).
 
 @objc(HOWebViewDelegateHelper)
-class HOWebViewDelegateHelper: NSObject, @preconcurrency WKUIDelegate {
+class HOWebViewDelegateHelper: NSObject, WKUIDelegate {
 	// Assigned but never read, and kept as it was.
 	//
 	// HOBrowserView sets this to its status bar. Nothing here reads it: the method
@@ -37,7 +37,7 @@ class HOWebViewDelegateHelper: NSObject, @preconcurrency WKUIDelegate {
 	// = WKUIDelegate =
 	// ================
 
-	func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+	func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor () -> Void) {
 		let alert = NSAlert()
 		alert.messageText     = NSLocalizedString("Script Message", comment: "JavaScript alert title")
 		alert.informativeText = message
@@ -57,7 +57,7 @@ class HOWebViewDelegateHelper: NSObject, @preconcurrency WKUIDelegate {
 		}
 	}
 
-	func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+	func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (Bool) -> Void) {
 		let alert = NSAlert()
 		alert.messageText     = NSLocalizedString("Script Message", comment: "JavaScript alert title")
 		alert.informativeText = message
@@ -76,7 +76,7 @@ class HOWebViewDelegateHelper: NSObject, @preconcurrency WKUIDelegate {
 		}
 	}
 
-	func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+	func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor ([URL]?) -> Void) {
 		let panel = NSOpenPanel()
 		panel.directoryURL            = URL(fileURLWithPath: NSHomeDirectory())
 		panel.allowsMultipleSelection = parameters.allowsMultipleSelection

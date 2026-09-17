@@ -47,6 +47,11 @@ extension FileBrowserViewController {
 	// what t_file_browser_view_controller.mm pins. Returning NSNull() instead
 	// compiles, reads as harmless, and fails that test: rule 33, caught by the one
 	// assertion written for it.
+	// `Any!`, not the protocol's `Any`: the ObjC++ answered nil out of range and
+	// t_file_browser_view_controller pins that answer (rule 33). The compiler
+	// warns that the optionality differs from the protocol's; that warning is
+	// the price of keeping the pinned behaviour, and is the one Swift warning
+	// left on purpose in this framework.
 	func outlineView(_ outlineView: NSOutlineView, child childIndex: Int, ofItem item: Any?) -> Any! {
 		// The ObjC++ subscripted a possibly-nil array and answered nil; a literal
 		// translation would trap, so the nil is explicit. AppKit is not supposed

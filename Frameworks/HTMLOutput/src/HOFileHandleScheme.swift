@@ -215,7 +215,7 @@ private final class HOFileHandleTask: @unchecked Sendable {
 
 @objc(HOFileHandleSchemeHandler)
 @MainActor
-class HOFileHandleSchemeHandler: NSObject, @preconcurrency WKURLSchemeHandler {
+class HOFileHandleSchemeHandler: NSObject, WKURLSchemeHandler {
 	private var tasks: [ObjectIdentifier: HOFileHandleTask] = [:]
 	// In-flight synchronous TextMate.system() calls.
 	private var pendingSyncTasks: Set<ObjectIdentifier> = []

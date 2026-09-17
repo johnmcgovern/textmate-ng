@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 // The Bundle Editor window: an NSBrowser over the bundle tree on the left, the
 // selected item's body in a text view below it, and that item's properties in a
@@ -453,10 +454,11 @@ class BundleEditor: NSWindowController {
 			default:          break
 		}
 
-		if bundleItem.storedPropertiesEqual(properties as! [AnyHashable: Any]) {
+		let storedProperties = properties as! [AnyHashable: Any]
+		if bundleItem.storedPropertiesEqual(storedProperties) {
 			changes.removeValue(forKey: bundleItem)
 		} else {
-			changes[bundleItem] = properties as! [AnyHashable: Any]
+			changes[bundleItem] = storedProperties
 		}
 
 		propertiesChanged = false
@@ -582,10 +584,12 @@ class BundleEditor: NSWindowController {
 	}
 
 	override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-		if keyPath != "documentEdited" {
-			propertiesChanged = true
+		MainActor.assumeIsolated { // KVO from the editor's own bindings, on the main thread (rule 26)
+			if keyPath != "documentEdited" {
+				propertiesChanged = true
+			}
+			didChangeModifiedState()
 		}
-		didChangeModifiedState()
 	}
 
 	// MARK: - Showing an item
@@ -658,7 +662,9 @@ class BundleEditor: NSWindowController {
 			window?.representedURL = URL(fileURLWithPath: newItem.paths[0])
 		} else {
 			window?.representedFilename = NSHomeDirectory()
-			window?.standardWindowButton(.documentIconButton)?.image = NSWorkspace.shared.icon(forFileType: info.fileType)
+			// info.fileType is a UTI or an extension, as -iconForFileType: accepted
+			// either; the generic icon if it is neither.
+			window?.standardWindowButton(.documentIconButton)?.image = NSWorkspace.shared.icon(for: UTType(info.fileType) ?? UTType(filenameExtension: info.fileType) ?? .item)
 		}
 
 		let properties = (pending as? [String: Any]) ?? (newItem.properties as? [String: Any]) ?? [:]

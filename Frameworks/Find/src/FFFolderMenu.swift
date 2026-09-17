@@ -22,7 +22,7 @@ import AppKit
 
 @objc(FFFolderMenu)
 @MainActor
-class FFFolderMenu: NSObject, @preconcurrency NSMenuDelegate {
+class FFFolderMenu: NSObject, NSMenuDelegate {
 	@objc static let sharedInstance = FFFolderMenu()
 
 	// Neither selector has a method in this module to point #selector at. -nop:

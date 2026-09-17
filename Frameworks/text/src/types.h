@@ -116,7 +116,7 @@ namespace text
 			} while(to != std::string::npos);
 
 			if(empty())
-				ranges.push_back(range_t(0));
+				ranges.push_back(range_t()); // was range_t(0), which chose the std::string constructor with a null pointer
 		}
 
 		operator std::string () const                    { return text::join(ranges, "&"); }

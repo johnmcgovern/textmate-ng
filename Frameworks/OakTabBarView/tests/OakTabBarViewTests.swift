@@ -60,12 +60,14 @@ final class SpyTabDelegate: NSObject, OakTabBarViewDelegate {
 	var doubleClickedIndexes: [UInt] = []
 	var didRequestNewTab = false
 
-	func performCloseTab(_ sender: OakTabBarView) {
-		closedTags.append(sender.tag)
+	// Any?, as the protocol declares `id`: the tab bar passes itself, menu items
+	// pass themselves, and the implementations look for the tab bar.
+	func performCloseTab(_ sender: Any?) {
+		closedTags.append((sender as? OakTabBarView)?.tag ?? -1)
 	}
 
-	func performCloseOtherTabsXYZ(_ sender: OakTabBarView) {
-		closedOtherTags.append(sender.tag)
+	func performCloseOtherTabsXYZ(_ sender: Any?) {
+		closedOtherTags.append((sender as? OakTabBarView)?.tag ?? -1)
 	}
 
 	func tabBarView(_ aTabBarView: OakTabBarView, shouldSelect anIndex: UInt) -> Bool {

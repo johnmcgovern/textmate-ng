@@ -96,7 +96,9 @@ private class OakPasteboardSelectorTableViewHelper: NSResponder, NSTableViewData
 	required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
 	deinit {
-		setTableView(nil)
+		MainActor.assumeIsolated { // the selector dies on the main thread (rule 26)
+			setTableView(nil)
+		}
 	}
 
 	func numberOfRows(in aTableView: NSTableView) -> Int {

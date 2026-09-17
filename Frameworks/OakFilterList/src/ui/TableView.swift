@@ -47,7 +47,7 @@ class OakInactiveTableRowView: NSTableRowView {
 	}
 
 	override var interiorBackgroundStyle: NSView.BackgroundStyle {
-		effectiveDrawAsHighlighted ? .dark : super.interiorBackgroundStyle
+		effectiveDrawAsHighlighted ? .emphasized : super.interiorBackgroundStyle
 	}
 
 	override func drawSelection(in dirtyRect: NSRect) {
@@ -56,7 +56,7 @@ class OakInactiveTableRowView: NSTableRowView {
 			return
 		}
 
-		NSColor.alternateSelectedControlColor.set()
+		NSColor.selectedContentBackgroundColor.set()
 		bounds.insetBy(dx: 0, dy: 0.5).offsetBy(dx: 0, dy: -0.5).intersection(dirtyRect).fill()
 	}
 }

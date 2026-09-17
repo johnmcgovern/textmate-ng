@@ -87,8 +87,11 @@ class FFDocumentSearch: NSObject, @unchecked Sendable {
 		let needle = searchString
 		let findOptions = self.options
 
+		// Read only on the background queue and never mutated after this point,
+		// which the dictionary's type cannot say (rule 26; FileChooser's shape).
+		nonisolated(unsafe) let searchOptions = options as? [AnyHashable: Any]
 		DispatchQueue.global(qos: .default).async { [self] in
-			OakDocumentController.sharedInstance.enumerateDocuments(atPaths: searchPaths, options: options as? [AnyHashable: Any]) { document, stop in
+			OakDocumentController.sharedInstance.enumerateDocuments(atPaths: searchPaths, options: searchOptions) { document, stop in
 				let cancelled = searchToken != self.lastSearchToken
 				stop?.pointee = ObjCBool(cancelled)
 				if cancelled {

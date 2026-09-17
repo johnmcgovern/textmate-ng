@@ -172,6 +172,9 @@ class OakTransitionViewController: NSViewController {
 		}
 
 		if let window = window, window.isVisible {
+			// The animation completion runs on the main thread; the closure is not
+			// Sendable and the capture says so (rule 26).
+			nonisolated(unsafe) let unsafeCompletion = animationCompletion
 			NSAnimationContext.runAnimationGroup({ context in
 				context.allowsImplicitAnimation = true
 				context.duration                = 0.2
@@ -179,7 +182,7 @@ class OakTransitionViewController: NSViewController {
 				// animation group, leaving the frame change to the implicit animation
 				// rather than -setFrame:display:animate:.
 				animationBody(false)
-			}, completionHandler: animationCompletion)
+			}, completionHandler: { unsafeCompletion() })
 		} else {
 			animationBody(false)
 			animationCompletion()

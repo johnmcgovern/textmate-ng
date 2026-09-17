@@ -305,17 +305,27 @@ class BundleItemChooser: OakChooser {
 	}
 
 	override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+		// Both observations are of main-thread objects (the recorder, the window's
+		// first responder), so KVO delivers on the main thread (rule 26). What the
+		// main-actor part needs is pulled out first as Sendable values: the change
+		// dictionary itself cannot cross into the isolated closure.
 		if context == Self.recordingObserverContext {
-			let isRecording = change?[.newKey] as? NSNumber
-			drawTableViewAsHighlighted = !(isRecording?.boolValue ?? false)
+			let isRecording = (change?[.newKey] as? NSNumber)?.boolValue ?? false
+			MainActor.assumeIsolated {
+				drawTableViewAsHighlighted = !isRecording
+			}
 		} else {
 			super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
 
-			if let view = _keyEquivalentView, !view.recording, keyPath == "firstResponder" {
-				let oldIsKeyEquivalentView = (change?[.oldKey] as? NSObject) === view
-				let newIsKeyEquivalentView = (change?[.newKey] as? NSObject) === view
-				if oldIsKeyEquivalentView != newIsKeyEquivalentView {
-					drawTableViewAsHighlighted = newIsKeyEquivalentView
+			let oldID = (change?[.oldKey] as? NSObject).map(ObjectIdentifier.init)
+			let newID = (change?[.newKey] as? NSObject).map(ObjectIdentifier.init)
+			MainActor.assumeIsolated {
+				if let view = _keyEquivalentView, !view.recording, keyPath == "firstResponder" {
+					let oldIsKeyEquivalentView = oldID == ObjectIdentifier(view)
+					let newIsKeyEquivalentView = newID == ObjectIdentifier(view)
+					if oldIsKeyEquivalentView != newIsKeyEquivalentView {
+						drawTableViewAsHighlighted = newIsKeyEquivalentView
+					}
 				}
 			}
 		}

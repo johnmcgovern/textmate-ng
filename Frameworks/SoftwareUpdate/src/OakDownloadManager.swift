@@ -43,7 +43,7 @@ private func GetHardwareInfo(_ field: Int32, isInteger: Bool = false) -> String 
 		let value = buf.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
 		return "\(value)"
 	}
-	return String(cString: buf)
+	return String(decoding: buf.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
 }
 
 // ==========================
@@ -86,7 +86,10 @@ private enum ArchiveVerification {
 	case digest(sha256: String, size: Int64)
 }
 
-private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSessionDataDelegate {
+// @unchecked Sendable because URLSessionDelegate requires Sendable now; every
+// delegate callback arrives on the session's delegate queue, which is the main
+// queue (see the session below), so the two mutable fields are never raced.
+private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSessionDataDelegate, @unchecked Sendable {
 	private let verification: ArchiveVerification
 	private var signee: String?
 	private var signature: String?
@@ -335,14 +338,18 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 // = OakDownloadManager =
 // ======================
 
+// @unchecked Sendable for the reason SoftwareUpdate is: the manager's methods
+// are called from the main thread and from URLSession.shared's completion
+// queue, and it holds no mutable state of its own (concurrency audit,
+// 2026-09-16).
 @objc(OakDownloadManager)
-class OakDownloadManager: NSObject {
+class OakDownloadManager: NSObject, @unchecked Sendable {
 	// nonisolated(unsafe), matching BundleInstallHelper and KEventManager: this is
 	// not a MainActor object — -downloadFileAtURL:… runs its completion on a
 	// URLSession queue — and the ObjC++ singleton it replaces was a plain
 	// function-local static with an unsynchronised lazily-computed ivar. The
 	// annotation states that unchanged situation rather than introducing one.
-	@objc nonisolated(unsafe) static let sharedInstance = OakDownloadManager()
+	@objc static let sharedInstance = OakDownloadManager() // a plain static: the class is Sendable
 
 	private var userAgentStringStorage: String?
 
@@ -381,6 +388,9 @@ class OakDownloadManager: NSObject {
 			log.log("GET \(serverURL.absoluteString, privacy: .public) using entity tag \(entityTag, privacy: .public)")
 		}
 
+		// The completion runs on URLSession.shared's queue; the handler is not
+		// Sendable, and the capture says so before the closure that carries it.
+		nonisolated(unsafe) let unsafeHandler = completionHandler
 		let dataTask = URLSession.shared.dataTask(with: request) { data, response, error in
 			var error = error
 			var wasUpdated = false
@@ -422,7 +432,7 @@ class OakDownloadManager: NSObject {
 				}
 			}
 
-			completionHandler(wasUpdated, error)
+			unsafeHandler(wasUpdated, error)
 		}
 		dataTask.resume()
 	}
@@ -472,8 +482,10 @@ class OakDownloadManager: NSObject {
 		task.standardOutput = outputPipe
 		task.standardError  = errorPipe
 
-		var outputData = Data()
-		var errorData  = Data()
+		// Each written by exactly one of the two queues below and read only after
+		// the group has emptied; the annotation states that ordering (rule 26).
+		nonisolated(unsafe) var outputData = Data()
+		nonisolated(unsafe) var errorData  = Data()
 		let group = DispatchGroup()
 
 		group.enter()

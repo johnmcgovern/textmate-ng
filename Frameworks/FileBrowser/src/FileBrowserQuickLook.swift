@@ -53,14 +53,20 @@ extension FileBrowserViewController: @preconcurrency QLPreviewPanelDataSource, @
 
 	@objc(beginPreviewPanelControl:)
 	override public func beginPreviewPanelControl(_ previewPanel: QLPreviewPanel!) {
-		previewItems = previewableItems
-		previewPanel.delegate = self
-		previewPanel.dataSource = self
+		// The panel-control overrides are nonisolated; Quick Look calls them on the
+		// main thread (rule 26).
+		MainActor.assumeIsolated {
+			previewItems = previewableItems
+			previewPanel.delegate = self
+			previewPanel.dataSource = self
+		}
 	}
 
 	@objc(endPreviewPanelControl:)
 	override public func endPreviewPanelControl(_ previewPanel: QLPreviewPanel!) {
-		previewItems = nil
+		MainActor.assumeIsolated {
+			previewItems = nil
+		}
 	}
 
 	public func numberOfPreviewItems(in previewPanel: QLPreviewPanel!) -> Int {

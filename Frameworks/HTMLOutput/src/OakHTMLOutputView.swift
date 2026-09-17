@@ -24,7 +24,7 @@ private let kHOScriptMessageHandlerName = "textmate"
 
 // The bundle-facing TextMate object (resources/HTMLOutput.js). Copied into every
 // bundle that links HTMLOutput by the seed's require-closure resource pass.
-private func BridgeUserScript() -> WKUserScript? {
+@MainActor private func BridgeUserScript() -> WKUserScript? {
 	guard let url = Bundle(for: OakHTMLOutputView.self).url(forResource: "HTMLOutput", withExtension: "js") else {
 		log.error("HTMLOutput: HTMLOutput.js missing from the bundle — the TextMate JavaScript API will be unavailable")
 		return nil
@@ -51,7 +51,7 @@ private func BridgeUserScript() -> WKUserScript? {
 	This is a plain scrolling helper, not the TextMate JavaScript API — that stays
 	absent until slice 2.
 */
-private func AutoScrollUserScript() -> WKUserScript {
+@MainActor private func AutoScrollUserScript() -> WKUserScript {
 	let source = ""
 		+ "(function() {"
 		+ "  var stick = true;"
@@ -364,7 +364,7 @@ class OakHTMLOutputView: HOBrowserView {
 	// = Navigation policy : Intercept txmt:// =
 	// ==========================================
 
-	override func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+	override func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
 		var url = navigationAction.request.url
 		if url?.scheme == "txmt" {
 			decisionHandler(.cancel)

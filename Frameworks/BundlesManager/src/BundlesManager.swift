@@ -118,11 +118,12 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 	}
 
 	private func tryUpdateBundleIndex(andCallback completionHandler: @escaping (Bool) -> Void) {
-		// The completion runs on the download session's delegate queue, which
-		// OakDownloadManager creates as the main queue (measured, concurrency audit
-		// 2026-09-16), and then hops to the main queue with dispatch_async as the
-		// ObjC++ did — a hop from main to main, kept for the ordering it gives.
-		// nonisolated(unsafe) states the crossing the compiler cannot see.
+		// The completion runs on URLSession.shared's queue — downloadFile uses the
+		// shared session, not the manager's main-queue one — and then hops to the
+		// main queue with dispatch_async, as the ObjC++ did. Everything before the
+		// hop is what the ObjC++ also did off the main thread: a file-date write,
+		// a defaults write, a log line. nonisolated(unsafe) states both crossings
+		// (concurrency audit, 2026-09-16).
 		nonisolated(unsafe) let unsafeSelf = self
 		nonisolated(unsafe) let unsafeHandler = completionHandler
 		OakDownloadManager.sharedInstance.downloadFile(at: remoteIndexURL, replacingFileAt: URL(fileURLWithPath: remoteIndexPath), publicKeys: publicKeys) { wasUpdated, error in
@@ -195,9 +196,10 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 		let progress = Progress.discreteProgress(totalUnitCount: Int64(bundles.count))
 
 		// Was a std::vector<std::string> sized to the bundles, NULL_STR meaning "not
-		// installed"; NSNull plays that part now. Written from the download
+		// installed"; NSNull plays that part now. Written from the archive-download
 		// completions and read after the group empties. Both happen on the main
-		// queue — the session's delegate queue is main — so the writes never race;
+		// queue — the archive task's session has delegateQueue: .main, and its
+		// completion is a delegate callback — so the writes never race;
 		// nonisolated(unsafe) states what the compiler cannot see.
 		nonisolated(unsafe) let res = NSMutableArray(array: Array(repeating: NSNull(), count: bundles.count))
 

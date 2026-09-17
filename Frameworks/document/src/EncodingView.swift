@@ -17,7 +17,7 @@ import AppKit
 // way. The controls are `@objc` so the pins can reach them through
 // EncodingViewTesting.h.
 
-private func MyCreateTextView() -> NSTextView {
+@MainActor private func MyCreateTextView() -> NSTextView {
 	let res = NSTextView(frame: .zero)
 	res.isVerticallyResizable   = true
 	res.isHorizontallyResizable = true

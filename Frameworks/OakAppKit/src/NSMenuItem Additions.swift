@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import ObjectiveC
 
 // Ported from "NSMenuItem Additions.mm". The three std::string-typed selectors
@@ -74,11 +75,11 @@ extension NSMenuItem {
 		if FileManager.default.fileExists(atPath: path) {
 			icon = NSWorkspace.shared.icon(forFile: path)
 		}
-		else if OakNotEmptyString((path as NSString).pathExtension) {
-			icon = NSWorkspace.shared.icon(forFileType: (path as NSString).pathExtension)
+		else if OakNotEmptyString((path as NSString).pathExtension), let type = UTType(filenameExtension: (path as NSString).pathExtension) {
+			icon = NSWorkspace.shared.icon(for: type)
 		}
 		else {
-			icon = NSWorkspace.shared.icon(forFileType: NSFileTypeForHFSTypeCode(OSType(kUnknownFSObjectIcon)))
+			icon = NSWorkspace.shared.icon(for: .item) // the generic icon, as kUnknownFSObjectIcon was
 		}
 
 		if let icon {

@@ -216,9 +216,12 @@ class FFTextFieldViewController: NSViewController, NSTextFieldDelegate, NSTextSt
 	}
 
 	override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-		if context == Self.firstResponderContext {
-			let firstResponder = view.window?.firstResponder
-			hasFocus = firstResponder === _textField || (firstResponder != nil && firstResponder === _textField?.currentEditor())
+		let isFirstResponderChange = context == Self.firstResponderContext
+		MainActor.assumeIsolated { // the window's first responder changes on the main thread (rule 26)
+			if isFirstResponderChange {
+				let firstResponder = view.window?.firstResponder
+				hasFocus = firstResponder === _textField || (firstResponder != nil && firstResponder === _textField?.currentEditor())
+			}
 		}
 	}
 
@@ -245,7 +248,9 @@ class FFTextFieldViewController: NSViewController, NSTextFieldDelegate, NSTextSt
 	// informal notification-shaped delegate protocol — which also settles the
 	// question above: this is the callback that fires, and it fired before.
 	override func textStorageDidProcessEditing(_ aNotification: Notification) {
-		addStylesToFieldEditor()
+		MainActor.assumeIsolated { // the field editor's text storage, on the main thread
+			addStylesToFieldEditor()
+		}
 	}
 
 	private func addStylesToFieldEditor() {

@@ -85,7 +85,10 @@ class OakSyntaxFormatter: Formatter {
 					styled.applyFontTraits(run.fontTraits, range: run.range)
 				}
 
-				var attributes: [NSAttributedString.Key: Any] = [.foregroundColor: run.foregroundColor]
+				var attributes: [NSAttributedString.Key: Any] = [:]
+				if let foregroundColor = run.foregroundColor {
+					attributes[.foregroundColor] = foregroundColor
+				}
 				if let backgroundColor = run.backgroundColor {
 					attributes[.backgroundColor] = backgroundColor
 				}

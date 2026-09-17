@@ -394,7 +394,7 @@ class ProjectLayoutView: NSView, @preconcurrency OakUserDefaultsObserver {
 	@objc func performClose(_ sender: Any?) {
 		let responder = window?.firstResponder
 		if let view = responder as? NSView, let htmlOutputView, view.isDescendant(of: htmlOutputView) {
-			NSApp.sendAction(Selector(("performCloseSplit:")), to: nil, from: htmlOutputView)
+			NSApp.sendAction(#selector(DocumentWindowController.performCloseSplit(_:)), to: nil, from: htmlOutputView)
 		} else if let delegate = window?.delegate, delegate.responds(to: #selector(performClose(_:))) {
 			delegate.perform(#selector(performClose(_:)), with: sender)
 		} else {

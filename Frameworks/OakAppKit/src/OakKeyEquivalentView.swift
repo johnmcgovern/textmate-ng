@@ -243,7 +243,7 @@ class OakKeyEquivalentView: OakView {
 
 		let stringAttributes: [NSAttributedString.Key: Any] = [
 			.foregroundColor: recording ? NSColor.secondaryLabelColor : NSColor.labelColor,
-			.font: OakControlFont(),
+			.font: OakControlFont() as Any,
 		]
 
 		let display = displayString ?? ""
@@ -263,33 +263,24 @@ class OakKeyEquivalentView: OakView {
 	// accessibility call, and Swift imports it as a func.
 	override func accessibilityIsIgnored() -> Bool { false }
 
-	override func accessibilityAttributeNames() -> [NSAccessibility.Attribute] {
-		let myAttributes: [NSAccessibility.Attribute] = [
-			.value,
-			.numberOfCharacters,
-			.description,
-			.selectedText,
-			.selectedTextRange,
-			.visibleCharacterRange,
-		]
-		return Array(Set(myAttributes).union(super.accessibilityAttributeNames()))
+	// The NSAccessibility protocol methods, which replaced the attribute-name API
+	// deprecated in 10.10. AppKit does *not* answer the old
+	// -accessibilityAttributeValue: from these (measured: it reported AXUnknown),
+	// so t_key_equivalent_view reads through these methods too.
+	override func accessibilityRole() -> NSAccessibility.Role? { .textField }
+	override func accessibilityLabel() -> String? { "Key Equivalent" }
+
+	override func accessibilityValue() -> Any? {
+		let isEmptyRecording = displayString == kRecordingPlaceholderString
+		return isEmptyRecording ? "" : displayString
 	}
 
-	override func accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
+	override func accessibilityNumberOfCharacters() -> Int {
 		let isEmptyRecording = displayString == kRecordingPlaceholderString
-		switch attribute {
-			case .role:
-				return NSAccessibility.Role.textField
-			case .value:
-				return isEmptyRecording ? "" : displayString
-			case .numberOfCharacters:
-				return isEmptyRecording ? 0 : (displayString?.count ?? 0)
-			case .selectedText, .selectedTextRange, .visibleCharacterRange:
-				return nil
-			case .description:
-				return "Key Equivalent"
-			default:
-				return super.accessibilityAttributeValue(attribute)
-		}
+		return isEmptyRecording ? 0 : (displayString?.count ?? 0)
 	}
+
+	override func accessibilitySelectedText() -> String? { nil }
+	override func accessibilitySelectedTextRange() -> NSRange { NSRange(location: NSNotFound, length: 0) }
+	override func accessibilityVisibleCharacterRange() -> NSRange { NSRange(location: NSNotFound, length: 0) }
 }

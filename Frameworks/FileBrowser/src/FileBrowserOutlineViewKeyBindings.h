@@ -14,4 +14,4 @@
 // import it.
 #import <Cocoa/Cocoa.h>
 
-SEL _Nullable FileBrowserOutlineViewActionForEvent(NSEvent* anEvent);
+SEL _Nullable FileBrowserOutlineViewActionForEvent(NSEvent* _Nonnull anEvent);

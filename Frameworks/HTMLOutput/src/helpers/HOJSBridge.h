@@ -34,7 +34,7 @@ NS_SWIFT_UI_ACTOR
 - (std::map<std::string, std::string> const&)environment;
 // ObjC-clean spelling of -setEnvironment:, for callers that cannot name a
 // std::map. OakHTMLOutputView is Swift and is the only one that sets this.
-- (void)setEnvironmentBox:(HOEnvironment*)environmentBox;
+- (void)setEnvironmentBox:(HOEnvironment* _Nullable)environmentBox;
 
 // Cancels every in-flight command and forgets it. Call on navigation and teardown:
 // the page that owns these command objects is going away.

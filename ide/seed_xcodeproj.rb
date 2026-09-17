@@ -366,6 +366,29 @@ def swift_xcc_flags(specs)
   dirs.flat_map { |d| ["-Xcc", "-I#{d}"] } + GLOBAL_DEFINE_FLAGS.flat_map { |f| ["-Xcc", f] }
 end
 
+# Swift warnings are errors (2026-09-16), with two exceptions:
+#
+#   - Deprecations stay warnings (-Wwarning DeprecatedDeclaration, SE-0443, Swift
+#     6.2+). Two are deliberate and say so in a comment — the synchronous
+#     -launchApplication:… in OakOpenWithMenu, and `isBezeled` on two progress
+#     indicators — and a deprecation is Apple's schedule, not a defect.
+#   - FileBrowser carries two warnings that have no group to downgrade: the
+#     outline data source returns `Any!` because t_file_browser_view_controller
+#     pins a nil answer out of range (rule 33), and `import TMFileReference`
+#     draws the compiler's "implicit import of bridging header" deprecation,
+#     which is about how that module is built rather than about any line in
+#     this one. So FileBrowser's Swift is compiled without -warnings-as-errors,
+#     and those two are the whole of its warning output.
+#
+# The count that this enforces was 121 unique warnings on the morning of
+# 2026-09-16 and 4 by the afternoon; the handoff has the list of what each was.
+SWIFT_WARNINGS_AS_ERRORS_EXCEPT = %w[FileBrowser FileBrowserTests].freeze
+
+def swift_warning_flags(name)
+  return [] if SWIFT_WARNINGS_AS_ERRORS_EXCEPT.include?(name)
+  ["-warnings-as-errors", "-Wwarning", "DeprecatedDeclaration"]
+end
+
 # Swift build settings for any target (lib, app, or test bundle) that compiles
 # .swift sources. The bridging header is committed source, found by convention
 # at <dir>/src/<Target>-Bridging-Header.h. See the Pass 1 comment for why
@@ -375,7 +398,7 @@ def apply_swift_settings(bs, config, dir, name, xcc, fallback_name = nil)
   bs["SWIFT_OBJC_INTEROP_MODE"]  = "objcxx"
   bs["SWIFT_OPTIMIZATION_LEVEL"] = config.name == "Release" ? "-O" : "-Onone"
   bs["SWIFT_INCLUDE_PATHS"]      = ["$(inherited)", "$(SRCROOT)/#{GEN_SWIFT}"]
-  bs["OTHER_SWIFT_FLAGS"]        = ["$(inherited)"] + xcc
+  bs["OTHER_SWIFT_FLAGS"]        = ["$(inherited)"] + xcc + swift_warning_flags(name)
   # tests/ first so a test bundle's bridging header lives next to its tests;
   # src/ is the convention for the framework/app targets themselves.
   #

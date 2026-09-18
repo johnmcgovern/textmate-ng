@@ -92,3 +92,18 @@
 @property (nonatomic, readonly) NSProgressIndicator* progressIndicator;
 - (void)checkProgressTimerDidFire:(NSTimer*)timer;
 @end
+
+// The hand-written DSA verifier (DSAVerifier.swift). Declared here rather than
+// in a shipping header because nothing outside OakDownloadManager calls it;
+// the tests do, to check the arithmetic against openssl.
+@interface OakDSAVerifier : NSObject
++ (BOOL)verifyData:(NSData*)data derSignature:(NSData*)signature pemPublicKey:(NSString*)pem;
++ (BOOL)verifyDigest:(NSData*)digest derSignature:(NSData*)signature pemPublicKey:(NSString*)pem;
++ (NSArray<NSNumber*>*)publicKeyBitWidthsFromPEM:(NSString*)pem;
+
+// The arithmetic underneath, reached directly: some of its branches cannot be
+// driven from a signature (see the add-back note in DSAVerifier.swift).
++ (NSArray<NSData*>*)divideDividend:(NSData*)dividend byDivisor:(NSData*)divisor;
++ (NSData*)multiply:(NSData*)lhs by:(NSData*)rhs;
++ (NSData*)modPowBase:(NSData*)base exponent:(NSData*)exponent modulus:(NSData*)modulus;
+@end

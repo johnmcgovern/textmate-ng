@@ -11,12 +11,14 @@ import os
 // selector is spelled out with @objc(...) rather than left to the importer's
 // renaming, and t_software_update.mm pins them (rule 18).
 //
-// **The SecTransform calls are deprecated and are ported unchanged anyway.**
-// SecVerifyTransformCreate went away in macOS 13 in favour of
-// SecKeyVerifySignature. Swapping the signature-verification path during a port
-// would change what the app trusts, which is not a translation — it is a
-// security change wearing a translation's clothes. It stays byte-for-byte until
-// somebody replaces it deliberately, with its own commit and its own testing.
+// **The bundle index's DSA signature is verified by DSAVerifier.swift** as of
+// 2026-09-17. It was SecTransform, deprecated since macOS 12 and "no longer
+// supported" since 13; the port kept those calls byte-for-byte on the grounds
+// that swapping a verification path is a security change and not a
+// translation. This is that change, made deliberately and on its own: the
+// algorithm, the keys and the bytes verified are identical, and
+// t_dsa_verifier.mm pins the new implementation against openssl in both key
+// shapes the index uses, plus the live index's own signature.
 
 // os_log(OS_LOG_DEFAULT, …) throughout the original, so a default-initialised
 // Logger — same destination. A named subsystem would be easier to filter for and
@@ -550,37 +552,13 @@ class OakDownloadManager: NSObject, @unchecked Sendable {
 		}
 	}
 
-	// MARK: - Signature verification
-	//
-	// Deprecated SecTransform API, ported unchanged — see the note at the top.
-
-	func signingKey(forPublicKeyString publicKeyString: String) -> SecKey? {
-		guard let publicKeyData = publicKeyString.data(using: .utf8) else { return nil }
-
-		var params = SecItemImportExportKeyParameters()
-		var type: SecExternalItemType = .itemTypePublicKey
-		var format: SecExternalFormat = .formatPEMSequence
-		var items: CFArray?
-
-		let err = SecItemImport(publicKeyData as CFData, nil, &format, &type, [], &params, nil, &items)
-		guard err == errSecSuccess else {
-			if let message = SecCopyErrorMessageString(err, nil) {
-				log.error("SecItemImport() failed: \(message as String, privacy: .public)")
-			}
-			return nil
-		}
-
-		guard let items = items as? [AnyObject], let first = items.first else { return nil }
-		return (first as! SecKey)
-	}
-
 	// MARK: - ECDSA verification — the update channel
 	//
-	// Separate from the SecTransform path below, and the two coexist on purpose.
-	// That one verifies MacroMates' bundle index for BundlesManager, using DSA keys
-	// that arrive *inside* the index itself; it is not ours to change and it goes
-	// when the bundle index goes. This one is for the update manifest, and nothing
-	// new should be built on the deprecated API. See ide/SOFTWARE_UPDATE_DESIGN.md.
+	// Separate from the DSA path below, and the two coexist on purpose. That one
+	// verifies MacroMates' bundle index for BundlesManager, with the algorithm and
+	// keys that index dictates; it goes when the bundle index goes. This one is
+	// for the update manifest, which this fork signs itself and therefore signs
+	// properly. See ide/SOFTWARE_UPDATE_DESIGN.md.
 	//
 	// P-256 with SHA-256. The public key travels as base64 of its **X9.63**
 	// representation — `0x04 || X || Y`, 65 bytes — rather than PEM or
@@ -626,6 +604,13 @@ class OakDownloadManager: NSObject, @unchecked Sendable {
 		return ok
 	}
 
+	// MARK: - DSA verification — the bundle index
+	//
+	// The signature travels base64-encoded in an HTTP header and covers the body
+	// bytes; the key is one of the PEM strings BundlesManager holds. DSAVerifier
+	// does the work — see the note at the top of that file for why it is hand
+	// written.
+	@objc(data:hasValidBase64EncodedSignature:usingPublicKeyString:)
 	func data(_ contentData: Data?, hasValidBase64EncodedSignature encodedSignature: String?, usingPublicKeyString publicKeyString: String?) -> Bool {
 		guard let encodedSignature, let contentData, let publicKeyString else { return false }
 
@@ -634,26 +619,6 @@ class OakDownloadManager: NSObject, @unchecked Sendable {
 			return false
 		}
 
-		guard let publicKey = signingKey(forPublicKeyString: publicKeyString) else { return false }
-
-		var err: Unmanaged<CFError>?
-		guard let verifier = SecVerifyTransformCreate(publicKey, signatureData as CFData, &err) else {
-			log.error("SecVerifyTransformCreate: \(String(describing: err?.takeUnretainedValue()), privacy: .public)")
-			return false
-		}
-
-		guard SecTransformSetAttribute(verifier, kSecTransformInputAttributeName, contentData as CFData, &err) else {
-			log.error("SecTransformSetAttribute: \(String(describing: err?.takeUnretainedValue()), privacy: .public)")
-			return false
-		}
-
-		let result = SecTransformExecute(verifier, &err)
-		if (result as AnyObject) === kCFBooleanTrue {
-			return true
-		}
-		if let err {
-			log.error("SecTransformExecute: \(String(describing: err.takeUnretainedValue()), privacy: .public)")
-		}
-		return false
+		return OakDSAVerifier.verify(data: contentData, derSignature: signatureData, pemPublicKey: publicKeyString)
 	}
 }

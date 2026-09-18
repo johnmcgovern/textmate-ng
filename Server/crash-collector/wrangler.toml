@@ -4,6 +4,14 @@
 # `main` is the Worker; REPORTS is the R2 binding it writes through. Nothing here
 # is secret — the bucket is private, and the Worker never lists it over HTTP.
 
+# Pinned to J23 Labs - Developer (developer@j23labs.com). The OAuth token
+# wrangler stores is per *user*, not per account, and records no account of its
+# own — so without this line, which account a deploy reaches is decided at
+# deploy time. Today that login sees only this account; a later `wrangler login`
+# from a personal account would change that without warning, and crash reports
+# would go somewhere they were never meant to.
+account_id = "c314d5670a6a5322c71be2775af1e27e"
+
 name = "textmate-ng-crash-collector"
 main = "src/worker.js"
 # Not today's date: the local `wrangler dev` runtime refuses a date newer than the

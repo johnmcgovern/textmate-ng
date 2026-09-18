@@ -2,6 +2,44 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-17 (v2026.9-alpha.29)
+
+**Nothing you look at has changed.** Fifteen commits since alpha.28, all of them
+underneath. If you are on alpha.24 or later this should arrive on its own.
+
+What is in it:
+
+* **The check that bundle downloads really came from where they claim** no longer
+  relies on an Apple interface that has been deprecated for three years and
+  described as unsupported for two. It now does that arithmetic itself. The
+  algorithm, the keys and the bytes checked are identical — what changed is that
+  the day Apple removes the old interface is no longer the day bundle updates
+  quietly stop being verified.
+* **Five defects in the code that reads files**, found by a fuzzer written for
+  this and now run every week. None had a symptom anyone had reported, and all
+  five were in handling of malformed input: a property list with an unusual key,
+  a string with a byte that is not valid text. They are the kind of thing that
+  becomes a crash on a different day.
+* **Crash reporting is being built, and is off.** There is now somewhere for
+  crash reports to go that belongs to this project rather than to the original
+  authors, which is why it was switched off in the first place. It stays off
+  until that service is running, and when it is turned on the application will
+  **ask you first** rather than assume. Reports say what the application was
+  doing when it stopped — not what you were editing.
+* **Every compiler warning in the newer half of the code is gone**, and new ones
+  now fail the build instead of accumulating. That is housekeeping, but it is the
+  housekeeping that stops a real warning hiding in a list of 121 ignored ones.
+
+**Why a release with nothing in it.** The same reason as the last two: this is a
+lot of change to things you use without noticing, and shipping it on its own is
+how a fault in it gets found quickly and blamed correctly.
+
+**Where to look if something is off.** Settings ▸ Bundles: installing or updating
+a bundle still works — that is the path whose signature check was rewritten.
+Icons in the file browser, the tab overflow menu, and Settings ▸ Bundles, which
+now come from a newer system interface and should look exactly as before. Opening
+a file in an unusual encoding, or a damaged one.
+
 ## 2026-09-16 (v2026.9-alpha.28)
 
 **The regular-expression engine is nine years newer.** Eight commits since

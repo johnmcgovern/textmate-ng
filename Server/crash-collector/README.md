@@ -11,9 +11,18 @@ them. This is the J23-owned collector that comment said was needed.
 
 ## Deploying
 
-    wrangler r2 bucket create textmate-ng-crash-reports
-    wrangler r2 bucket create textmate-ng-crash-reports-preview   # for `wrangler dev`
+    wrangler r2 bucket create textmate-ng-diagnostics
     wrangler deploy
+
+**Run these from this directory**, not from the repository root. With no wrangler
+config in the working directory, `wrangler deploy` falls through to its Pages
+path and fails with *"Could not detect a directory containing static files"*,
+which gives no hint that the real problem is where you are standing.
+
+The bucket is named `textmate-ng-diagnostics` to sit alongside the other
+`*-diagnostics` buckets in this account. A preview bucket is only needed for
+`wrangler dev --remote`; `bin/test-local` runs `--local`, where miniflare
+simulates it.
 
 `wrangler deploy` prints the Worker's URL. That URL is what
 `TM_CRASH_COLLECTOR_URL` in `ide/seed_xcodeproj.rb` must be set to; until it is,
@@ -32,8 +41,8 @@ report carries the contact string the user typed, their machine model, and the
 stack of what was running. The bucket is never listed over HTTP; to read what
 has arrived, list it from your own machine:
 
-    wrangler r2 object list textmate-ng-crash-reports
-    wrangler r2 object get textmate-ng-crash-reports reports/2026-09-17/<uuid>.gz.json
+    wrangler r2 object list textmate-ng-diagnostics
+    wrangler r2 object get textmate-ng-diagnostics reports/2026-09-17/<uuid>.gz.json
 
 Each report is stored twice: the gzipped report itself, and a small `.json`
 beside it with the hardware string, the contact string and the arrival time, so

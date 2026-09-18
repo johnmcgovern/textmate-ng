@@ -19,7 +19,7 @@
 // which is why nothing here ever lists the bucket over HTTP. To read the
 // reports, list the bucket from your own machine:
 //
-//     wrangler r2 object list textmate-ng-crash-reports
+//     wrangler r2 object list textmate-ng-diagnostics
 //
 // If the endpoint is ever abused as free storage, the fix is a shared token in
 // a header the client sends; the limits below are the first line, not the only

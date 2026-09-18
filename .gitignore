@@ -9,3 +9,7 @@
 # Local planning notes, deliberately unpublished (still on disk, just untracked)
 /NOTARIZATION_HANDOFF.md
 /ide/local/
+
+# wrangler leaves this behind when run from the repository root by mistake;
+# the Worker itself lives in Server/crash-collector and ignores its own copy.
+.wrangler/

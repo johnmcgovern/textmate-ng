@@ -1,5 +1,9 @@
-# Deploy with:  wrangler deploy        (from this directory)
-# Create the bucket once, first:  wrangler r2 bucket create textmate-ng-crash-reports
+# Deploy with:  wrangler deploy        — **from this directory**. Run it from the
+# repository root and wrangler finds no config there, falls through to its
+# Cloudflare Pages path, and fails with "Could not detect a directory containing
+# static files", which names neither the real problem nor this file.
+#
+# Create the bucket once, first:  wrangler r2 bucket create textmate-ng-diagnostics
 #
 # `main` is the Worker; REPORTS is the R2 binding it writes through. Nothing here
 # is secret — the bucket is private, and the Worker never lists it over HTTP.
@@ -21,8 +25,10 @@ compatibility_date = "2026-07-01"
 
 [[r2_buckets]]
 binding = "REPORTS"
-bucket_name = "textmate-ng-crash-reports"
-preview_bucket_name = "textmate-ng-crash-reports-preview"
+bucket_name = "textmate-ng-diagnostics"
+# Only used by `wrangler dev --remote`; bin/test-local runs --local, where
+# miniflare simulates the bucket and this name is just a label.
+preview_bucket_name = "textmate-ng-diagnostics-preview"
 
 [observability]
 enabled = true

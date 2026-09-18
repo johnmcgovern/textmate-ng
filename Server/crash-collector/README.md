@@ -24,9 +24,17 @@ The bucket is named `textmate-ng-diagnostics` to sit alongside the other
 `wrangler dev --remote`; `bin/test-local` runs `--local`, where miniflare
 simulates it.
 
-`wrangler deploy` prints the Worker's URL. That URL is what
-`TM_CRASH_COLLECTOR_URL` in `ide/seed_xcodeproj.rb` must be set to; until it is,
-the application does not upload anything and the consent prompt never appears.
+Then, once, so that `GET /list` below works:
+
+    wrangler secret put ADMIN_TOKEN
+
+`wrangler deploy` prints the Worker's URL. That URL goes in
+`TMCrashCollectorURL` in `Applications/TextMate/Info.plist` — the plist rather
+than a preference, so that where crash reports go is covered by the code
+signature. Until it is filled in, the application uploads nothing and never
+asks. It is currently
+`https://textmate-ng-crash-collector.developer-c31.workers.dev`, deployed
+2026-09-18.
 
 ## What it accepts
 
@@ -38,15 +46,40 @@ One route, `POST /`, whose shape is the client's and not this Worker's:
 `GET /r/<uuid>` returns that report. **Anyone with the URL can read it** — the
 id is a random UUID so the URL is unguessable, but there is no login. A crash
 report carries the contact string the user typed, their machine model, and the
-stack of what was running. The bucket is never listed over HTTP; to read what
-has arrived, list it from your own machine:
+stack of what was running.
 
-    wrangler r2 object list textmate-ng-diagnostics
-    wrangler r2 object get textmate-ng-diagnostics reports/2026-09-17/<uuid>.gz.json
+## Reading what has arrived
+
+    bin/reports              # everything, newest first
+    bin/reports 2026-09      # one month
 
 Each report is stored twice: the gzipped report itself, and a small `.json`
-beside it with the hardware string, the contact string and the arrival time, so
-that last command answers "what is this" without downloading and unzipping.
+beside it with the hardware string, the contact string and the arrival time.
+`bin/reports` shows the sidecars and never downloads a report, so listing what
+arrived does not mean reading anyone's stack.
+
+It goes through the Worker's `GET /list`, not through wrangler, because wrangler
+cannot do this. **There is no `wrangler r2 object list`** — in wrangler 4.108
+the `r2 object` verbs are `get`, `put` and `delete`, and each needs a key you
+already hold, whereas these keys contain a UUID that exists nowhere but in the
+notification shown to whoever crashed. `wrangler r2 bucket info` does print an
+`object_count`, but it lags badly: it still read `0` several minutes after two
+objects were confirmed stored, so it cannot answer "did anything arrive" either.
+The Worker holds the only binding to the bucket, so the listing comes from
+there.
+
+`/list` wants the bearer token in `ADMIN_TOKEN`, set as a wrangler secret.
+`bin/reports` reads the same value from the login keychain, so it is never an
+argument and never in a file:
+
+    security add-generic-password -a "$USER" -s textmate-ng-collector -w
+
+With `ADMIN_TOKEN` unset the route answers `404`, identically to any unknown
+path, so a collector not configured for listing is not advertised by the shape
+of its own refusal. Given a key — from `bin/reports` — a single report comes
+down with:
+
+    wrangler r2 object get textmate-ng-diagnostics/reports/2026-09-18/<uuid>.gz --remote --pipe > report.gz
 
 ## Limits, and what is deliberately missing
 

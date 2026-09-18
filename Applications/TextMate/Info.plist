@@ -7,7 +7,7 @@
 	     feature on. It lives here rather than in a preference so that it is covered
 	     by the code signature: where a crash report goes is not a user setting. -->
 	<key>TMCrashCollectorURL</key>
-	<string></string>
+	<string>https://textmate-ng-crash-collector.developer-c31.workers.dev</string>
 	<key>CFBundleName</key>
 	<string>TextMate-NG</string>
 	<key>CFBundleShortVersionString</key>

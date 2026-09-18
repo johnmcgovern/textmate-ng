@@ -1,6 +1,6 @@
 # What "beta" will mean
 
-Decided 2026-09-17. Beta is a **stability promise**, not a feature milestone —
+Decided 2026-09-17; criteria 1-3 revised 2026-09-18, when deploying showed that two of their checks named a command that does not exist. Beta is a **stability promise**, not a feature milestone —
 the port and the hardening are finished either way, and saying "beta" because
 the work is done would be describing this project's state rather than the
 software's.
@@ -12,11 +12,11 @@ the version stays `2026.N-alpha.M` until all of them hold.
 
 ## The criteria
 
-| # | Criterion | How it is checked | Status 2026-09-17 |
+| # | Criterion | How it is checked | Status 2026-09-18 |
 | --- | --- | --- | --- |
-| 1 | A crash collector is deployed and the application posts to it | `TMCrashCollectorURL` in Info.plist is non-empty and `wrangler r2 object list` answers | **Not met** — Worker written and tested locally, not deployed |
-| 2 | Crash reports are arriving, and there are none | The collector's bucket, plus `~/Library/Logs/DiagnosticReports` on every machine running it | **Partly** — 0 reports on the build machine; nothing in the field to count yet |
-| 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Not met** — alpha.28 published 2026-09-16 |
+| 1 | A crash collector is deployed and the application posts to it | `TMCrashCollectorURL` in Info.plist is non-empty, and `Server/crash-collector/bin/reports` answers | **Met 2026-09-18** — deployed, posted to and read back end to end |
+| 2 | Crash reports are arriving, and there are none | `bin/reports`, plus `~/Library/Logs/DiagnosticReports` on every machine running it | **Partly** — collector empty, but no shipped build carries the URL yet, so "none" is not yet evidence |
+| 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Not met** — the clock starts at the first release carrying the collector URL, which has not shipped |
 | 4 | The full suite, the sanitizers and the fuzzer are green on the tagged commit | The Sanitizers workflow on that commit, not merely on `master` | **Met** and enforced weekly |
 | 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | By hand: HTML output, the commit window, gutter line numbers, syntax colouring | **Not met, and cannot be met by script** — see below |
 | 6 | Nothing unreleased at the tag | `git log <tag>..HEAD` is empty | Met at each release |
@@ -59,8 +59,23 @@ quiet. That would be a release that reached nobody and said nothing.
 
 ## What is left, in order
 
-1. Deploy the Worker (`Server/crash-collector`), put its URL in Info.plist.
-2. Ship an alpha carrying it, and let it run.
+1. ~~Deploy the Worker (`Server/crash-collector`), put its URL in Info.plist.~~
+   Done 2026-09-18: `https://textmate-ng-crash-collector.developer-c31.workers.dev`,
+   verified by posting a report the way the client posts one, reading it back
+   byte-identical, and listing it with `bin/reports`. The test report was then
+   deleted, so the bucket is empty on purpose rather than by accident.
+2. Ship an alpha carrying it, and let it run. **Criterion 2 cannot be read as
+   met before this happens**: an empty collector that no build has ever posted
+   to looks exactly like an empty collector that nothing has crashed into, and
+   only one of those is evidence. Criterion 3's week starts here too.
 3. Do the smoke pass properly, the three unreached surfaces included.
 4. A week.
 5. Tag `2026.10-beta.1`.
+
+A note on criterion 2, learned while deploying. The check was written as
+`wrangler r2 object list`, a command that does not exist in any version of
+wrangler — so a criterion meant to be mechanically checkable would have failed
+at the moment someone first tried to check it, which is the moment it matters.
+It is now `bin/reports`, which is in the repository and is run by whoever reads
+this. A criterion that names a command nobody has run is a criterion nobody has
+checked.

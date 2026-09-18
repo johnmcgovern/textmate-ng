@@ -2943,6 +2943,90 @@ toolbar icon, and a menu item with a file icon (Open Recent). The key
 equivalent recorder's accessibility is pinned through the protocol
 methods; VoiceOver itself was not tried.
 
+## Session 2026-09-17 — the DSA verifier, a crash collector, and what beta will mean
+
+Three commits. Full suite **1206/1206 across 41 bundles**, 0 restarts,
+Release clean.
+
+### SecTransform is gone from everything that ships (`4373d150`)
+
+`SecVerifyTransformCreate` was the only thing checking that the bundle index
+came from MacroMates, and Apple has called it "no longer supported" since
+macOS 13. The modern API cannot replace it — `SecKeyVerifySignature` does
+RSA and ECDSA, not DSA — so `DSAVerifier.swift` verifies the signature
+itself: a bounds-checked DER reader, an unsigned big integer in base 2^32
+(Knuth D for division, Fermat for the one inverse), and FIPS 186-4 §4.7.
+Verification only, ~300 lines, no signing and no secrets, so nothing in it
+needs to be constant-time.
+
+Measured before it was written: the live index's `x-amz-meta-x-signature`
+verifies under `org.textmate.duff` with `openssl dgst -sha1` and nothing
+else. The last test replays that exact signature using the index's SHA-1
+rather than its 288 KB, because DSA signs the digest.
+
+**The mutation pass is the part worth carrying.** Fourteen tests passed on
+the first run, which for hand-written crypto is when to distrust them. Six
+mutations; three were not caught, and each gap was real:
+
+| Mutation | Why the tests missed it | The test that exists now |
+| --- | --- | --- |
+| range guard on r and s removed | (0,0) and (1,1) are refused by the arithmetic either way | **(r=1, s=0) is a universal forgery** — s=0 makes the Fermat inverse 0, so v=1=r, and that signature verifies against any message under any key |
+| algorithm OID check removed | an EC key fails on structure first, before the OID matters | an **X9.42 Diffie-Hellman** key, whose parameters are three INTEGERs in a SEQUENCE exactly like p, q, g |
+| Knuth's add-back correction removed | it fires ~twice in 2^32 divisions; 400,000 random ones missed it | vectors **constructed** to force it: dividends whose remainder sits just under the divisor |
+
+The other three (inverse exponent, multiply carry, a dropped exponent bit)
+were caught immediately. All six are caught now, each by one test.
+
+**What remains on SecTransform, accurately.** `Frameworks/network`'s
+`filter_check_signature.cc` still uses it, and `bl` — a command-line bundle
+installer — links it. `bl` does **not** ship in the app bundle (the bundle
+carries TextMate-NG, mate, tm_query and CommitWindowTool), and
+`nm -u` on the shipped binary finds zero SecTransform symbols. Porting that
+copy would mean a C++ DSA verifier for a developer tool, since `network`
+sits below Swift in the stack; it is not worth it, and this is the honest
+statement rather than "SecTransform is gone".
+
+### A crash collector, and consent (`40377023`)
+
+`Server/crash-collector` is a Cloudflare Worker over R2. It accepts the
+multipart POST `CrashReporter.swift` already made — the shape is the
+client's, not a new one — stores the gzipped report plus a small JSON
+beside it, and answers 201 with the `Location` the client shows the user.
+`bin/test-local` runs it under `wrangler dev` and checks the round trip and
+four refusals. Two things that cost a run each: `compatibility_date` must
+not be newer than the workerd binary wrangler ships with (2026-07-13 for
+4.108), and `status` is read-only in zsh — the same trap `bin/fuzz` hit.
+
+The client was unreachable since Phase 2.5 for **two** reasons and both are
+addressed. The URL now comes from `TMCrashCollectorURL` in Info.plist,
+signed with the application and **empty until the Worker is deployed**; and
+it asks once, when there is something to send, rather than defaulting to
+yes. Three gates: a non-empty https URL, the Settings checkbox, consent.
+Denying unticks the checkbox so the two never disagree; ticking it back on
+counts as consent. An unconfigured build uploads nothing and prompts for
+nothing, which is what ships today.
+
+**Deploying is yours**: `wrangler r2 bucket create textmate-ng-crash-reports`,
+`wrangler deploy`, then put the printed URL in Info.plist. Nothing reaches
+the field until that happens.
+
+### What beta will mean (`ide/BETA_CRITERIA.md`)
+
+A stability promise, not a feature milestone, with seven checkable
+criteria. Three are not met: the collector is not deployed, no build has
+run a week without a crash, and **the smoke pass has never covered HTML
+output, the commit window, or gutter line numbers on any build** — the
+three surfaces accessibility cannot reach. That last one is on the list
+because both of this project's worst shipped regressions were invisible to
+the suite and obvious in the first second of looking.
+
+The version will be `2026.10-beta.1`, and the step is pinned *before*
+taking it (`test_a_beta_is_newer_than_an_alpha`): the unattended updater
+installs nothing that is not strictly newer, so a beta that did not compare
+as newer than the last alpha would be refused by every machine already on
+one — silently, since anti-rollback is deliberately quiet. A release that
+reached nobody and said nothing.
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

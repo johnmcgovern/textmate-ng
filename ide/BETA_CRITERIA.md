@@ -18,7 +18,7 @@ the version stays `2026.N-alpha.M` until all of them hold.
 | 2 | Crash reports are arriving, and there are none | The collector's bucket, plus `~/Library/Logs/DiagnosticReports` on every machine running it | **Partly** — 0 reports on the build machine; nothing in the field to count yet |
 | 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Not met** — alpha.28 published 2026-09-16 |
 | 4 | The full suite, the sanitizers and the fuzzer are green on the tagged commit | The Sanitizers workflow on that commit, not merely on `master` | **Met** and enforced weekly |
-| 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | By hand: HTML output, the commit window, gutter line numbers, syntax colouring | **Not met** — those three have never been checked on any build |
+| 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | By hand: HTML output, the commit window, gutter line numbers, syntax colouring | **Not met, and cannot be met by script** — see below |
 | 6 | Nothing unreleased at the tag | `git log <tag>..HEAD` is empty | Met at each release |
 | 7 | The updater has been seen installing a build unattended | Observed for alpha.27 on 2026-09-16; must hold for the beta too | **Met once** |
 
@@ -27,6 +27,16 @@ one a script cannot answer. It is on the list because the two worst regressions
 this project has shipped — the Settings crash of alpha.10, and the gutter bug
 that survived to alpha.10 — were both invisible to the suite and obvious in the
 first second of looking.
+
+**Tried on alpha.29, and here is exactly how far a script gets.** HTML output:
+two output windows *do* open (564×684, with the expected chrome), but a
+`WKWebView` exposes no `AXWebArea` to this process, so whether anything is
+rendered inside them is unknown. Gutter line numbers: the text view exposes no
+accessibility children at all, so there is nothing to read. Syntax colouring:
+accessibility has no notion of colour. `screencapture` is refused — the screen
+recording permission was declined earlier — so there is no picture to fall back
+on. Three surfaces, three dead ends; this criterion needs a person to look at a
+window, and that is the whole reason it is written down separately.
 
 ## What beta will not promise
 

@@ -3027,6 +3027,63 @@ as newer than the last alpha would be refused by every machine already on
 one — silently, since anti-rollback is deliberately quiet. A release that
 reached nobody and said nothing.
 
+## Session 2026-09-17, evening — alpha.29 is published, and what the smoke pass could not reach
+
+`v2026.9-alpha.29` (`3bce5930`, build 20260917.4) is on GitHub Releases:
+notarized, stapled, verified from the outside — quarantined download,
+`spctl` accepted, staple valid, manifest decoding to alpha.29 with the
+payload's SHA-256. Gate: `bin/rehearse-update` 6/6. Two things checked on
+the shipped binary specifically: `TMCrashCollectorURL` is empty, so nothing
+uploads, and `nm -u` finds **zero SecTransform symbols**.
+
+### A real bug, found by trying the surface nobody had tried
+
+Markdown ▸ Show Preview fails outright:
+
+    .../Bundle Support.tmbundle/Support/shared/bin/ruby18: line 43:
+    .../TextMate/Ruby/1.8.7/bin/ruby: Bad CPU type in executable
+
+The Ruby that bundle ships is `Mach-O 64-bit executable x86_64`, and
+Rosetta is not installed on this machine. Anything routed through `ruby18`
+fails the same way. Measured with `plutil` rather than grep — the command
+files are *binary* plists, and a first pass that grepped them as text
+reported "0 showAsHTML commands", which was nonsense: **225 commands, 10
+produce HTML output, 2 of those need the Intel-only Ruby** (SQL's Database
+Browser and Execute Query). Show Preview is a third casualty by a different
+route.
+
+Not caused by anything in this fork, and not fixable in it either — the fix
+is Rosetta, or a bundle that stops shipping a 2010 Ruby. Worth knowing
+before anyone calls this beta, because "Markdown preview does nothing" is
+exactly the kind of thing a new user meets on day one.
+
+### The three surfaces, and why a script cannot close them
+
+| Surface | What happened | Why it is still unverified |
+| --- | --- | --- |
+| HTML output | Two windows *did* open, 564×684, with the expected chrome | `WKWebView` exposes no `AXWebArea` here, so the contents are unknown |
+| Gutter line numbers | — | the text view exposes no accessibility children at all |
+| Syntax colouring | — | accessibility has no notion of colour |
+
+`screencapture` is refused (the screen-recording permission was declined in
+an earlier session), so there is no fallback. `ide/BETA_CRITERIA.md`
+criterion 5 now says this in full. **These three need John's eyes on a
+window; no amount of scripting will do it.**
+
+### Reserved words, the recurring tax
+
+Three scripts broke today on names the shell or AppleScript owns: `status`
+(zsh, in bin/test-local — the same one bin/fuzz hit), and `line`, `items`
+and `before` in AppleScript. Each cost a run. When a one-line osascript
+fails with "Expected expression but found …" or "Access not allowed",
+suspect the variable name first.
+
+### What shipped, and what did not
+
+Verified on this build: all six Settings panes, and by inheritance from
+alpha.27/28 the surfaces unchanged since. Not verified: the three above,
+and the commit window (it needs a dirty repository, and the tree was clean).
+
 ## Before cutting a release: the five-minute smoke pass
 
 **Write this list down and follow it, because the suite cannot replace it.**

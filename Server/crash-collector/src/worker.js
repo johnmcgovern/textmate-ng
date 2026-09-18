@@ -43,6 +43,11 @@
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;   // a gzipped .ips is tens of KB; 2 MB is generous
 const MAX_FIELD_CHARS = 512;              // hardware and contact are short strings
+// What the 2 MB cap above is worth once the bytes are gzip: a couple of hundred
+// KB of zeros expands past a gigabyte, so the decompressed size needs its own
+// ceiling, enforced while decompressing rather than after. A real .ips is a few
+// hundred KB uncompressed.
+const MAX_UNCOMPRESSED_BYTES = 16 * 1024 * 1024;
 const RETENTION_NOTE = "reports are kept until deleted by hand";
 
 function cors(response) {
@@ -66,6 +71,95 @@ function sanitize(value) {
 		return "";
 	}
 	return value.replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, MAX_FIELD_CHARS);
+}
+
+// Returns the decompressed text, or null if the bytes are not gzip, are
+// truncated, or expand past `cap`. The cap is checked per chunk, so a bomb is
+// abandoned partway rather than after it has been held in memory whole.
+async function gunzipWithCap(buffer, cap) {
+	let reader;
+	try {
+		reader = new Response(buffer).body.pipeThrough(new DecompressionStream("gzip")).getReader();
+	} catch (error) {
+		return null;
+	}
+	const chunks = [];
+	let total = 0;
+	try {
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) {
+				break;
+			}
+			total += value.byteLength;
+			if (total > cap) {
+				await reader.cancel();
+				return null;
+			}
+			chunks.push(value);
+		}
+	} catch (error) {
+		return null;   // not gzip after all, or it stops mid-stream
+	}
+	const joined = new Uint8Array(total);
+	let at = 0;
+	for (const chunk of chunks) {
+		joined.set(chunk, at);
+		at += chunk.byteLength;
+	}
+	return new TextDecoder("utf-8").decode(joined);
+}
+
+// Is this a crash report macOS wrote about *this* application?
+//
+// This is the closest thing to an answer for "only TextMate-NG may upload", and
+// it is worth being exact about why it is not that answer. Nothing can prove a
+// shipped binary is genuine: a token in the app bundle is recoverable with
+// `strings`, and App Attest — the one real primitive — reports isSupported =
+// false for a Developer ID signed binary with no provisioning profile, measured
+// rather than assumed. So the goal is not proof. It is that the endpoint be
+// worth nothing to anyone else: not usable as free file storage, not usable to
+// fill the bucket with noise.
+//
+// A .ips is two JSON documents separated by a newline, and the second one
+// carries codeSigningID and codeSigningTeamID — written by the kernel from the
+// crashed process's actual code signature, not by the client. Requiring them to
+// match the released application means junk is refused, and means a forgery has
+// to be a deliberately constructed crash report claiming this project's team.
+// That is strictly more than a shipped token asks, since the token can simply be
+// read out of the bundle.
+//
+// The team ID is a var rather than a literal because it will change: J23 is
+// enrolled as an individual, and moving to an organization reissues it.
+// Reports from dev builds are refused as a side effect and correctly so — a
+// local Debug build is ad-hoc signed with no team, so only released builds can
+// post, which is what the bucket is for.
+function inspect(reportText, env) {
+	const split = reportText.indexOf("\n");
+	if (split < 0) {
+		return { reason: "not a two-part .ips document" };
+	}
+	let header, body;
+	try {
+		header = JSON.parse(reportText.slice(0, split));
+	} catch (error) {
+		return { reason: "the first line is not a JSON crash-report header" };
+	}
+	try {
+		body = JSON.parse(reportText.slice(split + 1));
+	} catch (error) {
+		return { reason: "what follows the first line is not JSON" };
+	}
+	if (!header.incident_id || !header.timestamp || !header.bug_type) {
+		return { reason: "the header has no incident_id, timestamp or bug_type" };
+	}
+	if (body.codeSigningID !== env.EXPECTED_SIGNING_ID) {
+		return { reason: `codeSigningID is ${JSON.stringify(body.codeSigningID ?? null)}, not this application` };
+	}
+	if (body.codeSigningTeamID !== env.EXPECTED_TEAM_ID) {
+		return { reason: `codeSigningTeamID is ${JSON.stringify(body.codeSigningTeamID ?? null)}, not this project's team` };
+	}
+	return { header };
 }
 
 async function handlePost(request, env) {
@@ -97,6 +191,18 @@ async function handlePost(request, env) {
 		return text(413, `Report too large (${body.byteLength} bytes, limit ${MAX_BODY_BYTES}).`);
 	}
 
+	// Everything above this point was about size. This is about what it is.
+	const reportText = await gunzipWithCap(body, MAX_UNCOMPRESSED_BYTES);
+	if (reportText === null) {
+		return text(415, "The `report` part is not gzip, is truncated, or expands past the limit.");
+	}
+	const inspected = inspect(reportText, env);
+	if (inspected.reason) {
+		// 4xx, so the client files it as sent and stops offering it: a report
+		// this Worker will not take is not one it will take next week either.
+		return text(422, `Not a TextMate-NG crash report: ${inspected.reason}`);
+	}
+
 	const id = crypto.randomUUID();
 	const received = new Date();
 	const day = received.toISOString().slice(0, 10);
@@ -108,6 +214,11 @@ async function handlePost(request, env) {
 		filename: sanitize(report.name) || "report.gz",
 		hardware: sanitize(form.get("hardware")),
 		contact: sanitize(form.get("contact")),
+		// From the report itself rather than from the client's form fields, so
+		// triage can sort by build without trusting anything the POST claimed.
+		appVersion: sanitize(inspected.header.app_version),
+		osVersion: sanitize(inspected.header.os_version),
+		incidentID: sanitize(inspected.header.incident_id),
 		userAgent: sanitize(request.headers.get("User-Agent")),
 		bytes: body.byteLength,
 	};

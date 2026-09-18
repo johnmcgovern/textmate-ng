@@ -81,6 +81,55 @@ down with:
 
     wrangler r2 object get textmate-ng-diagnostics/reports/2026-09-18/<uuid>.gz --remote --pipe > report.gz
 
+## Who can upload
+
+Nothing can prove a shipped binary is genuine, and it is worth saying that
+plainly rather than implying otherwise. A shared token in the app bundle is
+recoverable with `strings`. App Attest is the one real primitive, and it is not
+available here: `DCAppAttestService.shared.isSupported` was measured as `false`
+for a Developer ID signed binary with no provisioning profile, on macOS 27.
+
+So the aim is not proof of origin. It is that the endpoint be worth nothing to
+anyone else. `POST /` requires the `report` part to be a crash report macOS
+wrote about *this* application:
+
+| Check | Refusal |
+| --- | --- |
+| under 2 MB on the wire | `413` |
+| real gzip, and under 16 MB decompressed | `415` |
+| two JSON documents separated by a newline | `422` |
+| header has `incident_id`, `timestamp`, `bug_type` | `422` |
+| body's `codeSigningID` is `com.j23software.TextMate-NG` | `422` |
+| body's `codeSigningTeamID` is the project's Team ID | `422` |
+
+The last two are the useful ones. A `.ips` carries `codeSigningID` and
+`codeSigningTeamID` in its second document, written by the kernel from the
+crashed process's actual code signature rather than by whatever posted it. That
+is a stronger thing to demand than a token, which can simply be read out of the
+bundle — a forgery here has to be a deliberately constructed crash report
+claiming this project's signing identity. It is still not a guarantee, and a
+determined person can produce one. What it does stop completely is the endpoint
+being useful as free file storage or as a way to fill the bucket with noise,
+which is the abuse that actually costs something.
+
+Reports from local Debug builds are refused too, and that is correct: a Debug
+build is ad-hoc signed with no Team ID, so only released builds can post.
+
+Both expected values live in `[vars]` in `wrangler.toml`, not in the source,
+because the Team ID will change — J23 is enrolled as an individual, and an
+organization enrollment reissues it. Change it when the first build signed with
+the new one ships, not before, or reports from every build in the field stop
+being accepted.
+
+The decompressed cap is enforced while decompressing, not after: a couple of
+hundred KB of zeros expands past a gigabyte, so a check that ran afterwards
+would already have lost.
+
+**A deploy is not instantly global.** Testing a refusal immediately after
+`wrangler deploy` can reach the previous version and get the old answer; that
+happened once while writing these checks, and looked briefly like a hole in
+them. Repeat the request before believing it.
+
 ## Limits, and what is deliberately missing
 
 Two megabytes per report, 512 characters per text field, control characters

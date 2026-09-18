@@ -23,6 +23,19 @@ main = "src/worker.js"
 # is the only thing that runs this Worker before it is deployed.
 compatibility_date = "2026-07-01"
 
+# What a crash report must say about itself to be accepted. Both are compared
+# against codeSigningID / codeSigningTeamID in the report's own second JSON
+# document, which macOS writes from the crashed process's real code signature.
+#
+# EXPECTED_TEAM_ID is here rather than in the source because it is going to
+# change: J23 is enrolled as an individual, and an organization enrollment
+# reissues the Team ID. When that happens this is the edit, plus a redeploy —
+# and reports from builds signed with the old one stop being accepted, so change
+# it when the first build under the new team ships, not before.
+[vars]
+EXPECTED_SIGNING_ID = "com.j23software.TextMate-NG"
+EXPECTED_TEAM_ID = "R22V2H7QF4"
+
 [[r2_buckets]]
 binding = "REPORTS"
 bucket_name = "textmate-ng-diagnostics"

@@ -36,8 +36,35 @@ check() { # description expected actual
 	if [[ "$2" == "$3" ]]; then echo "    ok    $1 ($3)"; else echo "    FAIL  $1: expected $2, got $3"; fail=1; fi
 }
 
+# A crash report has to look like one now, so the fixtures are built rather than
+# printf'd: two JSON documents separated by a newline, the second carrying the
+# codeSigningID and codeSigningTeamID the Worker checks. `ips <file> [key=value]`
+# writes one, with overrides applied to whichever document holds that key.
+ips() {
+	local out=$1; shift
+	python3 - "$out" "$@" <<'PY'
+import gzip, json, sys
+out, overrides = sys.argv[1], sys.argv[2:]
+header = {
+	"app_name": "TextMate-NG", "app_version": "2026.9-alpha.29", "name": "TextMate-NG",
+	"bundleID": "com.j23software.TextMate-NG", "bug_type": "309",
+	"incident_id": "B2738B33-8A69-4ADC-9472-025A39039829",
+	"timestamp": "2026-09-18 12:00:00.00 -0700", "os_version": "macOS 27.0 (26A428)",
+}
+body = {
+	"procName": "TextMate-NG", "codeSigningID": "com.j23software.TextMate-NG",
+	"codeSigningTeamID": "R22V2H7QF4", "exception": {"type": "EXC_BAD_ACCESS"},
+}
+for override in overrides:
+	key, _, value = override.partition("=")
+	(header if key in header else body)[key] = value
+with gzip.open(out, "wb") as f:
+	f.write((json.dumps(header) + "\n" + json.dumps(body)).encode())
+PY
+}
+
 report=$(mktemp -t crashreport).gz
-printf 'Incident Identifier: TEST\nHardware Model: MacBookPro18,2\n' | gzip > "$report"
+ips "$report"
 
 echo "==> a report, posted the way the application posts one"
 headers=$(mktemp)
@@ -63,7 +90,41 @@ check "PUT not allowed"    405 "$(curl -s -o /dev/null -w '%{http_code}' -X PUT 
 big=$(mktemp)
 dd if=/dev/zero of="$big" bs=1m count=3 2>/dev/null
 check "oversized report"   413 "$(curl -s -o /dev/null -w '%{http_code}' -F "report=@$big" "http://127.0.0.1:$port/")"
-rm -f "$big" "$report" "$headers"
+rm -f "$big" "$headers"
+
+echo "==> what is not a crash report from this application"
+post() { curl -s -o /dev/null -w '%{http_code}' -F "report=@$1" -F 'hardware=x' -F 'contact=x' "http://127.0.0.1:$port/"; }
+
+junk=$(mktemp); head -c 400 /dev/urandom > "$junk"
+check "random bytes"       415 "$(post "$junk")"
+
+notgzip=$(mktemp); ips "$notgzip"; gunzip -c "$notgzip" > "$notgzip.plain" 2>/dev/null
+check "a report, ungzipped" 415 "$(post "$notgzip.plain")"
+
+# Compresses ~1000:1, so it is small enough to pass the 2 MB wire cap and large
+# enough to blow the 16 MB decompressed cap. The cap has to be enforced while
+# decompressing; this is the test that says so.
+bomb=$(mktemp); dd if=/dev/zero bs=1m count=64 2>/dev/null | gzip > "$bomb"
+check "a gzip bomb"        415 "$(post "$bomb")"
+
+text=$(mktemp); printf 'just some text\nand more of it\n' | gzip > "$text"
+check "gzipped prose"      422 "$(post "$text")"
+
+oneline=$(mktemp); printf '{"incident_id":"x","timestamp":"t","bug_type":"309"}' | gzip > "$oneline"
+check "no second document" 422 "$(post "$oneline")"
+
+wrongteam=$(mktemp).gz; ips "$wrongteam" codeSigningTeamID=XXXXXXXXXX
+check "another team"       422 "$(post "$wrongteam")"
+
+adhoc=$(mktemp).gz; ips "$adhoc" codeSigningTeamID=
+check "an ad-hoc dev build" 422 "$(post "$adhoc")"
+
+wrongapp=$(mktemp).gz; ips "$wrongapp" codeSigningID=com.apple.Safari
+check "another application" 422 "$(post "$wrongapp")"
+
+noheader=$(mktemp).gz; ips "$noheader" incident_id=
+check "no incident_id"     422 "$(post "$noheader")"
+rm -f "$junk" "$notgzip" "$notgzip.plain" "$bomb" "$text" "$oneline" "$wrongteam" "$adhoc" "$wrongapp" "$noheader"
 
 echo "==> the listing, with ADMIN_TOKEN configured"
 check "no token"           401 "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/list")"
@@ -74,6 +135,8 @@ check "right token"        200 "$(curl -s -o /tmp/crash-list.out -w '%{http_code
 # client sent, which is the field the listing exists to show.
 check "lists one report"   1 "$(python3 -c 'import json,sys; print(json.load(open("/tmp/crash-list.out"))["total"])')"
 check "carries contact"    Anonymous "$(python3 -c 'import json,sys; print(json.load(open("/tmp/crash-list.out"))["reports"][0]["contact"])')"
+# Read out of the report itself, not out of the form fields the POST supplied.
+check "carries app version" 2026.9-alpha.29 "$(python3 -c 'import json,sys; print(json.load(open("/tmp/crash-list.out"))["reports"][0]["appVersion"])')"
 check "no report body"     0 "$(grep -c 'Incident Identifier' /tmp/crash-list.out || true)"
 
 echo "==> the listing, with no ADMIN_TOKEN — must not announce itself"

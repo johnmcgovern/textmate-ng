@@ -2,6 +2,45 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-18 (v2026.9-alpha.30)
+
+**If this application crashes, it can now offer to send the report.** Five
+commits since alpha.29, and this is the only one you can see. If you are on
+alpha.24 or later this should arrive on its own.
+
+Alpha.29 said crash reporting was being built and was switched off until there
+was somewhere of this project's own for reports to go. There is now, so this is
+the build that turns it on.
+
+What that means in practice:
+
+* **It asks, once, and only when there is something to send.** Not at launch,
+  not on installing this build. The first time the application finds a crash
+  report it has not sent, it asks whether to send it, and remembers the answer.
+  Saying no also switches the Settings checkbox off, so the two never disagree,
+  and Settings ▸ Software Update can change your mind either way later.
+* **What a report contains**: the code that was running when the application
+  stopped, your Mac's model, the version of macOS, and whatever contact details
+  you have put in Settings. **Not** what you were editing, and not the contents
+  of any file. If you have entered no contact details it says "Anonymous".
+* **Where it goes**: a small service belonging to this project, not to the
+  original authors of TextMate and not to anybody else. Reports are readable by
+  anyone holding the link, which is a random one that is only shown to you, and
+  the collector never lists what it holds to the internet.
+* **Nothing is sent from a build you compiled yourself.** The collector only
+  accepts reports macOS wrote about a signed release of this application, so a
+  local development build is refused.
+
+**If you would rather it never asked**, switch off "Submit crash reports" in
+Settings ▸ Software Update before the application next crashes, and it will not.
+
+**Why a release for one feature.** Because the feature is only worth anything if
+it is out in the world before the next crash, and because everything else in
+these five commits is on the service side, where it is already running.
+
+**Where to look if something is off.** Settings ▸ Software Update: the checkbox
+and the contact field. Nothing else in the application was touched.
+
 ## 2026-09-17 (v2026.9-alpha.29)
 
 **Nothing you look at has changed.** Fifteen commits since alpha.28, all of them

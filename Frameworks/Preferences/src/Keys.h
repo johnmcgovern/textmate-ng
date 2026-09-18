@@ -71,3 +71,6 @@ extern NSString* const kUserDefaultsLineNumbersKey;
 extern NSString* const kUserDefaultsFolderSearchFollowLinksKey;
 extern NSString* const kUserDefaultsDisableCrashReportingKey;
 extern NSString* const kUserDefaultsCrashReportsContactInfoKey;
+// Three-valued, because "has not been asked" is not the same as "said no":
+// 0 unasked, 1 granted, 2 denied. See CrashReporter.swift.
+extern NSString* const kUserDefaultsCrashReportsConsentKey;

@@ -1,0 +1,20 @@
+# Deploy with:  wrangler deploy        (from this directory)
+# Create the bucket once, first:  wrangler r2 bucket create textmate-ng-crash-reports
+#
+# `main` is the Worker; REPORTS is the R2 binding it writes through. Nothing here
+# is secret — the bucket is private, and the Worker never lists it over HTTP.
+
+name = "textmate-ng-crash-collector"
+main = "src/worker.js"
+# Not today's date: the local `wrangler dev` runtime refuses a date newer than the
+# workerd binary it ships with (2026-07-13 for wrangler 4.108), and bin/test-local
+# is the only thing that runs this Worker before it is deployed.
+compatibility_date = "2026-07-01"
+
+[[r2_buckets]]
+binding = "REPORTS"
+bucket_name = "textmate-ng-crash-reports"
+preview_bucket_name = "textmate-ng-crash-reports-preview"
+
+[observability]
+enabled = true

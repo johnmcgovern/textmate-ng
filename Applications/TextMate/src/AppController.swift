@@ -316,13 +316,13 @@ class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItem
 		AboutWindowController.showChangesIfUpdated()
 
 		CrashReporter.sharedInstance.applicationDidFinishLaunching(notification)
-		// Uploading is deliberately disabled (Phase 2.5, 2026-07-26): `REST_API` here
-		// resolves to MacroMates' api.textmate.org, and this call defaulted to
-		// enabled — most users would never see the opt-out checkbox in Preferences
-		// before their first crash silently uploaded to a company this fork isn't
-		// affiliated with. Re-enable once a J23-owned collector exists, by restoring
-		// `[CrashReporter.sharedInstance postNewCrashReportsToURLString:...]` pointed
-		// at it. macOS's own system crash reporting is unaffected either way.
+		// Restored 2026-09-17, pointed at this project's own collector rather than
+		// MacroMates' api.textmate.org, and asking before the first upload instead
+		// of defaulting to yes — the two reasons Phase 2.5 cut the call. The URL
+		// comes from Info.plist and is empty until the Worker in
+		// Server/crash-collector is deployed, so an unconfigured build neither
+		// uploads nor prompts. macOS's own crash reporting is unaffected either way.
+		CrashReporter.sharedInstance.postNewCrashReports(toURLString: (Bundle.main.object(forInfoDictionaryKey: "TMCrashCollectorURL") as? String) ?? "")
 
 		_ = OakCommitWindowServer.sharedInstance // Setup server
 

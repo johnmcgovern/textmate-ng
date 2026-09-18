@@ -4,14 +4,26 @@ import UserNotifications
 // Collects the crash reports macOS wrote for this process and posts them to a
 // collector, then tells the user through a notification.
 //
-// ⚠️ **The posting half is currently unreachable.** Phase 2.5 stopped
-// AppController calling -postNewCrashReportsToURLString:, because the URL it was
-// given resolved to MacroMates' api.textmate.org and the setting defaulted to
-// enabled — see the comment at that call site. Only -applicationDidFinishLaunching:
-// runs today. It is ported faithfully rather than deleted because re-enabling it
-// against a J23-owned collector is a recorded intention, and its three helpers
-// are unit-tested so the transliteration is checked even though the upload path
-// cannot be exercised end to end.
+// **Uploading is opt-in and off until a collector exists.** Phase 2.5 stopped
+// AppController calling this at all, because the URL it was given resolved to
+// MacroMates' api.textmate.org and the setting defaulted to enabled — most
+// users would never have seen the opt-out before their first crash uploaded to
+// a company this fork is not affiliated with. Two things changed that on
+// 2026-09-17: there is a collector of this project's own (Server/crash-collector)
+// and, more to the point, the application now *asks* before the first upload
+// rather than defaulting to yes. Three gates, in order:
+//
+//   1. `TMCrashCollectorURL` in Info.plist. Empty means never, and it is empty
+//      until the Worker is deployed, so an unconfigured build asks nothing.
+//   2. The Settings checkbox (`DisableCrashReports`), unchanged.
+//   3. `CrashReportsUploadConsent`: unasked / granted / denied. On finding
+//      reports with consent unasked, the user is asked once, and the answer is
+//      remembered. Denying also ticks the Settings box off, so the two never
+//      disagree.
+//
+// A crash report carries the stack of whatever was running, the machine model,
+// and the contact string from Settings. That is the user's to give, which is
+// what the prompt is for.
 //
 // CrashReporter.h stays hand-written, so AppController was not touched.
 
@@ -47,9 +59,23 @@ class CrashReporter: NSObject, @unchecked Sendable {
 		userNotificationCenter(NSUserNotificationCenter.default, didActivate: launched)
 	}
 
+	// Gate 1, on its own so the tests can drive it: an unconfigured build has an
+	// empty URL and must post nowhere, and a plaintext URL must be refused
+	// rather than used — a crash report is not something to send over http.
+	@objc(isAcceptableCollectorURLString:)
+	static func isAcceptableCollectorURLString(_ urlString: String) -> Bool {
+		guard !urlString.isEmpty, let url = URL(string: urlString) else { return false }
+		return url.scheme == "https" && (url.host?.isEmpty == false)
+	}
+
 	@objc func postNewCrashReports(toURLString urlString: String) {
 		guard !UserDefaults.standard.bool(forKey: kUserDefaultsDisableCrashReportingKey) else { return }
-		guard let url = URL(string: urlString) else { return }
+		guard CrashReporter.isAcceptableCollectorURLString(urlString), let url = URL(string: urlString) else {
+			if !urlString.isEmpty {
+				CrashReporter.logError("Not an https crash collector URL, refusing to post: \(urlString)")
+			}
+			return
+		}
 
 		let identifier = "\(Bundle.main.bundleIdentifier ?? "").CrashReporting"
 		let activity = NSBackgroundActivityScheduler(identifier: identifier)
@@ -74,6 +100,12 @@ class CrashReporter: NSObject, @unchecked Sendable {
 			}
 			shouldSend.subtract(trimmed)
 		}
+
+		guard !shouldSend.isEmpty else { return }
+
+		// Gate 3, and the only one that can stop here: asking costs a modal, so
+		// it happens once there is something to send and not at launch.
+		guard consentToUpload(reportCount: shouldSend.count) else { return }
 
 		for reportPath in shouldSend {
 			guard let gzippedReport = CrashReporter.pathForGZipCompressedFile(atPath: reportPath) else { continue }
@@ -101,6 +133,53 @@ class CrashReporter: NSObject, @unchecked Sendable {
 			}
 			task.resume()
 		}
+	}
+
+	// MARK: - Consent
+
+	private enum UploadConsent: Int {
+		case unasked = 0, granted = 1, denied = 2
+	}
+
+	// Blocks the background activity queue this is called on, which is what it is
+	// for: the answer decides whether the loop below it runs at all, and the
+	// scheduler is happy to wait.
+	private func consentToUpload(reportCount: Int) -> Bool {
+		switch UploadConsent(rawValue: UserDefaults.standard.integer(forKey: kUserDefaultsCrashReportsConsentKey)) ?? .unasked {
+			case .granted:
+				return true
+			case .denied:
+				// Denying ticked the Settings box off. Reaching here means it is
+				// back on, which only the user can have done, and ticking a box
+				// labelled "Submit crash reports" is an answer — so it replaces the
+				// earlier no rather than being overruled by it.
+				UserDefaults.standard.set(UploadConsent.granted.rawValue, forKey: kUserDefaultsCrashReportsConsentKey)
+				return true
+			case .unasked:
+				break
+		}
+
+		let granted = DispatchQueue.main.sync { () -> Bool in
+			MainActor.assumeIsolated {
+				let alert = NSAlert()
+				alert.messageText = reportCount == 1
+					? "Send a crash report to the developer?"
+					: "Send \(reportCount) crash reports to the developer?"
+				alert.informativeText = "TextMate-NG quit unexpectedly. The report says what the application was doing at the time: the running code, your Mac’s model, and the contact details in Settings ▸ Software Update — nothing you were editing.\n\nYou will not be asked again; Settings ▸ Software Update can change the answer."
+				alert.addButton(withTitle: "Send")
+				alert.addButton(withTitle: "Don’t Send")
+				return alert.runModal() == .alertFirstButtonReturn
+			}
+		}
+
+		UserDefaults.standard.set((granted ? UploadConsent.granted : .denied).rawValue, forKey: kUserDefaultsCrashReportsConsentKey)
+		if !granted {
+			// So the Settings checkbox agrees with what was just said, rather than
+			// showing "Submit crash reports" ticked while nothing is submitted.
+			UserDefaults.standard.set(true, forKey: kUserDefaultsDisableCrashReportingKey)
+		}
+		CrashReporter.log("Crash report upload \(granted ? "granted" : "denied") by the user")
+		return granted
 	}
 
 	private func recordAsSent(_ reportPath: String) {

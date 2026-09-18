@@ -111,3 +111,4 @@ NSString* const kUserDefaultsLineNumbersKey             = @"lineNumbers";
 NSString* const kUserDefaultsFolderSearchFollowLinksKey = @"folderSearchFollowLinks";
 NSString* const kUserDefaultsDisableCrashReportingKey   = @"DisableCrashReports";
 NSString* const kUserDefaultsCrashReportsContactInfoKey = @"CrashReportsContactInfo";
+NSString* const kUserDefaultsCrashReportsConsentKey     = @"CrashReportsUploadConsent";

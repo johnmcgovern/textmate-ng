@@ -94,3 +94,27 @@ void test_exhaustive ()
 		}
 	}
 }
+
+// The alpha → beta transition, pinned before it is made rather than after.
+//
+// The updater installs nothing on the unattended path that is not strictly
+// newer than what is running (+isUpdate:newerThanVersion:), so if a beta did
+// not compare as newer than the last alpha, the first beta would be refused by
+// every machine already on alpha — silently, since anti-rollback is deliberately
+// quiet. That is a release that reaches nobody and says nothing, which is why
+// this is checked in advance.
+void test_a_beta_is_newer_than_an_alpha ()
+{
+	// The exact step this project is about to take.
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2026.9-alpha.28", @"2026.10-beta.1"), NSOrderedAscending);
+
+	// And the harder one, where only the pre-release word differs: "9" vs "10"
+	// settles the case above before the word is ever reached, so on its own it
+	// would prove nothing about alpha versus beta.
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2026.10-alpha.1", @"2026.10-beta.1"), NSOrderedAscending);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2026.10-beta.1",  @"2026.10-alpha.9"), NSOrderedDescending);
+
+	// Betas among themselves, and a beta against the release it precedes.
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2026.10-beta.1", @"2026.10-beta.2"), NSOrderedAscending);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2026.10-beta.9", @"2026.10"), NSOrderedAscending);
+}

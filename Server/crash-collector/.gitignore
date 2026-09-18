@@ -1,0 +1,4 @@
+# `wrangler dev` state: the local miniflare cache and its sqlite files, written
+# by bin/test-local. Machine-local and regenerated on every run.
+.wrangler/
+node_modules/

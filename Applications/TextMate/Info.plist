@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- The crash collector to post to (Server/crash-collector). Empty means the
+	     application never uploads and never asks; filling it in is what turns the
+	     feature on. It lives here rather than in a preference so that it is covered
+	     by the code signature: where a crash report goes is not a user setting. -->
+	<key>TMCrashCollectorURL</key>
+	<string></string>
 	<key>CFBundleName</key>
 	<string>TextMate-NG</string>
 	<key>CFBundleShortVersionString</key>

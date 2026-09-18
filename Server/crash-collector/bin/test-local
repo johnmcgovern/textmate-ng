@@ -1,0 +1,53 @@
+#!/bin/zsh
+# Exercise the Worker locally: start `wrangler dev`, post a report the way the
+# application does, read it back, and check the refusals. No deploy, no network.
+set -e
+cd "${0:h}/.."
+
+port=8787
+echo "==> starting wrangler dev on :$port"
+wrangler dev --port $port --local > /tmp/crash-collector-dev.log 2>&1 &
+dev_pid=$!
+trap 'kill $dev_pid 2>/dev/null || true' EXIT
+
+for i in {1..40}; do
+	curl -fsS "http://127.0.0.1:$port/" >/dev/null 2>&1 && break
+	sleep 0.5
+done
+
+fail=0
+check() { # description expected actual
+	if [[ "$2" == "$3" ]]; then echo "    ok    $1 ($3)"; else echo "    FAIL  $1: expected $2, got $3"; fail=1; fi
+}
+
+report=$(mktemp -t crashreport).gz
+printf 'Incident Identifier: TEST\nHardware Model: MacBookPro18,2\n' | gzip > "$report"
+
+echo "==> a report, posted the way the application posts one"
+headers=$(mktemp)
+code=$(curl -s -o /tmp/crash-post.out -D "$headers" -w '%{http_code}' \
+	-F "report=@$report;type=application/octet-stream" \
+	-F 'hardware=MacBookPro18,2/arm64/10' \
+	-F 'contact=Anonymous' \
+	"http://127.0.0.1:$port/")
+check "POST returns 201" 201 "$code"
+location=$(grep -i '^location:' "$headers" | awk '{print $2}' | tr -d '\r')
+[[ -n "$location" ]] && echo "    ok    Location: $location" || { echo "    FAIL  no Location header"; fail=1; }
+
+echo "==> reading it back"
+check "GET the report" 200 "$(curl -s -o /tmp/crash-get.out -w '%{http_code}' "$location")"
+check "round trips" "$(gunzip -c "$report" | shasum -a 256 | cut -d' ' -f1)" "$(gunzip -c /tmp/crash-get.out 2>/dev/null | shasum -a 256 | cut -d' ' -f1)"
+
+echo "==> the refusals"
+check "no report part"     400 "$(curl -s -o /dev/null -w '%{http_code}' -F 'hardware=x' "http://127.0.0.1:$port/")"
+check "not multipart"      400 "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "http://127.0.0.1:$port/")"
+check "unknown report"     404 "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/r/00000000-0000-4000-8000-000000000000")"
+check "PUT not allowed"    405 "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "http://127.0.0.1:$port/")"
+
+big=$(mktemp)
+dd if=/dev/zero of="$big" bs=1m count=3 2>/dev/null
+check "oversized report"   413 "$(curl -s -o /dev/null -w '%{http_code}' -F "report=@$big" "http://127.0.0.1:$port/")"
+rm -f "$big" "$report" "$headers"
+
+if [[ $fail == 0 ]]; then echo "==> all checks passed"; else echo "==> FAILURES; wrangler log at /tmp/crash-collector-dev.log"; fi
+exit $fail

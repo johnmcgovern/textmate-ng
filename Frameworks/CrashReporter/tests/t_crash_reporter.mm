@@ -10,11 +10,12 @@
 // failure from an overload that should never have matched.
 static std::string str (NSString* s) { return s.UTF8String ?: ""; }
 
-// CrashReporter is Swift behind a hand-written ObjC header. Its *upload* half is
-// currently unreachable — Phase 2.5 stopped AppController calling
-// -postNewCrashReportsToURLString: — so it cannot be exercised end to end, and
-// these tests exist because that makes its three pure helpers the only place a
-// transliteration mistake would ever be caught.
+// CrashReporter is Swift behind a hand-written ObjC header. Its upload half was
+// unreachable until 2026-09-17 — Phase 2.5 stopped AppController calling
+// -postNewCrashReportsToURLString: — and is now opt-in behind three gates, the
+// first of which is tested at the bottom of this file. The rest of it still
+// cannot be exercised end to end (it needs a crash, a collector and a modal), so
+// these tests remain the only place a transliteration mistake would be caught.
 //
 // The first test is the important one: it is the framework's whole documented
 // blocker, checked rather than argued about.
@@ -195,4 +196,40 @@ void test_gzip_produces_a_file_that_gunzips_back ()
 void test_gzip_returns_nil_for_a_missing_source ()
 {
 	OAK_ASSERT(![CrashReporter pathForGZipCompressedFileAtPath:@"/nonexistent/crash.ips"]);
+}
+
+// ==================================================
+// = Which collector URLs are posted to at all      =
+// ==================================================
+//
+// Gate 1. The URL comes from Info.plist, where it is empty until the Worker in
+// Server/crash-collector is deployed — so the common case, by a long way, is
+// the one where nothing must happen: no upload, and no prompt asking for one.
+
+void test_crash_reporter_refuses_to_post_without_a_collector ()
+{
+	// An unconfigured build. This is what ships today.
+	OAK_ASSERT_EQ((bool)[CrashReporter isAcceptableCollectorURLString:@""], false);
+	OAK_ASSERT_EQ((bool)[CrashReporter isAcceptableCollectorURLString:@"   "], false);
+}
+
+void test_crash_reporter_refuses_a_plaintext_collector ()
+{
+	// A crash report carries the contact string and the running stack; http
+	// would put both on the wire in the clear. A misconfigured Info.plist must
+	// fail closed rather than fall back.
+	OAK_ASSERT_EQ((bool)[CrashReporter isAcceptableCollectorURLString:@"http://example.invalid/"], false);
+	OAK_ASSERT_EQ((bool)[CrashReporter isAcceptableCollectorURLString:@"ftp://example.invalid/"], false);
+	OAK_ASSERT_EQ((bool)[CrashReporter isAcceptableCollectorURLString:@"file:///tmp/reports"], false);
+	// No host: "https:///x" parses, and posting to it would go nowhere.
+	OAK_ASSERT_EQ((bool)[CrashReporter isAcceptableCollectorURLString:@"https:///reports"], false);
+	OAK_ASSERT_EQ((bool)[CrashReporter isAcceptableCollectorURLString:@"not a url"], false);
+}
+
+void test_crash_reporter_accepts_the_deployed_collector ()
+{
+	// The shape `wrangler deploy` prints, so the test says yes to something as
+	// well as no to everything.
+	OAK_ASSERT_EQ((bool)[CrashReporter isAcceptableCollectorURLString:@"https://textmate-ng-crash-collector.j23.workers.dev/"], true);
+	OAK_ASSERT_EQ((bool)[CrashReporter isAcceptableCollectorURLString:@"https://crash.example.com/submit"], true);
 }

@@ -13,6 +13,8 @@
 // delegate, and +currentNotificationCenter raises in a process that is not a
 // bundled app, which the xctest runner is not.
 @interface CrashReporter (Testing)
+// Gate 1 of the upload path: which collector URLs are posted to at all.
++ (BOOL)isAcceptableCollectorURLString:(NSString*)urlString;
 + (NSArray<NSString*>*)reportsForProcessName:(NSString*)processName notBefore:(NSDate*)cutOff in:(NSString*)directory;
 + (NSData*)dataForURLRequest:(NSMutableURLRequest*)request withFormValues:(NSDictionary<NSString*, NSString*>*)payload;
 + (NSString*)pathForGZipCompressedFileAtPath:(NSString*)path;

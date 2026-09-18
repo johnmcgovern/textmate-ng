@@ -15,15 +15,31 @@
 // the URL is unguessable, but there is no account and no login: this is a
 // personal collector for one developer's own application, and a crash report is
 // not a secret so much as a private thing. What it does contain is the user's
-// contact string, their machine model, and the stack of whatever was running —
-// which is why nothing here ever lists the bucket over HTTP. To read the
-// reports, list the bucket from your own machine:
+// contact string, their machine model, and the stack of whatever was running.
 //
-//     wrangler r2 object list textmate-ng-diagnostics
+// Which leaves the developer needing a way to see what arrived, and wrangler
+// cannot give one: there is no `wrangler r2 object list` — the r2 object verbs
+// are get, put and delete, all of which need a key you already have, and the
+// keys here contain a UUID nobody has written down. `wrangler r2 bucket info`
+// reports an object count, but it is a lagging metric: it still read 0 several
+// minutes after two objects were confirmed stored. So the listing has to come
+// from the Worker, which is the only thing holding a binding to the bucket.
 //
-// If the endpoint is ever abused as free storage, the fix is a shared token in
-// a header the client sends; the limits below are the first line, not the only
-// one available.
+// GET /list does that, behind a bearer token in ADMIN_TOKEN — a wrangler
+// secret, never a value in wrangler.toml:
+//
+//     wrangler secret put ADMIN_TOKEN        (then: bin/reports)
+//
+// With no ADMIN_TOKEN set the route answers 404, exactly as an unknown path
+// does, so an endpoint that was never configured is not advertised by its own
+// refusal. The token is compared by SHA-256 digest rather than by string, so
+// the comparison takes the same time whatever the guess and leaks nothing
+// about length or prefix. /list is the only route that reads the bucket
+// wholesale; an unauthenticated request can still only fetch one report whose
+// UUID it already knows.
+//
+// If the POST endpoint is ever abused as free storage, the same token trick
+// works there; the limits below are the first line, not the only one available.
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;   // a gzipped .ips is tens of KB; 2 MB is generous
 const MAX_FIELD_CHARS = 512;              // hardware and contact are short strings
@@ -149,12 +165,101 @@ async function handleGet(request, env, id) {
 	return cors(new Response(object.body, { headers }));
 }
 
+// Same time whatever the guess, and nothing leaked about the token's length or
+// how far a guess got: both sides are hashed to a fixed 32 bytes first, and the
+// comparison accumulates differences instead of returning at the first one.
+//
+// No test covers the accumulate-instead-of-return part, and none can: replacing
+// the loop body with an early `return false` survives the whole suite, because
+// it is still correct — it answers the same thing, only sooner on a near miss.
+// The property is about time, and bin/test-local measures status codes. Left as
+// a loop anyway, but the reason it is safe is the hashing above rather than the
+// loop: an early exit here would leak which byte of a SHA-256 *digest* differed
+// first, which says nothing usable about the token that produced it. The loop
+// is the cheaper belt beside that brace, not the thing holding it up.
+async function tokenMatches(presented, expected) {
+	const encoder = new TextEncoder();
+	const [a, b] = await Promise.all([
+		crypto.subtle.digest("SHA-256", encoder.encode(presented)),
+		crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+	]);
+	const x = new Uint8Array(a);
+	const y = new Uint8Array(b);
+	let difference = 0;
+	for (let i = 0; i < x.length; i++) {
+		difference |= x[i] ^ y[i];
+	}
+	return difference === 0;
+}
+
+async function handleList(request, env, url) {
+	// Not configured is not an invitation: answer as though the route does not
+	// exist, which is what an unknown path gets.
+	if (!env.ADMIN_TOKEN) {
+		return null;
+	}
+	const header = request.headers.get("Authorization") || "";
+	const presented = header.startsWith("Bearer ") ? header.slice(7) : "";
+	if (!presented || !(await tokenMatches(presented, env.ADMIN_TOKEN))) {
+		return text(401, "Unauthorized.", { "WWW-Authenticate": "Bearer" });
+	}
+
+	// `reports/` alone lists every day; `?prefix=2026-09` narrows to one month
+	// without the caller having to know the key layout.
+	const narrow = sanitize(url.searchParams.get("prefix"));
+	const prefix = `reports/${narrow}`;
+	const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || "50"), 1), 1000);
+
+	// Only the .json sidecars: one small object per report, carrying everything
+	// worth listing, so this never reads a crash report to describe it.
+	const reports = [];
+	let cursor;
+	do {
+		const page = await env.REPORTS.list({ prefix, cursor, limit: 1000 });
+		for (const object of page.objects) {
+			if (object.key.endsWith(".gz.json")) {
+				reports.push(object.key);
+			}
+		}
+		cursor = page.truncated ? page.cursor : undefined;
+	} while (cursor);
+
+	// The day is the second key segment, so a plain descending sort on the key
+	// is newest-first; the UUID after it breaks ties arbitrarily but stably.
+	reports.sort().reverse();
+	const wanted = reports.slice(0, limit);
+	const bodies = await Promise.all(wanted.map(async (key) => {
+		const object = await env.REPORTS.get(key);
+		if (!object) {
+			return { key, error: "sidecar vanished between list and get" };
+		}
+		try {
+			return { key, report: key.slice(0, -5), ...JSON.parse(await object.text()) };
+		} catch (error) {
+			return { key, error: "sidecar is not JSON" };
+		}
+	}));
+
+	return cors(new Response(JSON.stringify({ total: reports.length, shown: bodies.length, reports: bodies }, null, 1) + "\n", {
+		status: 200,
+		headers: { "Content-Type": "application/json; charset=utf-8" },
+	}));
+}
+
 export default {
 	async fetch(request, env) {
 		const url = new URL(request.url);
 
 		if (request.method === "POST" && url.pathname === "/") {
 			return handlePost(request, env);
+		}
+
+		if (request.method === "GET" && url.pathname === "/list") {
+			const listing = await handleList(request, env, url);
+			// null means "no ADMIN_TOKEN configured" — fall through to the 404.
+			if (listing) {
+				return listing;
+			}
 		}
 
 		const report = url.pathname.match(/^\/r\/([0-9a-fA-F-]{36})$/);

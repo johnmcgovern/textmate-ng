@@ -1,19 +1,35 @@
 #!/bin/zsh
 # Exercise the Worker locally: start `wrangler dev`, post a report the way the
 # application does, read it back, and check the refusals. No deploy, no network.
+#
+# Two dev runs, because ADMIN_TOKEN has to be both set and unset to cover /list:
+# configured, it must refuse a wrong token and answer a right one; unconfigured,
+# it must 404 like any unknown path rather than advertise itself with a 401.
 set -e
 cd "${0:h}/.."
 
 port=8787
-echo "==> starting wrangler dev on :$port"
-wrangler dev --port $port --local > /tmp/crash-collector-dev.log 2>&1 &
-dev_pid=$!
-trap 'kill $dev_pid 2>/dev/null || true' EXIT
+token='test-token-not-a-secret'
 
-for i in {1..40}; do
-	curl -fsS "http://127.0.0.1:$port/" >/dev/null 2>&1 && break
-	sleep 0.5
-done
+# miniflare persists its simulated R2 under .wrangler/state between runs, so
+# without this the report count is cumulative and "one report was stored" passes
+# or fails depending on how many times this script has been run before. Local
+# dev state only; the deployed bucket is untouched.
+rm -rf .wrangler/state
+
+start_dev() { # port [extra wrangler args...]
+	local p=$1; shift
+	wrangler dev --port $p --local "$@" > /tmp/crash-collector-dev.log 2>&1 &
+	dev_pid=$!
+	for i in {1..40}; do
+		curl -fsS "http://127.0.0.1:$p/" >/dev/null 2>&1 && return
+		sleep 0.5
+	done
+}
+
+echo "==> starting wrangler dev on :$port"
+trap 'kill $dev_pid 2>/dev/null || true' EXIT
+start_dev $port --var "ADMIN_TOKEN:$token"
 
 fail=0
 check() { # description expected actual
@@ -48,6 +64,24 @@ big=$(mktemp)
 dd if=/dev/zero of="$big" bs=1m count=3 2>/dev/null
 check "oversized report"   413 "$(curl -s -o /dev/null -w '%{http_code}' -F "report=@$big" "http://127.0.0.1:$port/")"
 rm -f "$big" "$report" "$headers"
+
+echo "==> the listing, with ADMIN_TOKEN configured"
+check "no token"           401 "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/list")"
+check "wrong token"        401 "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer wrong" "http://127.0.0.1:$port/list")"
+check "token as a prefix"  401 "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${token:0:10}" "http://127.0.0.1:$port/list")"
+check "right token"        200 "$(curl -s -o /tmp/crash-list.out -w '%{http_code}' -H "Authorization: Bearer $token" "http://127.0.0.1:$port/list")"
+# The report posted above, and only it: one entry, and the contact string the
+# client sent, which is the field the listing exists to show.
+check "lists one report"   1 "$(python3 -c 'import json,sys; print(json.load(open("/tmp/crash-list.out"))["total"])')"
+check "carries contact"    Anonymous "$(python3 -c 'import json,sys; print(json.load(open("/tmp/crash-list.out"))["reports"][0]["contact"])')"
+check "no report body"     0 "$(grep -c 'Incident Identifier' /tmp/crash-list.out || true)"
+
+echo "==> the listing, with no ADMIN_TOKEN — must not announce itself"
+kill $dev_pid 2>/dev/null || true
+wait $dev_pid 2>/dev/null || true
+start_dev $port
+check "unconfigured /list" 404 "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/list")"
+check "even with a token"  404 "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" "http://127.0.0.1:$port/list")"
 
 if [[ $fail == 0 ]]; then echo "==> all checks passed"; else echo "==> FAILURES; wrangler log at /tmp/crash-collector-dev.log"; fi
 exit $fail

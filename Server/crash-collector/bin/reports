@@ -1,0 +1,59 @@
+#!/bin/zsh
+# What has arrived in the collector, newest first.
+#
+# There is no `wrangler r2 object list` — the r2 object verbs all need a key you
+# already have, and these keys carry a UUID nobody wrote down — so the listing
+# comes from the Worker's own /list route, which is the only thing holding a
+# binding to the bucket. That route wants the bearer token in ADMIN_TOKEN:
+#
+#     wrangler secret put ADMIN_TOKEN       # once, on the deployed Worker
+#
+# and this script wants the same value locally. It reads it from the login
+# keychain, so it is never an argument on a command line and never in a file:
+#
+#     security add-generic-password -a "$USER" -s textmate-ng-collector -w
+#
+# Usage:  bin/reports [prefix]      e.g. bin/reports 2026-09
+set -e
+cd "${0:h}/.."
+
+url=${TM_COLLECTOR_URL:-https://textmate-ng-crash-collector.developer-c31.workers.dev}
+token=${TM_COLLECTOR_TOKEN:-$(security find-generic-password -a "$USER" -s textmate-ng-collector -w 2>/dev/null || true)}
+if [[ -z "$token" ]]; then
+	print -u2 "No token. Either set TM_COLLECTOR_TOKEN, or put it in the keychain:"
+	print -u2 '    security add-generic-password -a "$USER" -s textmate-ng-collector -w'
+	exit 1
+fi
+
+out=$(mktemp)
+code=$(curl -s -o "$out" -w '%{http_code}' -H "Authorization: Bearer $token" "$url/list?prefix=${1:-}")
+if [[ "$code" == 401 ]]; then
+	print -u2 "Refused. The token here does not match ADMIN_TOKEN on the Worker."
+	exit 1
+elif [[ "$code" == 404 ]]; then
+	print -u2 "No /list on $url — either ADMIN_TOKEN is unset there, or the deployed"
+	print -u2 "Worker predates the listing route. Fix with: wrangler secret put ADMIN_TOKEN"
+	exit 1
+elif [[ "$code" != 200 ]]; then
+	print -u2 "$url/list answered $code:"; cat "$out" >&2; exit 1
+fi
+
+python3 - "$out" "$url" <<'PY'
+import json, sys
+listing = json.load(open(sys.argv[1]))
+base = sys.argv[2]
+if not listing["total"]:
+	print("No reports. That is the good answer.")
+	sys.exit()
+print(f'{listing["shown"]} of {listing["total"]} report(s), newest first:\n')
+for r in listing["reports"]:
+	if "error" in r:
+		print(f'  {r["key"]}  — {r["error"]}')
+		continue
+	print(f'  {r["receivedAt"]}  {r["bytes"]:>7} B  {r.get("hardware") or "?"}')
+	print(f'      from: {r.get("contact") or "(none given)"}')
+	print(f'      read: {base}/r/{r["id"]}')
+	print(f'      save: wrangler r2 object get textmate-ng-diagnostics/{r["report"]} --remote --pipe > {r["id"]}.gz')
+	print()
+PY
+rm -f "$out"

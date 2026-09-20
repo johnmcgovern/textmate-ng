@@ -52,18 +52,12 @@
 - (BOOL)data:(NSData*)data hasValidECDSASignature:(NSData*)signature usingPublicKey:(SecKeyRef)publicKey;
 @end
 
-// The signed update manifest (step 4). `now` is a parameter so expiry is testable
-// without waiting a month; `keys` so the pins can use a throwaway keypair instead
-// of J23's real one.
-@interface TMUpdateManifest : NSObject
-@property (nonatomic, readonly) NSString* version;
-@property (nonatomic, readonly) NSURL*    url;
-@property (nonatomic, readonly) NSString* sha256;
-@property (nonatomic, readonly) int64_t   size;
-@property (nonatomic, readonly) NSString* minimumSystemVersion;
-
-+ (TMUpdateManifest*)manifestFromData:(NSData*)data keys:(NSDictionary<NSString*, NSString*>*)keys now:(NSDate*)now error:(NSError**)error;
-@end
+// The signed update manifest (step 4) is declared in ../src/OakDownloadManager.h,
+// which this file already imports. It used to be redeclared here; once
+// BundlesManager needed TMUpdateManifest too — for the bundle index, after the
+// move off api.textmate.org — the shipping header had to carry it, and two
+// @interface blocks for one class is a hard error rather than a duplicate
+// declaration. One declaration, in the header that ships.
 
 // The last two checks before the running application is replaced (step 5).
 // `requirement` is a parameter so the mechanism can be pinned against a bundle

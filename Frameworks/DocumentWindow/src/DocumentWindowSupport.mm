@@ -182,7 +182,10 @@ void DWPerformDidOpenCallbacks (OakTextView* textView)
 
 BOOL DWCanReachBundleServer (void)
 {
-	char const* host = [[[NSURL URLWithString:@(REST_API)] host] UTF8String];
+	// The bundle index's own host, which since 2026-09-20 is this fork's mirror
+	// rather than api.textmate.org. Asking about the host we will actually
+	// download from is the only version of this check that means anything.
+	char const* host = [[[NSURL URLWithString:@TM_BUNDLE_INDEX_URL] host] UTF8String];
 	if(!host)
 		return NO;
 

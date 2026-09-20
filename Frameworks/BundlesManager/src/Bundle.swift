@@ -32,6 +32,11 @@ class TMBundle: NSObject {
 	@objc dynamic var contactEmail: String?
 	@objc dynamic var downloadURL: URL?
 	@objc dynamic var downloadLastUpdated: Date?
+	// sha256 of the payload, from the signed index. This is what replaced the
+	// per-archive signature that used to arrive in S3 object metadata: the index
+	// is signed, the index names the digest, so the payload needs no signature
+	// of its own and can be served by anything.
+	@objc dynamic var downloadSHA256: String?
 	@objc dynamic var downloadSize: Int = 0
 	@objc dynamic var mandatory: Bool = false
 	@objc var isMandatory: Bool { mandatory }

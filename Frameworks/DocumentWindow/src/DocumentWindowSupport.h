@@ -147,8 +147,8 @@ NSString* DWFindClipboardFilterString (NSString* string, NSString* basePath);
 void DWPerformDidOpenCallbacks (OakTextView* textView);
 
 // Whether the bundle server is reachable, which gates the grammar-install
-// suggestion. The host comes from the REST_API build setting — a preprocessor
-// define, so it is not visible to Swift at all.
+// suggestion. The host comes from the TM_BUNDLE_INDEX_URL build setting — a
+// preprocessor define, so it is not visible to Swift at all.
 BOOL DWCanReachBundleServer (void);
 
 // ============================================================

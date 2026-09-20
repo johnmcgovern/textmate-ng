@@ -117,6 +117,76 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 		}
 	}
 
+	// Fetch the bundle index, verify its signature, and write the document it
+	// carries — nothing else touches disk.
+	//
+	// This replaced a `downloadFile(…publicKeys:)` that took the signature from
+	// `x-amz-meta-x-signee` and `x-amz-meta-x-signature`, because MacroMates
+	// served the index from S3 and those headers are how S3 carries object
+	// metadata. GitHub cannot set custom response headers on a release asset, so
+	// that scheme could not follow the index to a host of this project's own.
+	// The signature now travels *inside* the document, in the same wrapper the
+	// software updater has used since alpha.24, and is checked by the same code:
+	// UpdateManifest.verifiedPayload, against the keys in TMUpdateManifestKeys.
+	//
+	// The bytes are written only after the signature checks out, so an index
+	// that fails verification cannot be read back later as if it had passed.
+	static func fetchVerifiedIndex(from url: URL, writingTo path: String, completionHandler: @escaping (Bool, Error?) -> Void) {
+		let task = URLSession.shared.dataTask(with: url) { data, response, error in
+			if let error {
+				completionHandler(false, error)
+				return
+			}
+			guard let data, !data.isEmpty else {
+				completionHandler(false, NSError(domain: "BundlesManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Empty response from the bundle index."]))
+				return
+			}
+			if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+				completionHandler(false, NSError(domain: "BundlesManager", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "Bundle index returned HTTP \(http.statusCode)."]))
+				return
+			}
+
+			let payload: Data
+			do {
+				// TMUpdateManifest, not UpdateManifest: this crosses a module
+				// boundary through a hand-written header, so the name here is the
+				// @objc one (rule 23).
+				payload = try TMUpdateManifest.verifiedPayload(from: data, keys: TMUpdateManifest.embeddedKeys())
+			} catch {
+				// Worth distinguishing in the log: being served an error page by a
+				// proxy looks identical to a bad signature unless the type is named.
+				let contentType = (response as? HTTPURLResponse)?.allHeaderFields["Content-Type"] as? String
+				log.error("Bundle index failed verification (\(contentType ?? "no content-type", privacy: .public)): \(error.localizedDescription, privacy: .public)")
+				completionHandler(false, error)
+				return
+			}
+
+			// Unchanged is not an update. Comparing the verified bytes rather than
+			// an ETag keeps this honest about what actually changed, and the index
+			// is tens of kilobytes.
+			if let existing = try? Data(contentsOf: URL(fileURLWithPath: path)), existing == payload {
+				completionHandler(false, nil)
+				return
+			}
+			do {
+				// On a fresh install nothing has created Cache/ yet, and an atomic
+				// write into a directory that does not exist fails with "the folder
+				// doesn't exist" — which reads like a missing download rather than a
+				// missing directory. The old header-signature path created it on the
+				// way past; this has to do the same.
+				let destination = URL(fileURLWithPath: path)
+				try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
+				                                        withIntermediateDirectories: true)
+				try payload.write(to: destination, options: .atomic)
+				completionHandler(true, nil)
+			} catch {
+				log.error("Could not store the bundle index at \(path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+				completionHandler(false, error)
+			}
+		}
+		task.resume()
+	}
+
 	private func tryUpdateBundleIndex(andCallback completionHandler: @escaping (Bool) -> Void) {
 		// The completion runs on URLSession.shared's queue — downloadFile uses the
 		// shared session, not the manager's main-queue one — and then hops to the
@@ -126,7 +196,24 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 		// (concurrency audit, 2026-09-16).
 		nonisolated(unsafe) let unsafeSelf = self
 		nonisolated(unsafe) let unsafeHandler = completionHandler
-		OakDownloadManager.sharedInstance.downloadFile(at: remoteIndexURL, replacingFileAt: URL(fileURLWithPath: remoteIndexPath), publicKeys: publicKeys) { wasUpdated, error in
+
+		// Snapshot what was recommended **before** the new index is written.
+		//
+		// `bundles` is lazily loaded, and the getter reads whatever index is on
+		// disk at the moment it is first touched. Taken after the download, as it
+		// used to be, the very first run loads the *new* index as the "old"
+		// recommendations — so every recommended bundle is in the set it is being
+		// compared against, `NOT (SELF IN …)` is false for all of them, and a
+		// fresh install ends up with only the three mandatory bundles. Measured
+		// on 2026-09-19 with an empty Managed directory: 3 installed, 30 skipped.
+		//
+		// This is not caused by moving off api.textmate.org; the ordering was the
+		// same before. It stayed hidden because on any machine that already had
+		// bundles, the getter had run at launch and the snapshot was genuinely
+		// the previous state.
+		nonisolated(unsafe) let oldRecommendations = NSSet(array: ((self.bundles ?? []) as NSArray).filtered(using: NSPredicate(format: "isRecommended == YES")))
+
+		BundlesManager.fetchVerifiedIndex(from: remoteIndexURL, writingTo: remoteIndexPath) { wasUpdated, error in
 			BundlesManagerSupport.recordIndexCheck(atPath: unsafeSelf.remoteIndexPath)
 			if error == nil {
 				UserDefaults.standard.set(Date(), forKey: kUserDefaultsLastBundleUpdateCheckKey)
@@ -136,9 +223,9 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 
 				DispatchQueue.main.async {
 					let newBundles = unsafeSelf.bundlesByLoadingIndex()
-					let oldRecommendations = NSSet(array: ((unsafeSelf.bundles ?? []) as NSArray).filtered(using: NSPredicate(format: "isRecommended == YES")))
 					unsafeSelf.bundles = newBundles
 					let bundlesToUpdate = (newBundles as NSArray).filtered(using: NSPredicate(format: "(hasUpdate == YES AND isCompatible == YES) OR (isInstalled == NO AND (isMandatory == YES OR (isRecommended == YES AND isCompatible == YES AND NOT (SELF IN %@))))", oldRecommendations)) as? [TMBundle] ?? []
+					log.log("Bundle index: \(newBundles.count, privacy: .public) listed, \(oldRecommendations.count, privacy: .public) previously recommended, \(bundlesToUpdate.count, privacy: .public) to install")
 					unsafeSelf.installBundles(bundlesToUpdate) { updatedBundles in
 						for bundle in updatedBundles ?? [] {
 							log.log("\(bundle.name ?? "", privacy: .public) bundle updated: \(bundle.path ?? "", privacy: .public)")
@@ -221,8 +308,19 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 				continue
 			}
 
+			// No digest means an index entry this build cannot verify, and the
+			// answer to that is to refuse rather than to fetch it anyway. The
+			// only way to reach here is an index that omitted `sha256`, which
+			// our own mirror never does — so this is the guard that would catch
+			// being pointed at somebody else's index.
+			guard let expectedSHA256 = bundle.downloadSHA256, !expectedSHA256.isEmpty else {
+				log.error("Refusing to download \(bundle.name ?? "", privacy: .public): the index carries no sha256 for it")
+				group.leave()
+				continue
+			}
+
 			progress.becomeCurrent(withPendingUnitCount: 1)
-			_ = OakDownloadManager.sharedInstance.downloadArchive(at: downloadURL, forReplacing: destURL, publicKeys: publicKeys) { extractedArchiveURL, error in
+			_ = OakDownloadManager.sharedInstance.downloadArchive(at: downloadURL, forReplacing: destURL, expectedSHA256: expectedSHA256, expectedSize: Int64(bundle.downloadSize)) { extractedArchiveURL, error in
 				if let extractedArchiveURL {
 					do {
 						_ = try FileManager.default.replaceItemAt(destURL, withItemAt: extractedArchiveURL, backupItemName: nil, options: .usingNewMetadataOnly)
@@ -464,6 +562,7 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 			bundle.downloadURL         = (version?["url"] as? String).flatMap { URL(string: $0) }
 			bundle.downloadLastUpdated = version?["updated"] as? Date
 			bundle.downloadSize        = (version?["size"] as? NSNumber)?.intValue ?? 0
+			bundle.downloadSHA256      = version?["sha256"] as? String
 
 			var grammars: [BundleGrammar] = []
 			for info in item["grammars"] as? [[String: Any]] ?? [] {
@@ -600,27 +699,18 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 		return bundlesFromIndex(remoteIndexPath: remoteIndexPath, localIndexPath: localIndexPath, installDir: installDir, cache: cache)
 	}
 
-	private var publicKeys: [String: String] {
-		var res: [String: String] = [:]
-
-		let dummy = Progress.discreteProgress(totalUnitCount: 1)
-		dummy.becomeCurrent(withPendingUnitCount: 1)
-		for key in NSDictionary(contentsOfFile: remoteIndexPath)?["keys"] as? [[String: Any]] ?? [] {
-			if let identity = key["identity"] as? String, let publicKey = key["publicKey"] as? String {
-				res[identity] = publicKey
-			}
-		}
-		dummy.resignCurrent()
-
-		if !res.isEmpty {
-			return res
-		}
-
-		return [
-			"org.textmate.duff":    "-----BEGIN PUBLIC KEY-----\nMIIBtjCCASsGByqGSM44BAEwggEeAoGBAPIE9PpXPK3y2eBDJ0dnR/D8xR1TiT9m\n8DnPXYqkxwlqmjSShmJEmxYycnbliv2JpojYF4ikBUPJPuerlZfOvUBC99ERAgz7\nN1HYHfzFIxVo1oTKWurFJ1OOOsfg8AQDBDHnKpS1VnwVoDuvO05gK8jjQs9E5LcH\ne/opThzSrI7/AhUAy02E9H7EOwRyRNLofdtPxpa10o0CgYBKDfcBscidAoH4pkHR\nIOEGTCYl3G2Pd1yrblCp0nCCUEBCnvmrWVSXUTVa2/AyOZUTN9uZSC/Kq9XYgqwj\nhgzqa8h/a8yD+ao4q8WovwGeb6Iso3WlPl8waz6EAPR/nlUTnJ4jzr9t6iSH9owS\nvAmWrgeboia0CI2AH++liCDvigOBhAACgYAFWO66xFvmF2tVIB+4E7CwhrSi2uIk\ndeBrpmNcZZ+AVFy1RXJelNe/cZ1aXBYskn/57xigklpkfHR6DGqpEbm6KC/47Jfy\ny5GEx+F/eBWEePi90XnLinytjmXRmS2FNqX6D15XNG1xJfjociA8bzC7s4gfeTUd\nlpQkBq2z71yitA==\n-----END PUBLIC KEY-----\n",
-			"org.textmate.msheets": "-----BEGIN PUBLIC KEY-----\nMIIDOzCCAi4GByqGSM44BAEwggIhAoIBAQDfYsqBc18uL7yYb/bDrrEtVTBG8tML\nmMtNFyU8XhlVKWdQJwBGG/fV2Wjc0hVYSeTWv3VueITZbuuVZEePXlem6Dki1DEL\nsMNeDvE/l0MKHXi1+sr1cht7QvuTi/c1UK4I6QNWDJWi7KmqJg3quLCwJfMef1x5\n/qgLUln5cU6+pAj43Vp62bzHJBjAnrC432yD7F4Mxu4oV/PEm5QC6pU7RcvUwAox\np7m7c8+CxX7Aq4dH6Jd8Jt6XuYIktlfcFivvvF60CvxhABDBdGMra4roO0wlJmID\n91oQ3PLxFBsDmbluPJlkmTp4YetsF8/Zd9P3WwBQUArtNdiqKZIQ4uHXAhUAvNZ5\ntZkzuUiblIxZKmOCBN/JeMsCggEBAK9jUiC98+hwY5XcDQjDSLPE4uvv+dHZ29Bx\n8KevX+qzd6shIhp6urvyBXrM+h8l7iB6Jh4Wm3WhqKMBjquRqyGogQDGxJr7QBVk\nQSOiyaKDT4Ue/Nhg1MFsrt3PtS1/nscZ6GGWswrCfQ1t4m/wXDasUSfz2smae+Jd\nZ6UGBzWQMRawyU/O/LX0PlJkBOMHopecAUcxHc2G02P2QwAMKPavwksQ4tWCJvIr\n7ZELfCcVQtG2UnpTRWqLZQaVwSYMHoNK9/reu099sdv9CQ+trH2Q5LlBXJmHloFK\nafiuQPjTmaJVf/piiQ79xJB6VmwoEpOJJG4NYNt7f+I7YCk07xwDggEFAAKCAQA5\nSBwWJouMKUI6Hi0EZ4/Yh98qQmItx4uWTYFdjcUVVYCKK7GIuXu67rfkbCJUrvT9\nID1vw2eyTmbuW2TPuRDsxUcB7WRyyLekl67vpUgMgLBLgYMXQf6RF4HM2tW7UWg7\noNQHkZKWbhDgXdumKzKf/qZPB/LT2Yndv/zqkQ+YXIu08j0RGkxJaAjB7nEv1XGq\nL2VJf8aEi+MnihAtMPCHcW34qswqO1kOCbOWNShlfWHGjKlfdsPYv87RcalHNqps\nk1r60kyEkeZvKGM+FDT80N7cafX286v8n9L4IvvnLr/FDOH4XXzEjXB9Vr5Ffvj1\ndxNPRmDZOo6JNKA8Uvki\n-----END PUBLIC KEY-----\n",
-		]
-	}
+	// **The two MacroMates DSA keys that used to live here are gone**, removed
+	// 2026-09-20 with the move off api.textmate.org. They were the fallback when
+	// the index named no keys of its own, which meant this fork trusted, by
+	// default, signatures made by an organisation it has no relationship with —
+	// and a bundle command is arbitrary code, so that was a code-execution path
+	// into every user of this fork if their infrastructure were ever turned or
+	// compromised.
+	//
+	// Nothing replaces them here. The index is now verified as a whole through
+	// UpdateManifest.verifiedPayload against TMUpdateManifestKeys, and each
+	// payload by the sha256 that signed index carries, so there is no longer a
+	// per-archive signature and no key list for one.
 
 	// Lazily loaded, as before, and without a KVO notification for that first
 	// load — the getter filled the ivar directly. The Preferences pane binds an

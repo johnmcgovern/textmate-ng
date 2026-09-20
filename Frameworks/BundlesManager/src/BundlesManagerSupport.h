@@ -8,7 +8,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 // Swift names are stated rather than left to the importer (rule 28).
 @interface BundlesManagerSupport : NSObject
-// [NSURL URLWithString:@REST_API "/bundles"] — REST_API is a -D flag the Swift
+// [NSURL URLWithString:@TM_BUNDLE_INDEX_URL] — a -D flag the Swift
 // compiler does not see.
 + (NSURL*)remoteIndexURL;
 

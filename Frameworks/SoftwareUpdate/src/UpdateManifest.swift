@@ -82,8 +82,15 @@ final class UpdateManifest: NSObject, @unchecked Sendable {
 
 	// `now` is a parameter rather than Date() so expiry is testable without
 	// waiting a month or lying to the clock.
-	@objc(manifestFromData:keys:now:error:)
-	static func manifest(from data: Data, keys: [String: String], now: Date) throws -> UpdateManifest {
+	// The signed bytes out of a wrapper, once the signature over them checks out
+	// against a key this build carries. Nothing is parsed here, which is what
+	// makes it reusable: the update channel's payload is JSON and the bundle
+	// index's is a plist, and the signature covers neither format — it covers
+	// the bytes. Split out of `manifest(from:keys:now:)` when bundles moved off
+	// api.textmate.org, so that both trust paths are literally the same code
+	// rather than two copies that can drift.
+	@objc(verifiedPayloadFromData:keys:error:)
+	static func verifiedPayload(from data: Data, keys: [String: String]) throws -> Data {
 		guard let wrapper = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
 			throw UpdateManifestError.malformed
 		}
@@ -99,7 +106,7 @@ final class UpdateManifest: NSObject, @unchecked Sendable {
 
 		// Verified before parsed. The order is the point.
 		guard let encodedKey = keys[keyID] else {
-			log.error("Update manifest names key '\(keyID, privacy: .public)', which this build does not carry")
+			log.error("Signed document names key '\(keyID, privacy: .public)', which this build does not carry")
 			throw UpdateManifestError.unknownKey
 		}
 		guard let publicKey = OakDownloadManager.publicKey(fromBase64X963String: encodedKey) else {
@@ -109,6 +116,12 @@ final class UpdateManifest: NSObject, @unchecked Sendable {
 		guard OakDownloadManager.sharedInstance.data(signedBytes, hasValidECDSASignature: signature, usingPublicKey: publicKey) else {
 			throw UpdateManifestError.badSignature
 		}
+		return signedBytes
+	}
+
+	@objc(manifestFromData:keys:now:error:)
+	static func manifest(from data: Data, keys: [String: String], now: Date) throws -> UpdateManifest {
+		let signedBytes = try verifiedPayload(from: data, keys: keys)
 
 		guard let inner = (try? JSONSerialization.jsonObject(with: signedBytes)) as? [String: Any] else {
 			throw UpdateManifestError.malformed

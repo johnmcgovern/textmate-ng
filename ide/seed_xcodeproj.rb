@@ -109,7 +109,12 @@ end
 # one round of shell-splitting.
 GLOBAL_DEFINE_FLAGS = [
   %q{-DNULL_STR=\"￿\"},
-  %q{-DREST_API=\"https://api.textmate.org\"},
+  # The bundle index this fork installs from: its own mirror, signed with the
+  # same key as release.json, never MacroMates' server. See
+  # ide/BUNDLE_HOSTING_PLAN.md for why this could not simply be a re-pointed
+  # REST_API — their scheme carries signatures in S3 object metadata headers,
+  # which GitHub cannot set.
+  %q{-DTM_BUNDLE_INDEX_URL=\"https://github.com/johnmcgovern/textmate-ng/releases/download/bundles/bundles.json\"},
 ]
 
 # Language-dispatching prefix header (Shared/PCH/prelude.h) routes to
@@ -318,7 +323,7 @@ end
 # supplies the std/boost includes, and a module (like a bridging header) is
 # compiled standalone, outside any target's GCC_PREFIX_HEADER.
 #
-# NOTE the shims do NOT get GLOBAL_DEFINE_FLAGS (-DNULL_STR=… / -DREST_API=…).
+# NOTE the shims do NOT get GLOBAL_DEFINE_FLAGS (-DNULL_STR=… / -DTM_BUNDLE_INDEX_URL=…).
 # Nothing currently exposed needs them; if a shim ever includes a header that
 # does (e.g. <text/types.h> uses NULL_STR), thread the defines through
 # swift_xcc_flags below as -Xcc -D… pairs.

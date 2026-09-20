@@ -12,7 +12,11 @@ static char const* kBundleAttributeUpdated = "org.textmate.bundle.updated";
 @implementation BundlesManagerSupport
 + (NSURL*)remoteIndexURL
 {
-	return [NSURL URLWithString:@REST_API "/bundles"];
+	// This fork's own signed mirror. TM_BUNDLE_INDEX_URL is a -D flag so the
+	// value is fixed at build time and covered by the code signature: where
+	// bundles come from is not something a preference should be able to move,
+	// because a bundle command is arbitrary code.
+	return [NSURL URLWithString:@TM_BUNDLE_INDEX_URL];
 }
 
 + (void)recordIndexCheckAtPath:(NSString*)remoteIndexPath

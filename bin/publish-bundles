@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""Sign the bundle index and publish it, with the payloads, to a GitHub release.
+
+Usage:
+  bin/publish-bundles [--dry-run] [--in DIR] [--tag bundles]
+
+Separate from bin/mirror-bundles for the same reason bin/release is separate
+from bin/notarize: rebuilding a mirror is safe and repeatable, and replacing
+what every user's editor downloads is not.
+
+**What is signed.** The index that bin/mirror-bundles produced, carrying a
+sha256 and size for every payload. It is signed with the same ECDSA key that
+already signs release.json, through bin/update-sign, and wrapped in the shape
+UpdateManifest.swift already parses:
+
+    { "manifest": <base64 of the index bytes>, "keyID": …, "signature": … }
+
+The signature covers the *decoded* bytes, so the base64 is transport only and
+neither side has to agree about JSON whitespace or key order.
+
+**Why that is enough.** Payloads need no signature of their own: the signed
+index names each one's sha256, and the application verifies downloads against it
+with ArchiveVerification.digest, the same path the software updater has used
+since alpha.24. That is what lets a GitHub release host this at all — the scheme
+it replaces depends on S3 object metadata headers, which GitHub cannot set.
+"""
+
+import argparse
+import base64
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_IN = ROOT / "build" / "bundle-mirror"
+KEY_ID = "j23-2026"
+REPO = "johnmcgovern/textmate-ng"
+DOWNLOAD = "https://github.com/{repo}/releases/download/{tag}/{file}"
+
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, check=True, capture_output=True, text=True, **kw)
+
+
+def build_signed_index(src: Path, tag: str, out: Path) -> dict:
+    index = json.loads((src / "index.json").read_text())
+
+    missing = []
+    for b in index["bundles"]:
+        payload = src / b["file"]
+        if not payload.exists():
+            missing.append(b["file"])
+            continue
+        blob = payload.read_bytes()
+        # Re-hash rather than trust the index we are about to sign. Signing a
+        # digest that does not match the bytes on disk would publish something
+        # no client could ever install, and the failure would look like a
+        # network problem.
+        actual = hashlib.sha256(blob).hexdigest()
+        if actual != b["sha256"] or len(blob) != b["size"]:
+            raise SystemExit(
+                f"error: {b['file']} does not match the index it was built with\n"
+                f"  index:  {b['sha256']} / {b['size']} bytes\n"
+                f"  ondisk: {actual} / {len(blob)} bytes\n"
+                f"  rebuild the mirror rather than publishing this."
+            )
+        b["url"] = DOWNLOAD.format(repo=REPO, tag=tag, file=b["file"])
+    if missing:
+        raise SystemExit(f"error: index names {len(missing)} payload(s) not in {src}: "
+                         + ", ".join(missing[:5]))
+
+    inner = json.dumps(index, indent=1, sort_keys=True).encode()
+    inner_path = out / "index.signed-bytes.json"
+    inner_path.write_bytes(inner)
+
+    signature = run([str(ROOT / "bin" / "update-sign"), "sign", str(inner_path)]).stdout.strip()
+
+    wrapper = {
+        "manifest": base64.b64encode(inner).decode(),
+        "keyID": KEY_ID,
+        "signature": signature,
+    }
+    (out / "bundles.json").write_text(json.dumps(wrapper, indent=1) + "\n")
+    return index
+
+
+# An X9.63 public key is a bare uncompressed point; openssl wants a
+# SubjectPublicKeyInfo. For P-256 the wrapper is a fixed prefix, so this is a
+# concatenation rather than a DER encoder.
+P256_SPKI_PREFIX = bytes.fromhex("3059301306072a8648ce3d020106082a8648ce3d030107034200")
+
+
+def verify_wrapper(path: Path) -> bool:
+    import tempfile
+    wrapper = json.loads(path.read_text())
+    signed = base64.b64decode(wrapper["manifest"])
+    signature = base64.b64decode(wrapper["signature"])
+    x963 = base64.b64decode(run([str(ROOT / "bin" / "update-sign"), "public-key"]).stdout.strip())
+
+    with tempfile.TemporaryDirectory() as tmp:
+        t = Path(tmp)
+        der = P256_SPKI_PREFIX + x963
+        (t / "pub.der").write_bytes(der)
+        (t / "sig.der").write_bytes(signature)
+        (t / "signed.bin").write_bytes(signed)
+        r = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-verify", str(t / "pub.der"),
+             "-keyform", "DER", "-signature", str(t / "sig.der"), str(t / "signed.bin")],
+            capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f"    openssl: {r.stdout.strip()} {r.stderr.strip()}", file=sys.stderr)
+        return r.returncode == 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--in", dest="src", default=str(DEFAULT_IN))
+    ap.add_argument("--tag", default="bundles")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    src = Path(args.src)
+    if not (src / "index.json").exists():
+        print(f"error: no index.json in {src} — run bin/mirror-bundles first", file=sys.stderr)
+        return 2
+
+    print(f"==> signing the index with {KEY_ID}")
+    index = build_signed_index(src, args.tag, src)
+    payloads = [src / b["file"] for b in index["bundles"]]
+    total = sum(p.stat().st_size for p in payloads)
+    print(f"    {len(payloads)} payloads, {total/1024/1024:.1f} MB")
+    print(f"    wrapper: {(src / 'bundles.json').stat().st_size} bytes")
+
+    # Verify what was just signed, before publishing it. A signature nobody
+    # checked is a guess, and the failure mode here is an editor that refuses
+    # every bundle with an error that looks like a network problem.
+    print("==> verifying the signature the way the application will")
+    if not verify_wrapper(src / "bundles.json"):
+        print("error: the signature does not verify against the published public key. "
+              "Nothing published.", file=sys.stderr)
+        return 1
+    print("    verified against the key in bin/update-sign public-key")
+
+    if args.dry_run:
+        print("==> --dry-run: nothing published")
+        print(f"    would create/update release '{args.tag}' on {REPO}")
+        for b in index["bundles"][:3]:
+            print(f"      {b['file']:<26} {b['sha256'][:12]}  {b['url']}")
+        print(f"      … and {len(payloads) - 3} more, plus bundles.json")
+        return 0
+
+    exists = subprocess.run(["gh", "release", "view", args.tag, "--repo", REPO],
+                            capture_output=True, text=True).returncode == 0
+    if not exists:
+        print(f"==> creating release '{args.tag}'")
+        run(["gh", "release", "create", args.tag, "--repo", REPO, "--prerelease",
+             "--title", "Bundle mirror",
+             "--notes", "Bundle payloads and the signed index the editor installs from. "
+                        "Built by bin/mirror-bundles from each bundle's own repository at a "
+                        "pinned commit; see ide/BUNDLE_HOSTING_PLAN.md."])
+    else:
+        print(f"==> release '{args.tag}' exists; replacing its assets")
+
+    print(f"==> uploading {len(payloads) + 1} assets")
+    run(["gh", "release", "upload", args.tag, "--repo", REPO, "--clobber",
+         *[str(p) for p in payloads], str(src / "bundles.json")])
+
+    print(f"==> done: https://github.com/{REPO}/releases/tag/{args.tag}")
+    print(f"    index: {DOWNLOAD.format(repo=REPO, tag=args.tag, file='bundles.json')}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

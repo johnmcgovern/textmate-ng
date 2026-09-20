@@ -70,17 +70,27 @@ what makes GitHub viable.
 
 ## The steps
 
-1. `bin/mirror-bundles` — resolve each bundle to a repository and commit, fetch
-   from GitHub, apply `bin/patch-bundles`, produce a `.tbz`, emit the index with
-   sha256 and size per entry.
-2. Sign the index with `bin/update-sign`; publish index and payloads to the
-   bundles repository as a release.
-3. Application: point `REST_API` at the new location, switch bundle downloads
-   from `.headerSignature` to `.digest`, and **delete the two hardcoded
-   MacroMates keys**.
-4. Fix `bl` in Release builds so `DefaultBundles.tbz` stops being empty, which
+1. ~~`bin/mirror-bundles`~~ **Done 2026-09-19.** 33 bundles from their own
+   repositories at pinned commits, patched, byte-reproducible across runs.
+2. ~~Sign and publish.~~ **Done 2026-09-20.** `bin/publish-bundles` signs the
+   index with `j23-2026`, the key that already signs release.json, and uploads
+   34 assets to the `bundles` release. Verified from outside: the published
+   signature checks out with openssl against the public key, and a downloaded
+   payload matches the digest in the signed index.
+   `https://github.com/johnmcgovern/textmate-ng/releases/download/bundles/bundles.json`
+3. Application, and this is the one that has to be **atomic**: point `REST_API`
+   at the new index, switch bundle downloads from `.headerSignature` to
+   `.digest`, and delete the two hardcoded MacroMates keys — in a single commit.
+   Deleting those keys while `REST_API` still points at api.textmate.org would
+   make every bundle install fail signature verification, and the error a user
+   sees would look like a network fault.
+4. Ship it, and verify on a machine with no bundles installed.
+5. Fix `bl` in Release builds so `DefaultBundles.tbz` stops being empty, which
    makes a first run work with no network at all. Independent of the above and
    worth doing on its own.
+
+Steps 1 and 2 changed nothing for any user: the release exists and nothing reads
+it. The dependency is not removed until step 3 ships.
 
 ## What this does not fix
 

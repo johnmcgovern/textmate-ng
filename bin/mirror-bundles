@@ -1,0 +1,313 @@
+#!/usr/bin/env python3
+"""Build this fork's bundle mirror from each bundle's own GitHub repository.
+
+Usage:
+  bin/mirror-bundles --bootstrap            # one time: derive the bundle list
+  bin/mirror-bundles build [--out DIR]      # fetch, patch, package, index
+  bin/mirror-bundles build --only Git C     # a subset, for iterating
+
+See ide/BUNDLE_HOSTING_PLAN.md for why this exists. In short: every bundle a
+user has today arrived from api.textmate.org, which is not ours, under a signing
+key that is not ours, and a bundle command is arbitrary code. This replaces both
+halves of that.
+
+**Where payloads come from.** Each bundle's own GitHub repository, pinned to a
+commit SHA, never from api.textmate.org. Verified equivalent before relying on
+it: the Git bundle fetched from GitHub has the same 177 files as the upstream
+payload, and each command is identical once the plists are normalised — the only
+difference is that upstream converts them to binary plists, which this does too.
+
+**What is trusted.** Nothing from this script is trusted on its own. It emits an
+index carrying a sha256 and size for every payload; `bin/update-sign` then signs
+that index with the same ECDSA key that already signs release.json, and the
+application verifies payloads by digest against it. That needs no custom HTTP
+headers, which is what makes a GitHub repository a usable host — unlike the
+current scheme, which depends on S3 object metadata.
+
+`bundles.json` is committed, so after bootstrapping, nothing here reads
+api.textmate.org again.
+"""
+
+import argparse
+import base64
+import hashlib
+import json
+import plistlib
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+BUNDLE_LIST = ROOT / "ide" / "bundles.json"
+UPSTREAM_INDEX = "https://api.textmate.org/bundles"
+CODELOAD = "https://codeload.github.com/{repo}/tar.gz/{sha}"
+
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, check=True, capture_output=True, text=True, **kw)
+
+
+def gh_json(path):
+    """GitHub API through `gh`, which is authenticated and so not rate-limited
+    to 60/hour the way an anonymous call is."""
+    out = run(["gh", "api", path]).stdout
+    return json.loads(out)
+
+
+# ----------------------------------------------------------------- bootstrap
+
+def bootstrap(local_copy: str = None) -> int:
+    """Derive the bundle list from the upstream index, once.
+
+    Only the *catalogue* is taken: name, uuid, category, which bundles are
+    default or mandatory, and which GitHub repository each one lives in. No
+    payload and no key. After this the list is committed and upstream is never
+    consulted again, which is the point.
+    """
+    # A plain urllib request gets HTTP 500 from that server; it wants a
+    # User-Agent. Noted rather than worked around quietly, because the fragility
+    # of this host is part of why the mirror exists. `--from FILE` takes a copy
+    # already on disk so bootstrapping does not depend on it being up at all.
+    if local_copy:
+        print(f"  reading {local_copy}")
+        index = plistlib.loads(Path(local_copy).read_bytes())
+    else:
+        print(f"  reading {UPSTREAM_INDEX} (the only time this script ever does)")
+        req = urllib.request.Request(UPSTREAM_INDEX, headers={"User-Agent": "curl/8.7.1"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            index = plistlib.loads(r.read())
+
+    wanted = []
+    for b in index.get("bundles", []):
+        if not (b.get("isMandatory") or b.get("isDefault") or b.get("name") == "Swift"):
+            continue
+        html = b.get("html_url") or ""
+        if not html.startswith("https://github.com/"):
+            print(f"  skipping {b.get('name')}: not on GitHub ({html})")
+            continue
+        wanted.append({
+            "name": b["name"],
+            "uuid": str(b["uuid"]),
+            "category": b.get("category", "Other"),
+            "description": b.get("description", ""),
+            "repo": html[len("https://github.com/"):].rstrip("/"),
+            "mandatory": bool(b.get("isMandatory")),
+            "default": bool(b.get("isDefault")) or b.get("name") == "Swift",
+            # Filled in by `build`, and committed, so a mirror is reproducible.
+            "sha": None,
+        })
+
+    wanted.sort(key=lambda x: x["name"])
+    BUNDLE_LIST.write_text(json.dumps({"bundles": wanted}, indent=1) + "\n")
+    print(f"  wrote {BUNDLE_LIST.relative_to(ROOT)} with {len(wanted)} bundles")
+    print("  commit it. From here on this script needs only GitHub.")
+    return 0
+
+
+# --------------------------------------------------------------------- build
+
+def newest_sha(repo: str) -> str:
+    return gh_json(f"repos/{repo}/commits?per_page=1")[0]["sha"]
+
+
+def to_binary_plists(root: Path) -> int:
+    """Upstream serves binary plists; TextMate parses them faster and the
+    bundles are identical either way. Converting here keeps the mirror a
+    like-for-like replacement rather than a subtly different one."""
+    n = 0
+    for p in root.rglob("*"):
+        if p.suffix.lower() not in {".tmcommand", ".tmsnippet", ".tmlanguage",
+                                    ".tmpreferences", ".tmmacro", ".tmdragcommand",
+                                    ".tmtheme", ".plist"}:
+            continue
+        try:
+            data = plistlib.loads(p.read_bytes())
+        except Exception:
+            continue          # not a plist despite the extension; leave it alone
+        p.write_bytes(plistlib.dumps(data, fmt=plistlib.FMT_BINARY))
+        n += 1
+    return n
+
+
+def write_deterministic_tbz(src: Path, dest: Path, arcname: str) -> None:
+    """Archive `src` so that the same commit always produces the same bytes.
+
+    A plain `tarfile.add` records mtime, uid, gid and directory order from the
+    filesystem, so two mirrors of the identical commit differed in all 33
+    payloads when this was first measured. That defeats the point of pinning a
+    SHA: if the bytes are not reproducible, nobody can check that what we serve
+    is what the commit says. So entries are sorted, timestamps zeroed, ownership
+    dropped, and modes reduced to executable-or-not.
+    """
+    entries = []
+    for p in sorted(src.rglob("*"), key=lambda q: q.relative_to(src).as_posix()):
+        entries.append((p, f"{arcname}/{p.relative_to(src).as_posix()}"))
+
+    with tarfile.open(dest, "w:bz2", format=tarfile.GNU_FORMAT) as tf:
+        root = tf.gettarinfo(str(src), arcname=arcname)
+        for ti in [root] + [tf.gettarinfo(str(p), arcname=n) for p, n in entries]:
+            ti.mtime = 0
+            ti.uid = ti.gid = 0
+            ti.uname = ti.gname = ""
+            if ti.isdir():
+                ti.mode = 0o755
+            elif ti.issym():
+                pass
+            else:
+                ti.mode = 0o755 if ti.mode & 0o100 else 0o644
+            if ti.isreg():
+                path = src if ti.name == arcname else src / ti.name[len(arcname) + 1:]
+                with open(path, "rb") as fh:
+                    tf.addfile(ti, fh)
+            else:
+                tf.addfile(ti)
+
+
+def package(entry: dict, out_dir: Path, staging: Path) -> dict:
+    name, repo = entry["name"], entry["repo"]
+    sha = entry.get("sha") or newest_sha(repo)
+
+    work = staging / name
+    work.mkdir(parents=True)
+    tgz = work / "src.tar.gz"
+    url = CODELOAD.format(repo=repo, sha=sha)
+    with urllib.request.urlopen(url, timeout=120) as r, open(tgz, "wb") as f:
+        shutil.copyfileobj(r, f)
+
+    src = work / "src"
+    src.mkdir()
+    with tarfile.open(tgz) as tf:
+        # GitHub wraps everything in <repo>-<sha>/; strip it.
+        members = []
+        for m in tf.getmembers():
+            parts = m.name.split("/", 1)
+            if len(parts) != 2 or not parts[1]:
+                continue
+            m.name = parts[1]
+            members.append(m)
+        tf.extractall(src, members=members, filter="data")
+
+    # The bundle has to be named <Name>.tmbundle inside the archive, because
+    # that is the directory the installer drops into place.
+    staged = work / "Bundles" / f"{name}.tmbundle"
+    staged.parent.mkdir(parents=True)
+    shutil.move(str(src), str(staged))
+
+    converted = to_binary_plists(staged)
+
+    # This fork's patches go in here, which is the only place they can go: the
+    # build-time archive is never unpacked (it ships empty) and patching on the
+    # user's machine would fight the bundle updater.
+    patched = run([str(ROOT / "bin" / "patch-bundles"), str(work)]).stdout.strip()
+
+    tbz = out_dir / f"{name.replace(' ', '-')}.tbz"
+    write_deterministic_tbz(staged, tbz, arcname=f"{name}.tmbundle")
+
+    blob = tbz.read_bytes()
+    return {
+        "name": name,
+        "uuid": entry["uuid"],
+        "category": entry["category"],
+        "description": entry["description"],
+        "repo": repo,
+        "sha": sha,
+        "mandatory": entry["mandatory"],
+        "default": entry["default"],
+        "file": tbz.name,
+        "size": len(blob),
+        "sha256": hashlib.sha256(blob).hexdigest(),
+        "plistsConverted": converted,
+        "patches": [l.strip() for l in patched.splitlines() if l.strip()],
+    }
+
+
+def build(only: list, out: Path) -> int:
+    if not BUNDLE_LIST.exists():
+        print(f"error: {BUNDLE_LIST} missing — run `bin/mirror-bundles --bootstrap` first",
+              file=sys.stderr)
+        return 2
+    entries = json.loads(BUNDLE_LIST.read_text())["bundles"]
+    if only:
+        wanted = {o.lower() for o in only}
+        entries = [e for e in entries if e["name"].lower() in wanted]
+        if not entries:
+            print(f"error: none of {only} are in the bundle list", file=sys.stderr)
+            return 2
+
+    out.mkdir(parents=True, exist_ok=True)
+    results, failures = [], []
+    with tempfile.TemporaryDirectory() as tmp:
+        staging = Path(tmp)
+        for i, entry in enumerate(entries, 1):
+            try:
+                r = package(entry, out, staging)
+                results.append(r)
+                note = f"  {r['sha256'][:12]}  {r['size']:>8}B"
+                patched = [p for p in r["patches"] if p.startswith("patched:")]
+                print(f"  [{i:2}/{len(entries)}] {entry['name']:<20}{note}"
+                      f"{'  <- patched' if patched else ''}")
+            except Exception as exc:
+                failures.append((entry["name"], str(exc)[:120]))
+                print(f"  [{i:2}/{len(entries)}] {entry['name']:<20}  FAILED: {exc}",
+                      file=sys.stderr)
+
+    # Write the resolved SHAs back into the committed list. Two reasons: a
+    # rebuild then reproduces the same payloads instead of silently following
+    # upstream's master, and `git diff ide/bundles.json` shows exactly which
+    # bundles moved and to what — which is the review step for pulling in
+    # someone else's code.
+    if results:
+        by_name = {r["name"]: r["sha"] for r in results}
+        full = json.loads(BUNDLE_LIST.read_text())
+        moved = []
+        for e in full["bundles"]:
+            new_sha = by_name.get(e["name"])
+            if new_sha and e.get("sha") != new_sha:
+                moved.append((e["name"], e.get("sha"), new_sha))
+                e["sha"] = new_sha
+        if moved:
+            BUNDLE_LIST.write_text(json.dumps(full, indent=1) + "\n")
+            print(f"  pinned {len(moved)} bundle(s) in {BUNDLE_LIST.relative_to(ROOT)}:")
+            for n, was, now in moved:
+                print(f"    {n:<20} {(was or 'unpinned')[:12]} -> {now[:12]}")
+
+    index = {
+        "formatVersion": 1,
+        "generated": subprocess.run(["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
+                                    capture_output=True, text=True).stdout.strip(),
+        "bundles": results,
+    }
+    (out / "index.json").write_text(json.dumps(index, indent=1) + "\n")
+
+    total = sum(r["size"] for r in results)
+    print(f"  ---- {len(results)} bundles, {total/1024/1024:.1f} MB, index.json written to {out}")
+    if failures:
+        print(f"  {len(failures)} failed:", file=sys.stderr)
+        for n, e in failures:
+            print(f"    {n}: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(add_help=True, description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("action", nargs="?", default="build", choices=["build"])
+    ap.add_argument("--bootstrap", action="store_true")
+    ap.add_argument("--from", dest="from_file", default=None,
+                    help="bootstrap from a copy of the upstream index already on disk")
+    ap.add_argument("--only", nargs="*", default=[])
+    ap.add_argument("--out", default=str(ROOT / "build" / "bundle-mirror"))
+    args = ap.parse_args()
+
+    if args.bootstrap:
+        return bootstrap(args.from_file)
+    return build(args.only, Path(args.out))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

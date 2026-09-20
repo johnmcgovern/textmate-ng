@@ -1,0 +1,334 @@
+{
+ "bundles": [
+  {
+   "name": "Apache",
+   "uuid": "D4FB34BC-80F3-11D9-9D53-00039398C572",
+   "category": "Languages",
+   "description": "Commands to relaunch <a href=\"http://apache.org/\">Apache</a>, edit the <tt>httpd.conf</tt> file etc.",
+   "repo": "textmate/apache.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "a12e895533700b0200cca20f169be63727efff8c"
+  },
+  {
+   "name": "Bundle Development",
+   "uuid": "679EFB46-5368-47E5-85BA-DEF72709A471",
+   "category": "Other",
+   "description": "This bundle has functionality related to developing bundles for TextMate.",
+   "repo": "textmate/bundle-development.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "97351087850c18dd6744f09717d8f4fc563864a5"
+  },
+  {
+   "name": "Bundle Support",
+   "uuid": "0BB1F01A-4F0A-475A-ACDD-0F5578F2EFC3",
+   "category": "Other",
+   "description": "Do not uninstall: Support files for other bundles.",
+   "repo": "textmate/bundle-support.tmbundle",
+   "mandatory": true,
+   "default": false,
+   "sha": "f2fbd0f9d48293b677f572a28233cdecd24cbde2"
+  },
+  {
+   "name": "C",
+   "uuid": "4675A940-6227-11D9-BFB1-000D93589AF6",
+   "category": "Languages",
+   "description": "Support for the venerable <a href=\"http://en.wikipedia.org/wiki/C_%28programming_language%29\">C programming language</a> and for the leaner C++. The bundle has completion (using \u2325\u238b) for the standard C functions and, in C++, STL algorithms.",
+   "repo": "textmate/c.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "80c8e886b67227096a56aca6b92fe1587f76d603"
+  },
+  {
+   "name": "CSS",
+   "uuid": "4675F24E-6227-11D9-BFB1-000D93589AF6",
+   "category": "Languages",
+   "description": "The <a href=\"http://www.w3.org/Style/CSS/\">cascading stylesheet language</a> is used in web pages. This bundle has syntax highlight, lots of snippets, validation, and more.",
+   "repo": "textmate/css.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "68d530382371c1df274c2776d350e28069a0905c"
+  },
+  {
+   "name": "Diff",
+   "uuid": "C2D2BFF9-708D-11D9-BD09-0011242E4184",
+   "category": "Other",
+   "description": "Syntax highlight and <a href=\"http://en.wikipedia.org/wiki/Diff\">diff</a> related functionality, for example see differences between document and last saved version, use a diff file as a patch, etc.",
+   "repo": "textmate/diff.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "0593bb775eab1824af97ef2172fd38822abd97d7"
+  },
+  {
+   "name": "Git",
+   "uuid": "EADD4718-EE11-4ABF-A7E6-13351FB3799D",
+   "category": "SCM",
+   "description": "Support for the Git version control system.",
+   "repo": "textmate/git.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "50e22e79ab3c8874f38fefef8cc6e7da0d0b3bcd"
+  },
+  {
+   "name": "HTML",
+   "uuid": "4676FC6D-6227-11D9-BFB1-000D93589AF6",
+   "category": "Languages",
+   "description": "Hypertext Markup Language support.",
+   "repo": "textmate/html.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "56a5f29746f1b5573488adfaa258326d4087d7ee"
+  },
+  {
+   "name": "Hyperlink Helper",
+   "uuid": "7592B521-FC5E-4D69-A6DD-5A0DD7529CB4",
+   "category": "Other",
+   "description": "The commands in this bundle makes it easy to create hyper links for example by searching for the current word or using the clipboard contents. This bundle is much more useful than it sounds!",
+   "repo": "textmate/hyperlink-helper.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "27f7d5f06339f551529f8713cc48c9441849139a"
+  },
+  {
+   "name": "JSON",
+   "uuid": "8BB0DBAF-E65C-4E14-A6A7-467D4AA535E0",
+   "category": "Languages",
+   "description": "Syntax highlight for <a href=\"http://json.org/\">JavaScript Object Notation</a> files, often used as a lightweight serialization format.",
+   "repo": "textmate/json.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "5f974b9c388dac504ee372163a28ca1b86a22a1f"
+  },
+  {
+   "name": "JavaScript",
+   "uuid": "AAB4FD74-73F9-11D9-B89A-000D93589AF6",
+   "category": "Languages",
+   "description": "Support for <a href=\"http://developer.mozilla.org/en/docs/About_JavaScript\">JavaScript</a>.",
+   "repo": "textmate/javascript.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "8928648352dc76025ad0bfd31e21fa6a1dc838a7"
+  },
+  {
+   "name": "Mail",
+   "uuid": "385A8908-0733-408E-AFA5-9576D2E3A16B",
+   "category": "Other",
+   "description": "Support for writing <a href=\"http://www.faqs.org/rfcs/rfc822.html\">email messages</a>.",
+   "repo": "textmate/mail.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "39a7bc360f3446cbe3c1c860812dc2828978c692"
+  },
+  {
+   "name": "Make",
+   "uuid": "4679297D-6227-11D9-BFB1-000D93589AF6",
+   "category": "Build",
+   "description": "Minimal syntax highlight and a build (<a href=\"http://www.gnu.org/software/make/\">make</a>) command.",
+   "repo": "textmate/make.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "3839e8113db1ec23227dcd30d5a57508a9b05d5c"
+  },
+  {
+   "name": "Markdown",
+   "uuid": "D99E8C0C-792F-11D9-A212-000D93B3A10E",
+   "category": "Languages",
+   "description": "<a href=\"http://daringfireball.net/projects/markdown/\">Markdown</a> allows you to write using an easy-to-read, easy-to-write plain text format, then convert it to structurally valid XHTML. This bundle provides preview functionality, syntax highlighting, and several useful commands.",
+   "repo": "textmate/markdown.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "c6b2d79cafcd8619c79acd79a04e7f5927062aa1"
+  },
+  {
+   "name": "Math",
+   "uuid": "8A9DDCA2-77E8-11D9-B5A8-000D93589AF6",
+   "category": "Other",
+   "description": "Support for performing different calculations inside TextMate.",
+   "repo": "textmate/math.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "7b563afaaefafeeb30b38f951f3ce9eefc1d9c11"
+  },
+  {
+   "name": "Mercurial",
+   "uuid": "162dcb4d-4227-11da-a523-000d93c89990",
+   "category": "SCM",
+   "description": "<a href=\"http://www.selenic.com/mercurial/\">Mercurial</a> is a source Control Management system designed for efficient handling of very large distributed projects.",
+   "repo": "textmate/mercurial.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "4ae7ddd8d49bd15e03280f051c9e8ed28c3e7b81"
+  },
+  {
+   "name": "Objective-C",
+   "uuid": "4679484F-6227-11D9-BFB1-000D93589AF6",
+   "category": "Languages",
+   "description": "The language used for writing Cocoa applications. This bundle supports documentation lookups, method completion, and more.",
+   "repo": "textmate/objective-c.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "d59562b0948d4dae01eaee1a2b2bcde3b478404e"
+  },
+  {
+   "name": "PHP",
+   "uuid": "467A1966-6227-11D9-BFB1-000D93589AF6",
+   "category": "Languages",
+   "description": "<a href=\"http://www.php.net/\">PHP</a> is a widely-used general-purpose scripting language that is especially suited for web development and can be embedded into HTML.",
+   "repo": "textmate/php.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "8f05764681d51cd0b13db1e36810d74913c86bfc"
+  },
+  {
+   "name": "Property List",
+   "uuid": "467A3CB0-6227-11D9-BFB1-000D93589AF6",
+   "category": "Languages",
+   "description": "Support for the various forms of Apple\u2019s <a href=\"http://developer.apple.com/documentation/Cocoa/Conceptual/PropertyLists/index.html\">Property List format</a> (originally from NeXT).",
+   "repo": "textmate/property-list.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "086998806dcbaad8d52d6a44360593aeb19de2e6"
+  },
+  {
+   "name": "Python",
+   "uuid": "E3BADC20-6B0E-11D9-9DC9-000D93589AF6",
+   "category": "Languages",
+   "description": "Support for the <a href=\"http://www.python.org/\">Python</a> programming language.",
+   "repo": "textmate/python.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "02dbf8b59c13419181efdaf41e885b501f186a3e"
+  },
+  {
+   "name": "Ruby",
+   "uuid": "467B298F-6227-11D9-BFB1-000D93589AF6",
+   "category": "Languages",
+   "description": "Support for the <a href=\"http://www.ruby-lang.org/\">Ruby</a> programming language.",
+   "repo": "textmate/ruby.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "efcb8941c701343f1b2e9fb105c678152fea6892"
+  },
+  {
+   "name": "SCM",
+   "uuid": "3BDF79F4-94AE-46C0-BFBF-D5572AD2F515",
+   "category": "SCM",
+   "description": "Provides support for the various SCM (source control management) bundles.",
+   "repo": "textmate/scm.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "f3c72b2611b32ce59c4cc2f8ca200278f7f5300c"
+  },
+  {
+   "name": "SCM Diff Gutter",
+   "uuid": "7A84ECFC-2683-4129-826D-51F05F7E668A",
+   "category": "SCM",
+   "description": "Show indication in gutter for added/modified lines",
+   "repo": "textmate/scm-diff-gutter.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "c5668b6173497458f861ad877de339fc13fb9c5c"
+  },
+  {
+   "name": "SQL",
+   "uuid": "AAB4CBF7-73F9-11D9-B89A-000D93589AF6",
+   "category": "Languages",
+   "description": "Database query language with support for MySQL and PostgreSQL.",
+   "repo": "textmate/sql.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "6d4edbc113d3272f7c097d6b1504624289ee2bc5"
+  },
+  {
+   "name": "Shell Script",
+   "uuid": "4694B05E-6227-11D9-BFB1-000D93589AF6",
+   "category": "Languages",
+   "description": "Support for running and editing shell scripts (using the bash dialect).",
+   "repo": "textmate/shellscript.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "cd4cf536d2ef420c71a724be2875c2240aea3c08"
+  },
+  {
+   "name": "Source",
+   "uuid": "4F45FDC0-62CA-4786-9134-8BC7C1F5606F",
+   "category": "Other",
+   "description": "Miscellaneous support for working with source code. This bundle is essential, e.g. it allows you to toggle comments on \u2318/.",
+   "repo": "textmate/source.tmbundle",
+   "mandatory": true,
+   "default": false,
+   "sha": "132e122b3ffe6375617a098d325b789fd439f325"
+  },
+  {
+   "name": "Subversion",
+   "uuid": "AEAF4DD4-74CD-11D9-BAD4-000A95A89C98",
+   "category": "SCM",
+   "description": "Provides a nice interface to a multitude of <a href=\"http://subversion.tigris.org/\">Subversion</a> commands.",
+   "repo": "textmate/subversion.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "bb317eea552d7a3fece63b9dcc5c61107d7e2a95"
+  },
+  {
+   "name": "Swift",
+   "uuid": "D08F016D-1D07-4BD8-8339-9AB5D151DF31",
+   "category": "Languages",
+   "description": "Swift is a general-purpose programming language developed by Apple and built for safety, clarity, and performance.",
+   "repo": "textmate/swift.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "2aa880d5cd3a41890fe1aac7ac8ca9935e36cd19"
+  },
+  {
+   "name": "TODO",
+   "uuid": "0B296803-7D51-11D9-859D-000D93B6E43C",
+   "category": "Other",
+   "description": "If you tag your comments with <tt>TODO</tt>, <tt>FIXME</tt>, or similar, this bundle provides functionality to list all your tagged items, with the ability to jump to either of them.",
+   "repo": "textmate/todo.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "e77e5afc5c6b9d9387a1cbcc536755cead93e937"
+  },
+  {
+   "name": "Text",
+   "uuid": "B7BC3FFD-6E4B-11D9-91AF-000D93589AF6",
+   "category": "Other",
+   "description": "The text bundle has a lot of support for plain text and is a requisite for working with text.",
+   "repo": "textmate/text.tmbundle",
+   "mandatory": true,
+   "default": false,
+   "sha": "cd901ca71edbf89b5ceaa98903c58f66d2ab07ff"
+  },
+  {
+   "name": "TextMate",
+   "uuid": "5A9D4FC6-6CBE-11D9-A21B-000D93589AF6",
+   "category": "Other",
+   "description": "This bundle has functionality which add to the application but is not related to a specific task (bundle).",
+   "repo": "textmate/textmate.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "e6c9b5e9609da8c9157abf5f77b02eff87b24936"
+  },
+  {
+   "name": "Themes",
+   "uuid": "A4380B27-F366-4C70-A542-B00D26ED997E",
+   "category": "Themes",
+   "description": "Themes for syntax highlight and (HTML) output.",
+   "repo": "textmate/themes.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "e6e918506291b2dec178ad1b7e6f04653d25818c"
+  },
+  {
+   "name": "XML",
+   "uuid": "4694D53F-6227-11D9-BFB1-000D93589AF6",
+   "category": "Languages",
+   "description": "Support for the <a href=\"http://www.w3.org/XML/\">eXtensible Markup Language</a>.",
+   "repo": "textmate/xml.tmbundle",
+   "mandatory": false,
+   "default": true,
+   "sha": "715363040b087a0c6720800e6dac30f9708b3f23"
+  }
+ ]
+}

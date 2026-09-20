@@ -1119,18 +1119,36 @@ def add_default_bundles_phase(project, target, t, targets)
 
   phase = target.new_shell_script_build_phase("Download default bundles")
   phase.shell_path   = "/bin/sh"
-  phase.input_paths  = ["$(SRCROOT)/#{list}"]
+  # bin/patch-bundles is an input so that editing a patch re-runs this phase;
+  # without it Xcode would keep a stale DefaultBundles.tbz.
+  phase.input_paths  = ["$(SRCROOT)/#{list}", "$(SRCROOT)/bin/patch-bundles"]
   phase.output_paths = ["$(DERIVED_FILE_DIR)/#{BUNDLE_ARCHIVE}"]
   # `;` rather than `&&`, matching rave: `bl` reaches api.textmate.org, and rave
   # already tolerates that failing (the server has been unreachable from this
   # machine). A build that cannot download bundles still produces an app — it just
   # starts with none, exactly as today.
+  #
+  # Between staging and tarring, this fork's patches are applied to the upstream
+  # bundles (bin/patch-bundles): the ruby18 shim, which otherwise downloads an
+  # x86_64-only ruby that cannot run on Apple Silicon, and the one command still
+  # using Ruby 1.8 `when X:` syntax. They are applied here so they travel inside
+  # DefaultBundles.tbz and never have to be applied on a user's machine.
+  #
+  # The two failures are deliberately not alike. No bundles at all is a warning,
+  # because a network failure should still produce an app. Bundles present but a
+  # patch that no longer applies is a hard error, because that means upstream
+  # changed underneath us and the fix has silently stopped happening.
   phase.shell_script = <<~SH
     set -u
     stage="$DERIVED_FILE_DIR/Managed"
     rm -rf "$stage" && mkdir -p "$stage"
     "$BUILT_PRODUCTS_DIR/bl" -C "$stage" install $(cat "$SCRIPT_INPUT_FILE_0") || \\
       echo "warning: bl could not install default bundles; shipping an empty #{BUNDLE_ARCHIVE}"
+    if [ -d "$stage/Bundles" ]; then
+      "$SRCROOT/bin/patch-bundles" "$stage" || exit 1
+    else
+      echo "warning: no bundles staged, so none patched"
+    fi
     /usr/bin/tar -cjf "$SCRIPT_OUTPUT_FILE_0" -C "$DERIVED_FILE_DIR" Managed
   SH
 

@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Apply this fork's patches to a staged tree of upstream bundles.
+
+Usage:  bin/patch-bundles <managed-dir> [--check]
+
+<managed-dir> is a directory containing `Bundles/`, as produced by
+`bl -C <dir> install …`. The build runs this between staging and tarring, so the
+patches travel inside DefaultBundles.tbz rather than being applied on anyone's
+machine. `--check` reports what would change and writes nothing.
+
+**Why patch upstream at all.** Both fixes are for the same defect class: bundle
+commands that cannot run on an Apple Silicon Mac. Upstream has not shipped a
+release since 2019 and these repositories are effectively dormant, so waiting
+for a fix upstream is waiting indefinitely.
+
+**Why this fails loudly.** Each patch pins the exact bytes it expects. If
+upstream ever changes a patched file, this exits non-zero and names the file
+rather than skipping it, because a patch that silently stops applying is how a
+fixed bug comes back. Re-running on an already-patched tree is a no-op, so the
+build can call it unconditionally.
+"""
+
+import hashlib
+import plistlib
+import re
+import sys
+from pathlib import Path
+
+# ---------------------------------------------------------------- the ruby18 shim
+
+# Upstream's shim, as served by api.textmate.org on 2026-09-19. Pinned by digest
+# because this patch replaces the file wholesale rather than editing it.
+UPSTREAM_RUBY18_SHA256 = "012cd54a4f48cee41112ef04f7ff4127d5497e27e69128633fcb8f4b04277812"
+
+PATCHED_RUBY18 = """#!/bin/sh
+
+# PATCHED by TextMate-NG (bin/patch-bundles). Upstream's version of this file
+# downloads a Ruby 1.8.7 build from archive.textmate.org the first time any
+# bundle command runs, and that build is x86_64 only. On an Apple Silicon Mac
+# without Rosetta every one of those commands dies with "Bad CPU type in
+# executable" — 179 of the 380 commands in the default bundles, the whole Git
+# bundle among them. It is also a runtime dependency on a third party's server
+# for a fork with no relationship to them.
+#
+# macOS still ships Ruby 2.6 as part of the OS, as a universal binary that
+# includes arm64, at the path below. It is a read-only system component rather
+# than a developer tool, so it is present without Xcode or Command Line Tools —
+# which is more than can be said for /usr/bin/python3. The bundles already carry
+# add_1.8_features.rb, written by upstream for exactly this transition, and it
+# restores the 1.8 methods 1.9 removed.
+#
+# The old 1.8.7 path is still honoured if a copy is already installed, so a
+# machine that downloaded one before this change keeps working. Nothing here
+# downloads anything.
+#
+# Apple has been deprecating the bundled scripting runtimes for years, so this
+# is a reprieve and not a resolution: when Ruby leaves macOS, the remaining
+# options are a native interpreter shipped inside TextMate-NG.app or rewriting
+# the commands. See ide/BETA_CRITERIA.md.
+
+if [ -x /System/Library/Frameworks/Ruby.framework/Versions/Current/usr/bin/ruby ]; then
+	exec /System/Library/Frameworks/Ruby.framework/Versions/Current/usr/bin/ruby \\
+		-r"$TM_SUPPORT_PATH/lib/ruby1.9/add_1.8_features.rb" "$@"
+fi
+
+for ruby in /System/Library/Frameworks/Ruby.framework/Versions/2.*/usr/bin/ruby; do
+	if [ -x "$ruby" ]; then
+		exec "$ruby" -r"$TM_SUPPORT_PATH/lib/ruby1.9/add_1.8_features.rb" "$@"
+	fi
+done
+
+# Whatever ruby is on PATH, if it is not the x86_64 one this replaced.
+if command -v ruby >/dev/null 2>&1; then
+	exec ruby -r"$TM_SUPPORT_PATH/lib/ruby1.9/add_1.8_features.rb" "$@"
+fi
+
+# Last resort: a 1.8.7 someone already has. Never downloads one.
+if [ -x "$HOME/Library/Application Support/TextMate/Ruby/1.8.7/bin/ruby" ]; then
+	exec "$HOME/Library/Application Support/TextMate/Ruby/1.8.7/bin/ruby" \\
+		-r"$TM_SUPPORT_PATH/private/ruby18_fix_loadpath.rb" "$@"
+fi
+
+echo >&2 "No usable ruby. macOS no longer ships one, and TextMate-NG does not download interpreters."
+exit 1
+"""
+
+# ------------------------------------------------- the Ruby 1.8 `when X:` syntax
+
+# `when 'NSRect':` is Ruby 1.8. 1.9 replaced the colon with `then`, so this one
+# command is the only script in the default bundles that will not parse on a
+# modern ruby. The sibling method ten lines above it already uses `then`.
+WHEN_COLON = re.compile(r"(?m)^(\s*when\s+(?:'[^']*'|/[^/]*/|\"[^\"]*\"))\s*:(\s)")
+
+NSLOG_COMMAND = "Objective-C.tmbundle/Commands/Insert NSLog() for current method.tmCommand"
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+class Result:
+    def __init__(self):
+        self.applied, self.already, self.missing, self.errors = [], [], [], []
+
+
+def patch_ruby18(bundles: Path, check: bool, out: Result) -> None:
+    path = bundles / "Bundle Support.tmbundle/Support/shared/bin/ruby18"
+    label = "Bundle Support: ruby18 shim"
+    if not path.exists():
+        out.missing.append(label)
+        return
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if "PATCHED by TextMate-NG" in text:
+        out.already.append(label)
+        return
+    digest = sha256(path)
+    if digest != UPSTREAM_RUBY18_SHA256:
+        out.errors.append(
+            f"{label}: upstream changed (sha256 {digest}, expected "
+            f"{UPSTREAM_RUBY18_SHA256}). Re-read it and update this patch rather "
+            f"than loosening the check."
+        )
+        return
+    if not check:
+        path.write_text(PATCHED_RUBY18, encoding="utf-8")
+        path.chmod(0o755)
+    out.applied.append(f"{label}: now prefers the native system ruby, downloads nothing")
+
+
+def patch_nslog(bundles: Path, check: bool, out: Result) -> None:
+    path = bundles / NSLOG_COMMAND
+    label = "Objective-C: Insert NSLog() for current method"
+    if not path.exists():
+        out.missing.append(label)
+        return
+    try:
+        plist = plistlib.loads(path.read_bytes())
+    except Exception as exc:
+        out.errors.append(f"{label}: not a readable plist ({exc})")
+        return
+    command = plist.get("command")
+    if not isinstance(command, str):
+        out.errors.append(f"{label}: no `command` string in the plist")
+        return
+    fixed, n = WHEN_COLON.subn(r"\1 then\2", command)
+    if n == 0:
+        if " then" in command:
+            out.already.append(label)
+        else:
+            out.errors.append(
+                f"{label}: found no `when X:` lines and no `then` either. "
+                f"Upstream changed; re-read the command."
+            )
+        return
+    plist["command"] = fixed
+    if not check:
+        path.write_bytes(plistlib.dumps(plist, fmt=plistlib.FMT_XML))
+    out.applied.append(f"{label}: {n} `when X:` lines rewritten to `when X then`")
+
+
+def main(argv: list) -> int:
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    check = "--check" in argv[1:]
+    if len(args) != 1:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+
+    managed = Path(args[0])
+    bundles = managed / "Bundles"
+    if not bundles.is_dir():
+        print(f"error: no Bundles/ under {managed}", file=sys.stderr)
+        return 2
+
+    out = Result()
+    patch_ruby18(bundles, check, out)
+    patch_nslog(bundles, check, out)
+
+    verb = "would patch" if check else "patched"
+    for line in out.applied:
+        print(f"  {verb}: {line}")
+    for line in out.already:
+        print(f"  already patched: {line}")
+    for line in out.missing:
+        # Not an error: a staged tree may hold only some bundles.
+        print(f"  not in this tree: {line}")
+    for line in out.errors:
+        print(f"  ERROR: {line}", file=sys.stderr)
+
+    if out.errors:
+        print(
+            "error: a patch no longer applies. A patch that silently stops "
+            "applying is how a fixed bug comes back, so this fails the build.",
+            file=sys.stderr,
+        )
+        return 1
+    if not out.applied and not out.already and not out.missing:
+        print("error: nothing matched at all — is this a staged bundles tree?", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -212,7 +212,12 @@ def package(entry: dict, out_dir: Path, staging: Path) -> dict:
                 continue
             m.name = parts[1]
             members.append(m)
-        tf.extractall(src, members=members, filter="data")
+        # No `filter=` here either: it is Python 3.12+, and this has to run
+        # wherever the mirror is built. Members were filtered by hand above.
+        for m in members:
+            if m.name.startswith("/") or ".." in Path(m.name).parts:
+                raise ValueError(f"archive member escapes the destination: {m.name}")
+        tf.extractall(src, members=members)
 
     # The bundle has to be named <Name>.tmbundle inside the archive, because
     # that is the directory the installer drops into place.

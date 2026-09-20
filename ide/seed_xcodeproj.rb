@@ -389,6 +389,10 @@ end
 # 2026-09-16 and 4 by the afternoon; the handoff has the list of what each was.
 SWIFT_WARNINGS_AS_ERRORS_EXCEPT = %w[FileBrowser FileBrowserTests].freeze
 
+# Built for the build itself and copied into no product. Exempt from the
+# hardened runtime; see where that is applied for what it was breaking.
+NON_SHIPPING_TOOLS = %w[bl].freeze
+
 def swift_warning_flags(name)
   return [] if SWIFT_WARNINGS_AS_ERRORS_EXCEPT.include?(name)
   ["-warnings-as-errors", "-Wwarning", "DeprecatedDeclaration"]
@@ -662,6 +666,19 @@ specs.each do |t|
     # `#include "foo.h"` resolves here, but a system `<glob.h>` / `<version.h>` pulled
     # in by the prelude must NOT resolve to a same-named header in the target's own
     # src dir (e.g. regexp/src/glob.h shadowing POSIX <glob.h>).
+    # Build-time tools that never ship do not get the hardened runtime.
+    #
+    # `bl` links Homebrew's libcapnp and libkj, which are not signed by this
+    # team. The hardened runtime enforces library validation, so a Release build
+    # signed it and it could then not load its own dependencies — it died with
+    # "different Team IDs" every time the default-bundles phase ran. That phase
+    # tolerated the failure as a warning, which is why every release up to and
+    # including alpha.31 shipped a 132-byte, empty DefaultBundles.tbz, and a
+    # first run with no network got no bundles at all. Found 2026-09-19.
+    #
+    # Safe because `bl` is not inside TextMate-NG.app — checked, not assumed —
+    # so it is never notarized and never runs on anyone else's machine.
+    bs["ENABLE_HARDENED_RUNTIME"] = "NO" if NON_SHIPPING_TOOLS.include?(t["name"])
     bs["USER_HEADER_SEARCH_PATHS"] = ["$(inherited)"] + own_dirs
     bs["HEADER_SEARCH_PATHS"] += header_farm_dirs(t)
     bs["OTHER_CFLAGS"] += per_target_cflags unless per_target_cflags.empty?
@@ -1115,45 +1132,31 @@ BUNDLE_LIST_NAME = "DefaultBundles.tbz.bl"
 BUNDLE_ARCHIVE   = "DefaultBundles.tbz"
 
 def add_default_bundles_phase(project, target, t, targets)
-  list = (t["files"].to_a + t["copy"].to_a).flat_map { |e| e["inputs"].to_a }
-                                           .find { |i| File.basename(i) == BUNDLE_LIST_NAME }
-  return warn("*** no #{BUNDLE_LIST_NAME} in #{t['name']}; skipping bundle provisioning") unless list
-
-  bl = targets["bl"] or return warn("*** no `bl` target; skipping bundle provisioning")
-  target.add_dependency(bl)
-
-  phase = target.new_shell_script_build_phase("Download default bundles")
+  phase = target.new_shell_script_build_phase("Stage default bundles")
   phase.shell_path   = "/bin/sh"
-  # bin/patch-bundles is an input so that editing a patch re-runs this phase;
-  # without it Xcode would keep a stale DefaultBundles.tbz.
-  phase.input_paths  = ["$(SRCROOT)/#{list}", "$(SRCROOT)/bin/patch-bundles"]
+  # bin/stage-bundles as an input, so editing it rebuilds the archive. The
+  # committed bundle list is no longer read here: the published index decides
+  # which bundles exist, and it is signed.
+  phase.input_paths  = ["$(SRCROOT)/bin/stage-bundles"]
   phase.output_paths = ["$(DERIVED_FILE_DIR)/#{BUNDLE_ARCHIVE}"]
-  # `;` rather than `&&`, matching rave: `bl` reaches api.textmate.org, and rave
-  # already tolerates that failing (the server has been unreachable from this
-  # machine). A build that cannot download bundles still produces an app — it just
-  # starts with none, exactly as today.
+  # Staged from this fork's published mirror rather than by `bl`.
   #
-  # Between staging and tarring, this fork's patches are applied to the upstream
-  # bundles (bin/patch-bundles): the ruby18 shim, which otherwise downloads an
-  # x86_64-only ruby that cannot run on Apple Silicon, and the one command still
-  # using Ruby 1.8 `when X:` syntax. They are applied here so they travel inside
-  # DefaultBundles.tbz and never have to be applied on a user's machine.
+  # `bl` speaks the old index format — a plist whose signature arrives in S3
+  # object metadata headers — while the mirror is a signed wrapper verified by
+  # digest, which is exactly what lets a GitHub release host it. Teaching the
+  # C++ updater the new format is a larger change than not needing it here.
+  # bin/stage-bundles does what the application does: verify the index against
+  # the keys in Info.plist, check each payload against the sha256 that signed
+  # index names, then unpack. Patches are already inside those payloads, applied
+  # when the mirror was built, so there is no separate patch step.
   #
-  # The two failures are deliberately not alike. No bundles at all is a warning,
-  # because a network failure should still produce an app. Bundles present but a
-  # patch that no longer applies is a hard error, because that means upstream
-  # changed underneath us and the fix has silently stopped happening.
+  # --offline-ok keeps a network failure a warning, as it was before: an app
+  # without its bundles is worse than one with them, and much better than no app.
   phase.shell_script = <<~SH
     set -u
     stage="$DERIVED_FILE_DIR/Managed"
     rm -rf "$stage" && mkdir -p "$stage"
-    "$BUILT_PRODUCTS_DIR/bl" -C "$stage" install $(cat "$SCRIPT_INPUT_FILE_0") || \\
-      echo "warning: bl could not install default bundles; shipping an empty #{BUNDLE_ARCHIVE}"
-    if [ -d "$stage/Bundles" ]; then
-      "$SRCROOT/bin/patch-bundles" "$stage" || exit 1
-    else
-      echo "warning: no bundles staged, so none patched"
-    fi
+    "$SRCROOT/bin/stage-bundles" "$stage" --offline-ok || exit 1
     /usr/bin/tar -cjf "$SCRIPT_OUTPUT_FILE_0" -C "$DERIVED_FILE_DIR" Managed
   SH
 

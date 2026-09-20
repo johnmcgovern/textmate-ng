@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Stage the default bundles into a Managed tree, for DefaultBundles.tbz.
+
+Usage:  bin/stage-bundles <managed-dir> [--index URL] [--offline-ok]
+
+Replaces `bl` in the build. Not because `bl` is broken — it works again now that
+Release builds stop giving it a hardened runtime it cannot satisfy — but because
+it speaks the *old* index format: a plist whose signature arrives in S3 object
+metadata headers. The mirror this fork publishes is a signed wrapper around a
+plist, verified by digest, which is the whole reason a GitHub release can host
+it. Teaching the C++ updater that format is a bigger change than not needing it.
+
+So this does what the application does, in the order the application does it:
+fetch the signed index, verify it, then fetch each payload and check it against
+the sha256 the signed index names. Nothing is unpacked before it verifies.
+
+**Why the application needs this at all.** DefaultBundles.tbz is what a first run
+unpacks when it has no bundles yet. It has been 132 bytes — empty — in every
+release up to and including alpha.31, so a first run with no network produced an
+editor with no bundles, no syntax highlighting and no commands, and no
+explanation. See ide/BUNDLE_HOSTING_PLAN.md.
+
+`--offline-ok` makes a network failure a warning rather than an error, which is
+what the build wants: an app that ships without its bundles is worse than one
+that ships with them, but it is much better than no app at all.
+"""
+
+import argparse
+import base64
+import hashlib
+import json
+import plistlib
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_INDEX = "https://github.com/johnmcgovern/textmate-ng/releases/download/bundles/bundles.json"
+P256_SPKI_PREFIX = bytes.fromhex("3059301306072a8648ce3d020106082a8648ce3d030107034200")
+
+
+def safe_extract(tf, dest: Path) -> None:
+    """Unpack, refusing members that would escape `dest`.
+
+    `tarfile.extractall(filter="data")` is the modern way to say this, and it
+    does not exist before Python 3.12 — Xcode ships 3.9, so the build failed on
+    every bundle with "unexpected keyword argument 'filter'" while the same code
+    worked from a shell on 3.14. Checking the paths explicitly works everywhere
+    and states the rule outright: nothing absolute, nothing climbing out, no
+    links pointing outside.
+    """
+    dest = dest.resolve()
+    for m in tf.getmembers():
+        target = (dest / m.name).resolve()
+        if not str(target).startswith(str(dest) + "/") and target != dest:
+            raise ValueError(f"archive member escapes the destination: {m.name}")
+        if (m.issym() or m.islnk()):
+            link = (target.parent / m.linkname).resolve()
+            if not str(link).startswith(str(dest) + "/"):
+                raise ValueError(f"archive link escapes the destination: {m.name} -> {m.linkname}")
+        if not (m.isfile() or m.isdir() or m.issym() or m.islnk()):
+            raise ValueError(f"archive member is not a regular file or directory: {m.name}")
+    tf.extractall(dest)
+
+
+def fetch(url: str, timeout: int = 120) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "textmate-ng/stage-bundles"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def trusted_keys() -> dict:
+    """The same keys the application carries, read from the same place, so the
+    build cannot accidentally trust something the application would refuse."""
+    plist = plistlib.loads((ROOT / "Applications/TextMate/Info.plist").read_bytes())
+    return plist.get("TMUpdateManifestKeys", {})
+
+
+def verified_index(url: str) -> dict:
+    wrapper = json.loads(fetch(url))
+    signed = base64.b64decode(wrapper["manifest"])
+    signature = base64.b64decode(wrapper["signature"])
+    key_id = wrapper.get("keyID", "")
+
+    keys = trusted_keys()
+    if key_id not in keys:
+        raise SystemExit(f"error: the index is signed by '{key_id}', which this build does not trust")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        t = Path(tmp)
+        (t / "pub.der").write_bytes(P256_SPKI_PREFIX + base64.b64decode(keys[key_id]))
+        (t / "sig.der").write_bytes(signature)
+        (t / "signed.bin").write_bytes(signed)
+        r = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-verify", str(t / "pub.der"), "-keyform", "DER",
+             "-signature", str(t / "sig.der"), str(t / "signed.bin")],
+            capture_output=True, text=True)
+        if r.returncode != 0:
+            raise SystemExit(f"error: the index signature does not verify ({r.stdout.strip()}{r.stderr.strip()})")
+
+    return plistlib.loads(signed)
+
+
+def stage(managed: Path, index_url: str, offline_ok: bool) -> int:
+    try:
+        index = verified_index(index_url)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        msg = f"could not fetch the bundle index ({exc})"
+        if offline_ok:
+            print(f"warning: {msg}; staging nothing")
+            return 0
+        print(f"error: {msg}", file=sys.stderr)
+        return 1
+
+    bundles_dir = managed / "Bundles"
+    bundles_dir.mkdir(parents=True, exist_ok=True)
+
+    installed, failed = [], []
+    for entry in index["bundles"]:
+        version = entry["versions"][0]
+        name = entry["name"]
+        try:
+            blob = fetch(version["url"])
+            actual = hashlib.sha256(blob).hexdigest()
+            if actual != version["sha256"] or len(blob) != version["size"]:
+                raise ValueError(f"digest mismatch: {actual} vs {version['sha256']}")
+
+            # Verified first, unpacked second. The order is the point: this is a
+            # tar archive from the network, and `tar` is not a security boundary.
+            destination = bundles_dir / f"{name}.tmbundle"
+            with tempfile.TemporaryDirectory() as tmp:
+                payload = Path(tmp) / "b.tbz"
+                payload.write_bytes(blob)
+                with tarfile.open(payload) as tf:
+                    safe_extract(tf, Path(tmp) / "out")
+                unpacked = Path(tmp) / "out" / f"{name}.tmbundle"
+                if not unpacked.is_dir():
+                    raise ValueError(f"archive does not contain {name}.tmbundle")
+                if destination.exists():
+                    subprocess.run(["rm", "-rf", str(destination)], check=True)
+                subprocess.run(["cp", "-R", str(unpacked), str(destination)], check=True)
+
+            installed.append({
+                "category": entry.get("category", "Other"),
+                "name": name,
+                "path": f"Bundles/{name}.tmbundle",
+                "source": "org.textmate.updates.default",
+                "updated": version["updated"],
+                "uuid": entry["uuid"],
+            })
+        except Exception as exc:
+            failed.append((name, str(exc)[:90]))
+
+    # What the application reads to know what it already has. Without it every
+    # bundle looks uninstalled and the first run re-downloads all of them, which
+    # is exactly what shipping them was meant to avoid.
+    (managed / "LocalIndex.plist").write_bytes(
+        plistlib.dumps({"bundles": installed}, fmt=plistlib.FMT_XML))
+
+    total = sum((bundles_dir / f"{b['name']}.tmbundle").stat().st_size for b in installed) if installed else 0
+    print(f"  staged {len(installed)} bundles into {managed}")
+    for name, err in failed:
+        print(f"  FAILED {name}: {err}", file=sys.stderr)
+    if failed:
+        # Deliberately not covered by --offline-ok. That flag exists for "the
+        # network is not there", where staging nothing is the right answer. The
+        # index downloading and then its payloads failing is a different thing
+        # entirely, and shipping a half-populated archive because of it would be
+        # worse than shipping none: it took a rebuild to notice that 33 bundles
+        # had silently become 0.
+        print(f"error: {len(failed)} of {len(index['bundles'])} bundles could not be staged",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("managed")
+    ap.add_argument("--index", default=DEFAULT_INDEX)
+    ap.add_argument("--offline-ok", action="store_true")
+    args = ap.parse_args()
+    return stage(Path(args.managed), args.index, args.offline_ok)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

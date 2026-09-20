@@ -2,6 +2,42 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-19 (v2026.9-alpha.31)
+
+**Bundles now come from this project, and bundle commands work again.** Six
+commits since alpha.30. If you are on alpha.24 or later this should arrive on
+its own.
+
+What is in it:
+
+* **More than half of the bundle commands were broken, and are not any more.**
+  Anything written in Ruby — the whole Git bundle, Markdown's Show Preview, most
+  of Objective-C — failed with "Bad CPU type in executable". The bundles ship a
+  helper that downloads a Ruby built in 2012 for Intel Macs, and an Apple Silicon
+  Mac cannot run it without Rosetta, which is not installed by default and which
+  nothing offered to install. It now uses the Ruby macOS already includes, which
+  is native, and downloads nothing. **179 commands** were affected. If you ever
+  saw that error, or wondered why Commit did nothing, this is why.
+* **Bundles are downloaded from this project's own mirror.** Until now the
+  editor fetched its bundles, and the list of them, from servers belonging to
+  the original authors of TextMate — who this fork is not affiliated with and
+  has no arrangement with. It also trusted their signing keys, which meant
+  trusting them with what code runs on your machine, since a bundle command is
+  just a script. The application now installs from a mirror built from each
+  bundle's own public repository at a recorded commit, and trusts exactly one
+  signing key: this project's.
+* **A first run installs every default bundle.** It used to install three and
+  stop, leaving a new installation with almost no syntax highlighting and no
+  commands. That bug only showed up on a genuinely fresh install, which is the
+  one case nobody tests twice.
+
+**Nothing about your existing bundles changes on update.** They are re-checked
+against the new mirror and replaced only when the mirror has something newer.
+
+**Where to look if something is off.** Settings ▸ Bundles: the list should
+populate and installing or updating should work. Any Git command from the
+Bundles menu. Markdown ▸ Show Preview.
+
 ## 2026-09-18 (v2026.9-alpha.30)
 
 **If this application crashes, it can now offer to send the report.** Five

@@ -181,14 +181,18 @@ def write_deterministic_tbz(src: Path, dest: Path, arcname: str) -> None:
                 tf.addfile(ti)
 
 
-def package(entry: dict, out_dir: Path, staging: Path) -> dict:
+def package(entry: dict, out_dir: Path, staging: Path, refresh: bool = False) -> dict:
     name, repo = entry["name"], entry["repo"]
     # The commit date, not the time this ran. `hasUpdate` is
     # `downloadLastUpdated > lastUpdated`, comparing the index's timestamp
     # against when the user installed — so a generation timestamp would mark all
     # 33 bundles as updated on every mirror run and re-download the lot. A
     # pinned commit's date is stable, which is what that comparison needs.
-    if entry.get("sha"):
+    # `--refresh` is what makes the scheduled job able to notice anything: with
+    # a pin present this otherwise always uses the pin, so a refresh that
+    # honoured pins would report "nothing moved" forever. Pinned is the default
+    # because a rebuild must reproduce the same payloads.
+    if entry.get("sha") and not refresh:
         sha = entry["sha"]
         committed = entry.get("committed") or commit_date(repo, sha)
     else:
@@ -259,7 +263,7 @@ def package(entry: dict, out_dir: Path, staging: Path) -> dict:
     }
 
 
-def build(only: list, out: Path) -> int:
+def build(only: list, out: Path, refresh: bool = False) -> int:
     if not BUNDLE_LIST.exists():
         print(f"error: {BUNDLE_LIST} missing — run `bin/mirror-bundles --bootstrap` first",
               file=sys.stderr)
@@ -278,7 +282,7 @@ def build(only: list, out: Path) -> int:
         staging = Path(tmp)
         for i, entry in enumerate(entries, 1):
             try:
-                r = package(entry, out, staging)
+                r = package(entry, out, staging, refresh=refresh)
                 results.append(r)
                 note = f"  {r['sha256'][:12]}  {r['size']:>8}B"
                 patched = [p for p in r["patches"] if p.startswith("patched:")]
@@ -367,12 +371,14 @@ def main() -> int:
     ap.add_argument("--from", dest="from_file", default=None,
                     help="bootstrap from a copy of the upstream index already on disk")
     ap.add_argument("--only", nargs="*", default=[])
+    ap.add_argument("--refresh", action="store_true",
+                    help="ignore the pinned commits and resolve each bundle to its newest")
     ap.add_argument("--out", default=str(ROOT / "build" / "bundle-mirror"))
     args = ap.parse_args()
 
     if args.bootstrap:
         return bootstrap(args.from_file)
-    return build(args.only, Path(args.out))
+    return build(args.only, Path(args.out), refresh=args.refresh)
 
 
 if __name__ == "__main__":

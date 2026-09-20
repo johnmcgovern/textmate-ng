@@ -85,9 +85,27 @@ what makes GitHub viable.
    make every bundle install fail signature verification, and the error a user
    sees would look like a network fault.
 4. Ship it, and verify on a machine with no bundles installed.
-5. Fix `bl` in Release builds so `DefaultBundles.tbz` stops being empty, which
-   makes a first run work with no network at all. Independent of the above and
-   worth doing on its own.
+5. ~~Fix `bl` in Release builds so `DefaultBundles.tbz` stops being empty.~~
+   **Done 2026-09-19**, and it was two faults rather than one. `bl` could not
+   run at all — signing gives it a hardened runtime, which enforces library
+   validation, and it links Homebrew dylibs this team did not sign. Exempting
+   build-time tools that ship in no product fixed that, and then it failed
+   differently, because it speaks the old index format. `bin/stage-bundles`
+   replaces it, doing what the application does: verify the signed index, check
+   each payload against its sha256, unpack. The archive is 4.6 MB with all 33
+   bundles and a local index, so a first run with no network now works.
+
+6. ~~A refresh path.~~ **Done 2026-09-19.** `.github/workflows/bundle-refresh.yml`
+   re-resolves every bundle weekly and opens a pull request when a pin moves.
+   It publishes nothing: the diff on `ide/bundles.json` is the review step, and
+   the signing key is on no runner. A red run means `bin/patch-bundles` has
+   stopped applying, which is exactly when someone should look.
+
+   The flag matters more than the schedule. `bin/mirror-bundles` honours the
+   pins by default, because a rebuild must reproduce the same payloads — so
+   without `--refresh` the job would have reported "nothing moved" every week
+   forever. Caught by testing it against a deliberately wrong pin rather than by
+   reading it.
 
 Steps 1 and 2 changed nothing for any user: the release exists and nothing reads
 it. The dependency is not removed until step 3 ships.

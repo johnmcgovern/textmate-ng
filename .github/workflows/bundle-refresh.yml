@@ -1,0 +1,116 @@
+name: Bundle refresh
+
+# Re-resolve every mirrored bundle against its upstream repository, and open a
+# pull request when any of them has moved.
+#
+# **Why this exists.** ide/bundles.json pins 33 bundles to 33 commits. Without
+# something to notice upstream moving, those pins quietly become the permanent
+# version of every bundle this editor ships — the mirror would stop being a
+# mirror and start being a fork nobody decided to make. Equally, nothing here
+# publishes: the diff on ide/bundles.json *is* the review step for pulling in
+# other people's code, and a bundle command is arbitrary code, so it gets read
+# by a person before it reaches anyone.
+#
+# **A failure here is a real signal, not noise.** bin/patch-bundles pins the
+# exact bytes of the two files this fork patches — the ruby18 shim and the one
+# command still using Ruby 1.8 `when X:` syntax — and fails loudly rather than
+# skipping if upstream changes either. A red run means a patch has stopped
+# applying, which is precisely when someone needs to look.
+#
+# To publish what this proposes: merge the pull request, then run
+# `bin/mirror-bundles build` and `bin/publish-bundles` locally. Publishing needs
+# the signing key, which is not on any runner and should not be.
+
+on:
+  schedule:
+    # Mondays 07:00 UTC, two hours before the sanitizer run so a red mirror is
+    # visible before the rest of the week's noise.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Rebuild the mirror against current upstream
+      env:
+        # `gh api` for commit resolution: authenticated, so 5000 requests an
+        # hour rather than the 60 an anonymous caller gets.
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # The payloads are throwaway here — this job exists to learn which
+        # commits moved, and `build` writes those back into ide/bundles.json.
+        # --refresh is the whole point: without it the tool honours the pins in
+        # ide/bundles.json and would report "nothing moved" every week forever.
+        bin/mirror-bundles build --refresh --out "${RUNNER_TEMP}/mirror" \
+          | tee "${RUNNER_TEMP}/mirror.log"
+
+    - name: Summarise what moved
+      id: changes
+      run: |
+        if git diff --quiet ide/bundles.json; then
+          echo "moved=0" >> "$GITHUB_OUTPUT"
+          echo "Nothing moved. All 33 bundles are still at their pinned commits." >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        echo "moved=1" >> "$GITHUB_OUTPUT"
+        {
+          echo "### Bundles that moved upstream"
+          echo
+          # From the tool's own output rather than from the diff: it names each
+          # bundle alongside the commit it moved from and to. A diff of the JSON
+          # shows the hashes with the name a dozen lines away, which reads as
+          # anonymous and is exactly the thing a reviewer needs to not guess at.
+          echo '```'
+          sed -n '/pinned .* bundle/,$p' "${RUNNER_TEMP}/mirror.log" || true
+          echo '```'
+          echo
+          echo "Merging this only changes the pins. Publishing is a separate,"
+          echo "local step that needs the signing key: \`bin/mirror-bundles build\`"
+          echo "then \`bin/publish-bundles\`."
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Open a pull request
+      if: steps.changes.outputs.moved == '1'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        branch="bundle-refresh/$(date -u +%Y-%m-%d)"
+        moved=$(git diff --unified=0 ide/bundles.json | grep -cE '^\+.*"sha"' || true)
+
+        git config user.name  "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git checkout -b "$branch"
+        git add ide/bundles.json
+
+        # Written to a file rather than inlined, so the message does not inherit
+        # this block's indentation.
+        cat > "${RUNNER_TEMP}/msg" <<EOF
+        Bundle pins moved upstream
+
+        ${moved} bundle(s) now point at newer commits. Opened by the Bundle
+        refresh workflow. Merging changes the pins and publishes nothing.
+
+        Read the diff before merging: these are commits in other people's
+        repositories, and a bundle command is arbitrary code. bin/patch-bundles
+        still applied cleanly, or this run would have failed before here.
+        EOF
+        sed -i 's/^        //' "${RUNNER_TEMP}/msg"
+        git commit -F "${RUNNER_TEMP}/msg"
+        git push -u origin "$branch"
+
+        # The label is convenience, not a requirement: create it if missing and
+        # carry on either way, because failing to open the pull request over a
+        # missing label would lose the only signal this job produces.
+        gh label create bundles --description "Mirrored bundle pins" --color ededed 2>/dev/null || true
+        gh pr create --fill --label bundles --body-file "${RUNNER_TEMP}/msg" || \
+          gh pr create --fill --body-file "${RUNNER_TEMP}/msg"

@@ -15,8 +15,8 @@ the version stays `2026.N-alpha.M` until all of them hold.
 | # | Criterion | How it is checked | Status 2026-09-19 |
 | --- | --- | --- | --- |
 | 1 | A crash collector is deployed and the application posts to it | `TMCrashCollectorURL` in Info.plist is non-empty, and `Server/crash-collector/bin/reports` answers | **Met 2026-09-18** — deployed, posted to and read back end to end |
-| 2 | Crash reports are arriving, and there are none | `bin/reports`, plus `~/Library/Logs/DiagnosticReports` on every machine running it | **Partly** — collector empty, but no shipped build carries the URL yet, so "none" is not yet evidence |
-| 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Not met** — the clock starts at the first release carrying the collector URL, which has not shipped |
+| 2 | Crash reports are arriving, and there are none | `bin/reports`, plus `~/Library/Logs/DiagnosticReports` on every machine running it | **In progress from 2026-09-19** — alpha.30 is the first build carrying the URL, so an empty collector is evidence from here on and was not before |
+| 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Running** — started 2026-09-19 with alpha.30; earliest it can be met is 2026-09-26 |
 | 4 | The full suite, the sanitizers and the fuzzer are green on the tagged commit | The Sanitizers workflow on that commit, not merely on `master` | **Met** and enforced weekly |
 | 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | `screencapture` of each window, read directly | **Mostly met 2026-09-19** — three of the four surfaces verified; the commit window is **broken**, see below |
 | 6 | Nothing unreleased at the tag | `git log <tag>..HEAD` is empty | Met at each release |
@@ -113,11 +113,14 @@ quiet. That would be a release that reached nobody and said nothing.
    verified by posting a report the way the client posts one, reading it back
    byte-identical, and listing it with `bin/reports`. The test report was then
    deleted, so the bucket is empty on purpose rather than by accident.
-2. Ship an alpha carrying it, and let it run. **Criterion 2 cannot be read as
-   met before this happens**: an empty collector that no build has ever posted
-   to looks exactly like an empty collector that nothing has crashed into, and
-   only one of those is evidence. Criterion 3's week starts here too.
-3. Do the smoke pass properly, the three unreached surfaces included.
+2. ~~Ship an alpha carrying it, and let it run.~~ Done 2026-09-19: alpha.30,
+   notarized `cec05b4a`, verified from outside by downloading the published zip,
+   quarantining it, and confirming Gatekeeper accepts it as a notarized
+   Developer ID build with the collector URL inside. Criterion 2 now means
+   something and criterion 3's week is running.
+3. ~~Do the smoke pass properly, the three unreached surfaces included.~~ Done
+   2026-09-19 by screenshot; see above. It found the commit window broken, and
+   that needs a decision about Rosetta before beta.
 4. A week.
 5. Tag `2026.10-beta.1`.
 

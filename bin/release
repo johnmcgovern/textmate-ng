@@ -414,8 +414,14 @@ and notarized, so Gatekeeper accepts it with no workaround — if macOS refuses 
 open it, that is a real signal rather than something to work around.
 
 This is an alpha, but it can update itself: it checks for new releases and installs
-them after asking you. Crash-report *submission* stays switched off while the fork
-has no collector of its own — macOS's own crash reporting is unaffected either way.
+them after asking you.
+
+If it crashes, it can send the report to this project's own collector — but only
+after asking, once, the first time there is something to send, and never for a
+build you compiled yourself. A report carries the code that was running, your
+Mac's model and the contact details in Settings; not what you were editing.
+Settings ▸ Software Update turns it off before it ever asks. macOS's own crash
+reporting is unaffected either way.
 
 The `-dSYMs.zip` asset is debug symbols for this exact build — only useful for
 turning a crash report into readable function names. **The app is the other

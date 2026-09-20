@@ -12,31 +12,80 @@ the version stays `2026.N-alpha.M` until all of them hold.
 
 ## The criteria
 
-| # | Criterion | How it is checked | Status 2026-09-18 |
+| # | Criterion | How it is checked | Status 2026-09-19 |
 | --- | --- | --- | --- |
 | 1 | A crash collector is deployed and the application posts to it | `TMCrashCollectorURL` in Info.plist is non-empty, and `Server/crash-collector/bin/reports` answers | **Met 2026-09-18** — deployed, posted to and read back end to end |
 | 2 | Crash reports are arriving, and there are none | `bin/reports`, plus `~/Library/Logs/DiagnosticReports` on every machine running it | **Partly** — collector empty, but no shipped build carries the URL yet, so "none" is not yet evidence |
 | 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Not met** — the clock starts at the first release carrying the collector URL, which has not shipped |
 | 4 | The full suite, the sanitizers and the fuzzer are green on the tagged commit | The Sanitizers workflow on that commit, not merely on `master` | **Met** and enforced weekly |
-| 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | By hand: HTML output, the commit window, gutter line numbers, syntax colouring | **Not met, and cannot be met by script** — see below |
+| 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | `screencapture` of each window, read directly | **Mostly met 2026-09-19** — three of the four surfaces verified; the commit window is **broken**, see below |
 | 6 | Nothing unreleased at the tag | `git log <tag>..HEAD` is empty | Met at each release |
 | 7 | The updater has been seen installing a build unattended | Observed for alpha.27 on 2026-09-16; must hold for the beta too | **Met once** |
 
-Criterion 5 is the one most likely to be quietly skipped, because it is the only
-one a script cannot answer. It is on the list because the two worst regressions
+Criterion 5 was the one most likely to be quietly skipped, because it looked
+like the only one a script could not answer. That turned out to be wrong, and
+the correction is below. It is on the list because the two worst regressions
 this project has shipped — the Settings crash of alpha.10, and the gutter bug
 that survived to alpha.10 — were both invisible to the suite and obvious in the
 first second of looking.
 
-**Tried on alpha.29, and here is exactly how far a script gets.** HTML output:
-two output windows *do* open (564×684, with the expected chrome), but a
-`WKWebView` exposes no `AXWebArea` to this process, so whether anything is
-rendered inside them is unknown. Gutter line numbers: the text view exposes no
-accessibility children at all, so there is nothing to read. Syntax colouring:
-accessibility has no notion of colour. `screencapture` is refused — the screen
-recording permission was declined earlier — so there is no picture to fall back
-on. Three surfaces, three dead ends; this criterion needs a person to look at a
-window, and that is the whole reason it is written down separately.
+**Settled on alpha.30, 2026-09-19, and the earlier conclusion was wrong.**
+The alpha.29 attempt reported three dead ends: a `WKWebView` exposes no
+`AXWebArea`, the text view exposes no accessibility children, and accessibility
+has no notion of colour. All three are still true, and all three stopped
+mattering the moment `screencapture` worked — the screen recording permission
+had been declined when that was written and has since been granted. A picture
+answers every one of them directly, so this criterion is scriptable after all.
+
+Two things had to be right first, and both had been wrong:
+
+- **The application has to be genuinely frontmost, and idle time does not say
+  so.** HIDIdleTime read 614 s while Chrome held focus. With no key window,
+  accessibility reported zero windows, `keystroke` went to Chrome instead of the
+  editor, and `Open Quickly…` read `enabled false` — which looked like a broken
+  surface for three attempts and was only the responder chain doing its job.
+  With the app actually frontmost it reads `enabled true`.
+- **Windows have to be observed through `CGWindowListCopyWindowInfo`**, not
+  `name of every window`. The window server saw every window opening normally
+  the whole time accessibility saw none.
+
+What alpha.30 actually showed:
+
+| Surface | Verdict |
+| --- | --- |
+| Gutter line numbers | **Alive.** 1–47 drawn, with fold arrows at the right lines |
+| Syntax colouring | **Alive.** Keywords, strings, comments, numbers and function names all distinct; C++ detected in the status bar |
+| HTML output | **Alive.** The window opens at 564×684 *and renders text*, so the command-to-WebKit path works end to end |
+| Settings | **Alive.** All six panes clicked through, each with controls, no crash |
+| File browser | **Alive.** Tree populated, and it updated live when a file appeared |
+| Find, Bundle Editor, Software Update | **Alive**, each opening a window |
+| **Commit window** | **BROKEN — see below** |
+
+## The one real defect this found
+
+`Bundles ▸ Git ▸ Commit…` does not open. It fails with
+
+    .../Bundle Support.tmbundle/Support/shared/bin/ruby18: line 43:
+    .../TextMate/Ruby/1.8.7/bin/ruby: Bad CPU type in executable
+
+The Ruby that ships with the bundles is `Mach-O 64-bit executable x86_64`, and
+Rosetta is not installed on this machine: `arch -x86_64 /usr/bin/true` fails the
+same way and `oahd` is not running. **216 of the 380 installed bundle commands
+invoke `ruby18`**, across 29 bundles — the whole Git bundle (36), Markdown's
+Show Preview, most of Objective-C, Mercurial, PHP and Ruby.
+
+This is not a regression in alpha.30; nothing in this release goes near it. It
+is also not only a build-machine problem. Apple Silicon Macs do not ship with
+Rosetta, and the on-demand install prompt appears for *application bundles*, not
+for a shell script that execs an x86 binary — so a user on a clean Apple Silicon
+Mac gets this same failure with no offer to fix it, and more than half of the
+bundle commands are dead for them.
+
+`softwareupdate --install-rosetta` fixes it on a given machine. That is a
+decision about what the application should require, not a build step, which is
+why it is written here rather than done: either the beta declares Rosetta a
+prerequisite and says so where a user will see it, or those 216 commands need a
+Ruby that runs natively.
 
 ## What beta will not promise
 

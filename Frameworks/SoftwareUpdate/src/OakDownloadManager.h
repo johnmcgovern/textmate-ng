@@ -17,8 +17,6 @@ NS_ASSUME_NONNULL_BEGIN
 @interface OakDownloadManager : NSObject
 @property (class, readonly) OakDownloadManager* sharedInstance;
 @property (nonatomic) NSString* userAgentString;
-- (void)downloadFileAtURL:(NSURL*)serverURL replacingFileAtURL:(NSURL*)localFileURL publicKeys:(NSDictionary<NSString*, NSString*>*)publicKeys completionHandler:(void(^)(BOOL wasUpdated, NSError* _Nullable error))completionHandler;
-- (id <NSProgressReporting>)downloadArchiveAtURL:(NSURL*)serverURL forReplacingURL:(nullable NSURL*)localURL publicKeys:(NSDictionary<NSString*, NSString*>*)publicKeys completionHandler:(void(^)(NSURL* _Nullable extractedArchiveURL, NSError* _Nullable error))completionHandler;
 
 // The same download, verified against a digest from a signed index instead of a
 // signature in the response headers. Used by the software updater, and since

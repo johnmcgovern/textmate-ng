@@ -78,8 +78,11 @@ void test_download_manager_answers_its_public_selectors ()
 	NSArray<NSString*>* const required = @[
 		@"userAgentString",
 		@"setUserAgentString:",
-		@"downloadFileAtURL:replacingFileAtURL:publicKeys:completionHandler:",
-		@"downloadArchiveAtURL:forReplacingURL:publicKeys:completionHandler:",
+		// The two publicKeys: variants were removed on 2026-09-20 with the DSA
+		// verifier they fed. This pin is what would have caught their removal if
+		// anything still needed them; it names the digest path instead, which is
+		// now the only way an archive is vouched for.
+		@"downloadArchiveAtURL:forReplacingURL:expectedSHA256:expectedSize:completionHandler:",
 	];
 
 	NSMutableArray* missing = [NSMutableArray array];

@@ -74,17 +74,19 @@ private func GetHardwareInfo(_ field: Int32, isInteger: Bool = false) -> String 
 // by the size of the download — around 50 MB for the application.
 // How a downloaded archive is vouched for.
 //
-// `.headerSignature` is the original scheme: the signature rides in
-// `x-amz-meta-x-signature` response headers and is checked against keys the
-// caller supplies. BundlesManager still uses it for MacroMates' bundles, and it
-// is not ours to change.
+// One way, now. The *manifest* is signed and carries the payload's size and
+// SHA-256, so the archive needs no signature of its own. That is the shape
+// Chrome's updater uses, and it is what makes GitHub — which cannot set custom
+// response headers on a release asset — usable as a host at all.
 //
-// `.digest` is the update channel's: the *manifest* is signed, and it carries the
-// payload's size and SHA-256, so the archive needs no signature of its own. This
-// is the shape Chrome's updater uses, and it is what makes GitHub — which cannot
-// set those headers on a release asset — usable as a CDN at all.
+// There used to be a second case, `.headerSignature`, where the signature rode
+// in `x-amz-meta-x-signature` response headers and was checked against DSA keys
+// the caller supplied. It existed for MacroMates' bundle server. When bundles
+// moved to this project's own mirror on 2026-09-20 nothing called it any more,
+// and it went, taking ~900 lines of hand-written DSA with it. Kept as an enum
+// with one case rather than inlined, because the next thing to arrive here will
+// be a second way of vouching, not a replacement for this one.
 private enum ArchiveVerification {
-	case headerSignature(publicKeys: [String: String])
 	case digest(sha256: String, size: Int64)
 }
 
@@ -262,12 +264,6 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 		}
 
 		switch verification {
-			case .headerSignature(let publicKeys):
-				guard OakDownloadManager.sharedInstance.data(payload, hasValidBase64EncodedSignature: signature, usingPublicKeyString: signee.flatMap { publicKeys[$0] }) else {
-					return refusal("Unable to verify signature.")
-				}
-				return nil
-
 			case .digest(let expectedSHA256, let expectedSize):
 				guard let payload else {
 					return refusal("Update payload is empty.")
@@ -347,7 +343,7 @@ private final class OakDownloadArchiveTask: NSObject, ProgressReporting, URLSess
 @objc(OakDownloadManager)
 class OakDownloadManager: NSObject, @unchecked Sendable {
 	// nonisolated(unsafe), matching BundleInstallHelper and KEventManager: this is
-	// not a MainActor object — -downloadFileAtURL:… runs its completion on a
+	// not a MainActor object — the download completions run on a
 	// URLSession queue — and the ObjC++ singleton it replaces was a plain
 	// function-local static with an unsynchronised lazily-computed ivar. The
 	// annotation states that unchanged situation rather than introducing one.
@@ -378,72 +374,6 @@ class OakDownloadManager: NSObject, @unchecked Sendable {
 			return res
 		}
 		set { userAgentStringStorage = newValue }
-	}
-
-	@objc(downloadFileAtURL:replacingFileAtURL:publicKeys:completionHandler:)
-	func downloadFile(at serverURL: URL, replacingFileAt localFileURL: URL, publicKeys: [String: String], completionHandler: @escaping (Bool, Error?) -> Void) {
-		var request = URLRequest(url: serverURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
-		request.setValue(userAgentString, forHTTPHeaderField: "User-Agent")
-
-		if let entityTag = Self.extendedAttribute("org.w3.http.etag", at: localFileURL) {
-			request.setValue(entityTag, forHTTPHeaderField: "If-None-Match")
-			log.log("GET \(serverURL.absoluteString, privacy: .public) using entity tag \(entityTag, privacy: .public)")
-		}
-
-		// The completion runs on URLSession.shared's queue; the handler is not
-		// Sendable, and the capture says so before the closure that carries it.
-		nonisolated(unsafe) let unsafeHandler = completionHandler
-		let dataTask = URLSession.shared.dataTask(with: request) { data, response, error in
-			var error = error
-			var wasUpdated = false
-
-			let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-			if error != nil || statusCode != 200 {
-				if error == nil && statusCode != 304 {
-					error = NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Server returned \(statusCode) for \(serverURL.absoluteString)"])
-				}
-			} else {
-				let headers = (response as? HTTPURLResponse)?.allHeaderFields
-				let signee    = headers?[OakHTTPHeaderSignee] as? String
-				let signature = headers?[OakHTTPHeaderSignature] as? String
-				if let signee, let signature {
-					if let publicKey = publicKeys[signee] {
-						if self.data(data, hasValidBase64EncodedSignature: signature, usingPublicKeyString: publicKey) {
-							do {
-								try data?.write(to: localFileURL, options: .atomic)
-								wasUpdated = true
-
-								if let newETag = headers?["ETag"] as? String {
-									if !Self.setExtendedAttribute("org.w3.http.etag", to: newETag, at: localFileURL) {
-										log.error("setxattr(\(localFileURL.path, privacy: .public)): \(errno)")
-									}
-								} else {
-									log.error("No ETag: \(serverURL.absoluteString, privacy: .public)")
-								}
-							} catch let writeError {
-								error = writeError
-							}
-						} else {
-							error = NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unable to verify signature."])
-						}
-					} else {
-						error = NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unable to obtain public key for \(signee)."])
-					}
-				} else {
-					error = NSError(domain: "OakDownloadManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Missing signature"])
-				}
-			}
-
-			unsafeHandler(wasUpdated, error)
-		}
-		dataTask.resume()
-	}
-
-	// BundlesManager's entry point: signature in the response headers. Unchanged,
-	// and pinned as unchanged — it is the path this framework did not mean to touch.
-	@objc(downloadArchiveAtURL:forReplacingURL:publicKeys:completionHandler:)
-	func downloadArchive(at serverURL: URL, forReplacing localURL: URL?, publicKeys: [String: String], completionHandler: @escaping (URL?, Error?) -> Void) -> ProgressReporting {
-		return OakDownloadArchiveTask(url: serverURL, forReplacing: localURL, verification: .headerSignature(publicKeys: publicKeys), completionHandler: completionHandler)
 	}
 
 	// The update channel's entry point: size and checksum from a signed manifest,
@@ -604,21 +534,4 @@ class OakDownloadManager: NSObject, @unchecked Sendable {
 		return ok
 	}
 
-	// MARK: - DSA verification — the bundle index
-	//
-	// The signature travels base64-encoded in an HTTP header and covers the body
-	// bytes; the key is one of the PEM strings BundlesManager holds. DSAVerifier
-	// does the work — see the note at the top of that file for why it is hand
-	// written.
-	@objc(data:hasValidBase64EncodedSignature:usingPublicKeyString:)
-	func data(_ contentData: Data?, hasValidBase64EncodedSignature encodedSignature: String?, usingPublicKeyString publicKeyString: String?) -> Bool {
-		guard let encodedSignature, let contentData, let publicKeyString else { return false }
-
-		guard let signatureData = Data(base64Encoded: encodedSignature, options: []) else {
-			log.error("Unable to decode signature: \(encodedSignature, privacy: .public)")
-			return false
-		}
-
-		return OakDSAVerifier.verify(data: contentData, derSignature: signatureData, pemPublicKey: publicKeyString)
-	}
 }

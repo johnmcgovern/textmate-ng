@@ -149,16 +149,27 @@ void test_description_names_the_bundle_and_its_path_when_installed ()
 
 // MARK: - Derived values
 
-// An update exists only when both dates are known and the download is strictly
-// newer. The spelling in the original is `[download laterDate:local] != local`,
-// which for equal dates answers NO because -laterDate: returns the receiver.
-void test_has_update_needs_both_dates_and_a_newer_download ()
+// An update exists when the download is strictly newer than what is installed —
+// and also when the index offers something and **we do not know** what is
+// installed. Unknown is not up to date.
+//
+// That second rule changed on 2026-09-20. It used to answer NO, which sounds
+// conservative and is not: LocalIndex.plist only records an `updated` date when
+// one is already known, so a bundle that arrived without one never acquired
+// one, and 30 of 36 installed bundles on the development machine were frozen
+// permanently. The ruby18 fix shipped in alpha.31 reached none of them.
+//
+// Equal dates answer NO. The spelling in the original is
+// `[download laterDate:local] != local`, which for equal dates returns the
+// receiver.
+void test_has_update_needs_a_newer_download_or_an_unknown_install ()
 {
 	Bundle* bundle = BundleNamed(@"X");
-	OAK_ASSERT(bundle.hasUpdate == NO);
+	OAK_ASSERT(bundle.hasUpdate == NO);   // nothing on offer, nothing installed
 
+	// On offer, install date unknown: stale, because we cannot say otherwise.
 	bundle.downloadLastUpdated = Date(2000);
-	OAK_ASSERT(bundle.hasUpdate == NO);
+	OAK_ASSERT(bundle.hasUpdate == YES);
 
 	bundle.lastUpdated = Date(2000);
 	OAK_ASSERT(bundle.hasUpdate == NO);

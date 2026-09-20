@@ -108,8 +108,30 @@ class TMBundle: NSObject {
 	// passes because plist dates of this size are tagged; this is that answer
 	// spelled as the value comparison it always meant.
 	@objc var hasUpdate: Bool {
-		guard let downloadLastUpdated, let lastUpdated else {
+		guard let downloadLastUpdated else {
+			// The index offers no version of this at all, so there is nothing to
+			// update to. Not the same as being current.
 			return false
+		}
+		guard let lastUpdated else {
+			// **Installed, but we do not know when — which is not the same as up
+			// to date, and used to be treated as though it were.**
+			//
+			// `lastUpdated` comes from the `updated` key in LocalIndex.plist, and
+			// that key is only written when it is already known; a bundle that
+			// arrived without one never acquires one. On this machine 30 of 36
+			// installed bundles had no date, so hasUpdate was permanently false
+			// for all of them and they were frozen at whatever was installed.
+			//
+			// That is how the ruby18 fix shipped in alpha.31's mirror reached no
+			// existing installation: Bundle Support was one of the 30. Found on
+			// 2026-09-20 by running the commit window after shipping the fix for
+			// it and watching it fail exactly as before.
+			//
+			// Answering "yes, it is stale" costs one download of a bundle that
+			// may already be current, once — installing writes the date, so the
+			// next check has one and this branch is not taken again.
+			return true
 		}
 		return downloadLastUpdated > lastUpdated
 	}

@@ -177,6 +177,45 @@ if gh release view "$TAG" >/dev/null 2>&1; then
   echo "error: release $TAG already exists — delete it or bump the version" >&2; exit 1
 fi
 
+# CI, on the exact commit this tag points at.
+#
+# **This exists because it did not.** v2026.9-alpha.31 was tagged, notarized and
+# published from a commit that CI could not compile, and had been red for six
+# commits before it. Nothing noticed, because everything else here checks the
+# *artifact* — which was fine, being built on the release Mac — and nothing
+# checked the one signal that sees what the release Mac cannot. CI pins Xcode
+# 26.6 and this machine has 27; they disagree about Swift 6 concurrency, so a
+# green local build is not evidence about CI and never was.
+#
+# The commit, not the branch: `gh run list` without --commit answers about
+# whatever ran most recently, which on a busy day is not the thing being
+# released.
+TAG_SHA=$(git -C "$ROOT" rev-parse "$TAG^{commit}")
+echo "==> checking CI on ${TAG_SHA%${TAG_SHA#????????}}"
+# `.[0]` on an empty array is null, and interpolating that yields the string
+# "null:" rather than nothing — so the no-run case has to be spelled out or it
+# falls through to "still null", which reads like a bug in this script.
+CI_STATE=$(gh run list --commit "$TAG_SHA" --workflow=build.yml --limit 1 \
+             --json status,conclusion -q '.[0] | "\(.status):\(.conclusion // "")"' 2>/dev/null || echo "")
+case "$CI_STATE" in
+  completed:success)
+    echo "    CI passed on this commit" ;;
+  ""|null:*|"null")
+    echo "error: CI has never run on $TAG_SHA." >&2
+    echo "  Push the branch and let it finish before releasing. If the run was" >&2
+    echo "  evicted, re-run it: gh run list --workflow=build.yml" >&2
+    exit 1 ;;
+  completed:*)
+    echo "error: CI ${CI_STATE#completed:} on $TAG_SHA — refusing to publish." >&2
+    echo "  gh run list --commit $TAG_SHA" >&2
+    echo "  A release built on this Mac can pass every check here and still be a" >&2
+    echo "  commit nobody else can build. That is what alpha.31 was." >&2
+    exit 1 ;;
+  *)
+    echo "error: CI is still ${CI_STATE%%:*} on $TAG_SHA — wait for it." >&2
+    exit 1 ;;
+esac
+
 echo "==> releasing $TAG"
 
 # ============================================================

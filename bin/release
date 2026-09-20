@@ -192,29 +192,39 @@ fi
 # released.
 TAG_SHA=$(git -C "$ROOT" rev-parse "$TAG^{commit}")
 echo "==> checking CI on ${TAG_SHA%${TAG_SHA#????????}}"
-# `.[0]` on an empty array is null, and interpolating that yields the string
-# "null:" rather than nothing — so the no-run case has to be spelled out or it
-# falls through to "still null", which reads like a bug in this script.
-CI_STATE=$(gh run list --commit "$TAG_SHA" --workflow=build.yml --limit 1 \
-             --json status,conclusion -q '.[0] | "\(.status):\(.conclusion // "")"' 2>/dev/null || echo "")
-case "$CI_STATE" in
-  completed:success)
-    echo "    CI passed on this commit" ;;
-  ""|null:*|"null")
-    echo "error: CI has never run on $TAG_SHA." >&2
-    echo "  Push the branch and let it finish before releasing. If the run was" >&2
-    echo "  evicted, re-run it: gh run list --workflow=build.yml" >&2
-    exit 1 ;;
-  completed:*)
-    echo "error: CI ${CI_STATE#completed:} on $TAG_SHA — refusing to publish." >&2
-    echo "  gh run list --commit $TAG_SHA" >&2
-    echo "  A release built on this Mac can pass every check here and still be a" >&2
-    echo "  commit nobody else can build. That is what alpha.31 was." >&2
-    exit 1 ;;
-  *)
-    echo "error: CI is still ${CI_STATE%%:*} on $TAG_SHA — wait for it." >&2
-    exit 1 ;;
-esac
+# Every run on this commit, not just the newest.
+#
+# Pushing the tag starts a second run on the same bytes as the branch push, so
+# `--limit 1` answers "in progress" about a duplicate of a run that already
+# passed — which is how this refused a release thirty seconds after allowing it.
+# A completed failure still refuses, including a failed re-run of something that
+# passed before, because that is exactly the case worth hearing about.
+#
+# `.[0]` on an empty array is null and interpolates to the string "null", so the
+# never-ran case has to be spelled out or it reads as a bug in this script.
+CI_RUNS=$(gh run list --commit "$TAG_SHA" --workflow=build.yml --limit 20 \
+            --json status,conclusion -q '.[] | "\(.status):\(.conclusion // "")"' 2>/dev/null || echo "")
+CI_FAILED=$(printf '%s\n' "$CI_RUNS" | grep -c '^completed:' | head -1 >/dev/null; \
+            printf '%s\n' "$CI_RUNS" | grep '^completed:' | grep -cv '^completed:success$' || true)
+CI_PASSED=$(printf '%s\n' "$CI_RUNS" | grep -c '^completed:success$' || true)
+CI_RUNNING=$(printf '%s\n' "$CI_RUNS" | grep -c -v '^completed:' || true)
+
+if [ -z "$CI_RUNS" ] || [ "$CI_RUNS" = "null" ]; then
+  echo "error: CI has never run on $TAG_SHA." >&2
+  echo "  Push the branch and let it finish before releasing." >&2
+  exit 1
+elif [ "$CI_FAILED" -gt 0 ]; then
+  echo "error: $CI_FAILED CI run(s) failed on $TAG_SHA — refusing to publish." >&2
+  echo "  gh run list --commit $TAG_SHA" >&2
+  echo "  A release built on this Mac can pass every check here and still be a" >&2
+  echo "  commit nobody else can build. That is what alpha.31 was." >&2
+  exit 1
+elif [ "$CI_PASSED" -gt 0 ]; then
+  echo "    CI passed on this commit ($CI_PASSED run(s); $CI_RUNNING still going on the same bytes)"
+else
+  echo "error: CI is still running on $TAG_SHA and none has passed yet — wait for it." >&2
+  exit 1
+fi
 
 echo "==> releasing $TAG"
 

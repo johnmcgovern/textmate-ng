@@ -16,9 +16,9 @@ the version stays `2026.N-alpha.M` until all of them hold.
 | --- | --- | --- | --- |
 | 1 | A crash collector is deployed and the application posts to it | `TMCrashCollectorURL` in Info.plist is non-empty, and `Server/crash-collector/bin/reports` answers | **Met 2026-09-18** — deployed, posted to and read back end to end |
 | 2 | Crash reports are arriving, and there are none | `bin/reports`, plus `~/Library/Logs/DiagnosticReports` on every machine running it | **In progress from 2026-09-19** — alpha.30 is the first build carrying the URL, so an empty collector is evidence from here on and was not before |
-| 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Running** — started 2026-09-19 with alpha.30; earliest it can be met is 2026-09-26 |
+| 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Restarted 2026-09-19 with alpha.31**; earliest it can be met is 2026-09-26. Shipping resets this by design — the criterion is about one build, not about the project |
 | 4 | The full suite, the sanitizers and the fuzzer are green on the tagged commit | The Sanitizers workflow on that commit, not merely on `master` | **Met** and enforced weekly |
-| 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | `screencapture` of each window, read directly | **Mostly met 2026-09-19** — three of the four surfaces verified; the commit window is **broken**, see below |
+| 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | `screencapture` of each window, read directly | **Met on alpha.31** — all four surfaces verified, the commit window included: the Ruby that broke it is fixed and shipped |
 | 6 | Nothing unreleased at the tag | `git log <tag>..HEAD` is empty | Met at each release |
 | 7 | The updater has been seen installing a build unattended | Observed for alpha.27 on 2026-09-16; must hold for the beta too | **Met once** |
 
@@ -61,7 +61,14 @@ What alpha.30 actually showed:
 | Find, Bundle Editor, Software Update | **Alive**, each opening a window |
 | **Commit window** | **BROKEN — see below** |
 
-## The one real defect this found
+## The one real defect this found — fixed and shipped in alpha.31
+
+Resolved 2026-09-19. `bin/patch-bundles` replaces the shim with one that uses
+the Ruby macOS ships, and the mirror serves the patched bundle, so no user ever
+needs Rosetta. What follows is the original finding, kept because the reasoning
+is what led to moving off api.textmate.org entirely.
+
+### As originally found
 
 `Bundles ▸ Git ▸ Commit…` does not open. It fails with
 

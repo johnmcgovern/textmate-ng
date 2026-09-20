@@ -77,14 +77,22 @@ void test_public_surface_from_crash_reporter_h ()
 // = Finding crash reports    =
 // ============================
 
-// macOS names reports "<Process>_<YYYY-MM-DD>-<HHMMSS>...", and the helper
-// parses that back with strptime to decide what is recent enough to send.
+// macOS names a modern report "<Process>-<YYYY-MM-DD>-<HHMMSS>.ips" — a hyphen
+// after the process name. Older .crash files used an underscore. The helper
+// parses either back with strptime to decide what is recent enough to send.
+//
+// **The hyphen fixtures are the point.** This test used to use only underscores,
+// which is what the code expected and not what macOS writes, so it passed while
+// the function returned nothing on any real machine. A fixture copied from the
+// implementation's assumption tests nothing.
 void test_reports_are_matched_by_name_and_date ()
 {
 	test::jail_t jail;
-	jail.touch("TextMate_2026-07-30-101500_host.ips");   // recent
+	jail.touch("TextMate-2026-07-30-101500.ips");        // recent, real macOS naming
+	jail.touch("TextMate-2020-01-01-101500.ips");        // long ago, real macOS naming
+	jail.touch("TextMate_2026-07-30-101500_host.ips");   // recent, legacy .crash naming
 	jail.touch("TextMate_2020-01-01-101500_host.ips");   // long ago
-	jail.touch("SomeOtherApp_2026-07-30-101500_host.ips"); // another process
+	jail.touch("SomeOtherApp-2026-07-30-101500.ips");    // another process
 	jail.touch("TextMate-not-a-report.txt");             // no parseable date
 
 	NSString* dir = [NSString stringWithUTF8String:jail.path().c_str()];
@@ -96,11 +104,16 @@ void test_reports_are_matched_by_name_and_date ()
 	for(NSString* path in res)
 		[names addObject:path.lastPathComponent];
 
-	OAK_ASSERT([names containsObject:@"TextMate_2026-07-30-101500_host.ips"]);
-	OAK_ASSERT(![names containsObject:@"TextMate_2020-01-01-101500_host.ips"]); // before the cut-off
-	OAK_ASSERT(![names containsObject:@"SomeOtherApp_2026-07-30-101500_host.ips"]);
+	OAK_ASSERT([names containsObject:@"TextMate-2026-07-30-101500.ips"]);        // what macOS actually writes
+	OAK_ASSERT([names containsObject:@"TextMate_2026-07-30-101500_host.ips"]);   // and the legacy form
+	OAK_ASSERT(![names containsObject:@"TextMate-2020-01-01-101500.ips"]);       // before the cut-off
+	OAK_ASSERT(![names containsObject:@"TextMate_2020-01-01-101500_host.ips"]);  // before the cut-off
+	OAK_ASSERT(![names containsObject:@"SomeOtherApp-2026-07-30-101500.ips"]);   // a different process
 	OAK_ASSERT(![names containsObject:@"TextMate-not-a-report.txt"]); // strptime rejects it
-	OAK_ASSERT_EQ(res.count, 1);
+	// Two, not one: both recent fixtures match, one in each naming convention.
+	// Kept as an exact count rather than a floor, because it is what catches a
+	// format that starts matching more than it should.
+	OAK_ASSERT_EQ(res.count, 2);
 }
 
 void test_reports_is_empty_for_a_missing_directory ()

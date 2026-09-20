@@ -233,15 +233,26 @@ class CrashReporter: NSObject, @unchecked Sendable {
 	// Reports macOS wrote for `processName` since `cutOff`. The directory is a
 	// parameter purely so a test can point it at a fixture; production passes
 	// the real one.
+	// **Both separators, and the hyphen is the one that matters.** macOS names a
+	// modern `.ips` report `TextMate-NG-2026-09-19-215108.ips` — process name,
+	// then a *hyphen*. The underscore is the older `.crash` convention. Only the
+	// underscore was accepted here until 2026-09-20, which meant this function
+	// returned nothing on any current macOS and crash reporting was inert: the
+	// collector was deployed, the client was wired to it, and nothing was ever
+	// going to be sent.
+	//
+	// It survived because the test that covers this used underscore fixtures, so
+	// it confirmed what the code expected rather than what the system produces.
+	// Found by crashing a signed build on purpose and watching nothing happen.
 	@objc static func reports(forProcessName processName: String, notBefore cutOff: Date, in directory: String) -> [String] {
-		let timeFormat = processName + "_%F-%H%M%S"
+		let timeFormats = [processName + "-%F-%H%M%S", processName + "_%F-%H%M%S"]
 
 		var res: [String] = []
 		for fileName in (try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? [] {
 			guard fileName.hasPrefix(processName) else { continue }
 
 			var bsdDate = tm()
-			guard strptime(fileName, timeFormat, &bsdDate) != nil else { continue }
+			guard timeFormats.contains(where: { strptime(fileName, $0, &bsdDate) != nil }) else { continue }
 
 			let seconds = mktime(&bsdDate)
 			if seconds != -1 && Double(seconds) >= cutOff.timeIntervalSince1970 {

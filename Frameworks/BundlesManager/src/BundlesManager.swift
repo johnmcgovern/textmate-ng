@@ -132,6 +132,18 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 	// The bytes are written only after the signature checks out, so an index
 	// that fails verification cannot be read back later as if it had passed.
 	static func fetchVerifiedIndex(from url: URL, writingTo path: String, completionHandler: @escaping (Bool, Error?) -> Void) {
+		// URLSession's completion is @Sendable and this handler is not, so the
+		// capture has to be stated rather than implied (rule 26). Every caller
+		// hands over a closure that was already crossing this boundary before,
+		// through the download manager; naming it here changes nothing about what
+		// runs where, only about what is written down.
+		//
+		// Swift 6.4, which is what Xcode 27 ships, accepts the capture without
+		// this. Xcode 26.6 — what CI pins — rejects it, so a green local build
+		// said nothing about a red CI one. That is how alpha.31 was tagged on a
+		// commit CI could not build.
+		nonisolated(unsafe) let unsafeHandler = completionHandler
+		let completionHandler = unsafeHandler
 		let task = URLSession.shared.dataTask(with: url) { data, response, error in
 			if let error {
 				completionHandler(false, error)

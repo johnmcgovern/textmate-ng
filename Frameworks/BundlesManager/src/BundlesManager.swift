@@ -143,18 +143,17 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 		// said nothing about a red CI one. That is how alpha.31 was tagged on a
 		// commit CI could not build.
 		nonisolated(unsafe) let unsafeHandler = completionHandler
-		let completionHandler = unsafeHandler
 		let task = URLSession.shared.dataTask(with: url) { data, response, error in
 			if let error {
-				completionHandler(false, error)
+				unsafeHandler(false, error)
 				return
 			}
 			guard let data, !data.isEmpty else {
-				completionHandler(false, NSError(domain: "BundlesManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Empty response from the bundle index."]))
+				unsafeHandler(false, NSError(domain: "BundlesManager", code: 0, userInfo: [NSLocalizedDescriptionKey: "Empty response from the bundle index."]))
 				return
 			}
 			if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-				completionHandler(false, NSError(domain: "BundlesManager", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "Bundle index returned HTTP \(http.statusCode)."]))
+				unsafeHandler(false, NSError(domain: "BundlesManager", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "Bundle index returned HTTP \(http.statusCode)."]))
 				return
 			}
 
@@ -169,7 +168,7 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 				// proxy looks identical to a bad signature unless the type is named.
 				let contentType = (response as? HTTPURLResponse)?.allHeaderFields["Content-Type"] as? String
 				log.error("Bundle index failed verification (\(contentType ?? "no content-type", privacy: .public)): \(error.localizedDescription, privacy: .public)")
-				completionHandler(false, error)
+				unsafeHandler(false, error)
 				return
 			}
 
@@ -177,7 +176,7 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 			// an ETag keeps this honest about what actually changed, and the index
 			// is tens of kilobytes.
 			if let existing = try? Data(contentsOf: URL(fileURLWithPath: path)), existing == payload {
-				completionHandler(false, nil)
+				unsafeHandler(false, nil)
 				return
 			}
 			do {
@@ -190,10 +189,10 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 				try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
 				                                        withIntermediateDirectories: true)
 				try payload.write(to: destination, options: .atomic)
-				completionHandler(true, nil)
+				unsafeHandler(true, nil)
 			} catch {
 				log.error("Could not store the bundle index at \(path, privacy: .public): \(error.localizedDescription, privacy: .public)")
-				completionHandler(false, error)
+				unsafeHandler(false, error)
 			}
 		}
 		task.resume()

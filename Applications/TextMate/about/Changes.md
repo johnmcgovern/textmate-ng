@@ -2,6 +2,33 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-20 (v2026.9-alpha.32)
+
+**A first run now works without a network, and crash reports now actually
+reach us.** Eight commits since alpha.31. If you are on alpha.24 or later this
+should arrive on its own.
+
+What is in it:
+
+* **The application ships with its bundles again.** Every release until now
+  carried an empty bundle archive — 132 bytes — so a fresh installation with no
+  working network got an editor with no syntax highlighting, no commands and no
+  explanation of why. It now carries all 33, ready before the first launch.
+* **Crash reporting has never once worked, and does now.** The part that finds
+  the reports macOS writes was looking for a filename macOS stopped using: it
+  wanted an underscore where the system writes a hyphen. Every report was
+  skipped silently, so nothing was ever sent, however the setting was left. If
+  you had this switched on, it was doing nothing. It still asks before the first
+  upload and still never sends anything from a build you compiled yourself.
+* **Some cryptography we no longer need has been deleted** rather than left
+  lying around — about 900 lines, unused since bundles moved to this project's
+  own mirror last release. Nothing you can see changes; there is simply less of
+  it to go wrong.
+
+**Where to look if something is off.** Settings ▸ Software Update, for the crash
+report checkbox and contact field. Settings ▸ Bundles, which should list what is
+installed. Opening a source file of any language you use.
+
 ## 2026-09-19 (v2026.9-alpha.31)
 
 **Bundles now come from this project, and bundle commands work again.** Six

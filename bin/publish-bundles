@@ -28,7 +28,9 @@ it replaces depends on S3 object metadata headers, which GitHub cannot set.
 import argparse
 import base64
 import hashlib
+import datetime
 import json
+import plistlib
 import subprocess
 import sys
 from pathlib import Path
@@ -49,9 +51,10 @@ def build_signed_index(src: Path, tag: str, out: Path) -> dict:
 
     missing = []
     for b in index["bundles"]:
-        payload = src / b["file"]
+        version = b["versions"][0]
+        payload = src / version["file"]
         if not payload.exists():
-            missing.append(b["file"])
+            missing.append(version["file"])
             continue
         blob = payload.read_bytes()
         # Re-hash rather than trust the index we are about to sign. Signing a
@@ -59,20 +62,28 @@ def build_signed_index(src: Path, tag: str, out: Path) -> dict:
         # no client could ever install, and the failure would look like a
         # network problem.
         actual = hashlib.sha256(blob).hexdigest()
-        if actual != b["sha256"] or len(blob) != b["size"]:
+        if actual != version["sha256"] or len(blob) != version["size"]:
             raise SystemExit(
-                f"error: {b['file']} does not match the index it was built with\n"
-                f"  index:  {b['sha256']} / {b['size']} bytes\n"
+                f"error: {version['file']} does not match the index it was built with\n"
+                f"  index:  {version['sha256']} / {version['size']} bytes\n"
                 f"  ondisk: {actual} / {len(blob)} bytes\n"
                 f"  rebuild the mirror rather than publishing this."
             )
-        b["url"] = DOWNLOAD.format(repo=REPO, tag=tag, file=b["file"])
+        version["url"] = DOWNLOAD.format(repo=REPO, tag=tag, file=version["file"])
+        # A real plist date, because hasUpdate compares it against the local
+        # install time as a Date. A string here silently compares as nothing.
+        version["updated"] = datetime.datetime.strptime(
+            version["updated"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=None)
     if missing:
         raise SystemExit(f"error: index names {len(missing)} payload(s) not in {src}: "
                          + ", ".join(missing[:5]))
 
-    inner = json.dumps(index, indent=1, sort_keys=True).encode()
-    inner_path = out / "index.signed-bytes.json"
+    # The signed document is a plist, not JSON: BundlesManager reads the index
+    # with NSDictionary(contentsOfFile:), and the whole point of this design is
+    # to leave that parser alone. The JSON wrapper around it is only transport
+    # for the signature.
+    inner = plistlib.dumps({"bundles": index["bundles"]}, fmt=plistlib.FMT_XML)
+    inner_path = out / "index.signed-bytes.plist"
     inner_path.write_bytes(inner)
 
     signature = run([str(ROOT / "bin" / "update-sign"), "sign", str(inner_path)]).stdout.strip()
@@ -129,7 +140,7 @@ def main() -> int:
 
     print(f"==> signing the index with {KEY_ID}")
     index = build_signed_index(src, args.tag, src)
-    payloads = [src / b["file"] for b in index["bundles"]]
+    payloads = [src / b["versions"][0]["file"] for b in index["bundles"]]
     total = sum(p.stat().st_size for p in payloads)
     print(f"    {len(payloads)} payloads, {total/1024/1024:.1f} MB")
     print(f"    wrapper: {(src / 'bundles.json').stat().st_size} bytes")
@@ -148,7 +159,8 @@ def main() -> int:
         print("==> --dry-run: nothing published")
         print(f"    would create/update release '{args.tag}' on {REPO}")
         for b in index["bundles"][:3]:
-            print(f"      {b['file']:<26} {b['sha256'][:12]}  {b['url']}")
+            v = b["versions"][0]
+            print(f"      {v['file']:<26} {v['sha256'][:12]}  {v['url']}")
         print(f"      … and {len(payloads) - 3} more, plus bundles.json")
         return 0
 

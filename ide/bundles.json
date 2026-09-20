@@ -5,6 +5,31 @@
    "uuid": "D4FB34BC-80F3-11D9-9D53-00039398C572",
    "category": "Languages",
    "description": "Commands to relaunch <a href=\"http://apache.org/\">Apache</a>, edit the <tt>httpd.conf</tt> file etc.",
+   "contactName": "Simon Gregory",
+   "contactEmailRot13": "fvzba@uryirpgbe.bet",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "mod_perl",
+     "scope": "source.apache-config.mod_perl",
+     "uuid": "6A616B03-1053-49BF-830F-0F4E63DB2447",
+     "fileTypes": []
+    },
+    {
+     "name": "Apache",
+     "scope": "source.apache-config",
+     "uuid": "023D670E-80F1-11D9-9BD1-00039398C572",
+     "fileTypes": [
+      "conf",
+      "htaccess"
+     ]
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "source.perl"
+    }
+   ],
    "repo": "textmate/apache.tmbundle",
    "mandatory": false,
    "default": true,
@@ -15,6 +40,51 @@
    "uuid": "679EFB46-5368-47E5-85BA-DEF72709A471",
    "category": "Other",
    "description": "This bundle has functionality related to developing bundles for TextMate.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Language Grammar",
+     "scope": "source.plist.textmate.grammar",
+     "uuid": "101D6FC2-6CBD-11D9-B329-000D93347A42",
+     "fileTypes": [
+      "textmate"
+     ],
+     "firstLineMatch": "^\\{\\s*scopeName = .*$"
+    },
+    {
+     "name": "Snippet",
+     "scope": "text.tm-snippet",
+     "uuid": "95BE73A9-82E2-493A-B467-013B4B2ECAD2",
+     "fileTypes": []
+    },
+    {
+     "name": "TextMate Scopes",
+     "scope": "text.tm-scope",
+     "uuid": "B02BCBF9-28E1-4193-A894-AB567D28924C",
+     "fileTypes": []
+    },
+    {
+     "name": "TextMate Settings",
+     "scope": "source.plist.textmate.settings",
+     "uuid": "CF3947B5-C5CE-46A1-8E84-724C6C986861",
+     "fileTypes": []
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "source.regexp.oniguruma"
+    },
+    {
+     "name": "TextMate",
+     "uuid": "5A9D4FC6-6CBE-11D9-A21B-000D93589AF6"
+    },
+    {
+     "name": "Themes",
+     "uuid": "A4380B27-F366-4C70-A542-B00D26ED997E"
+    }
+   ],
    "repo": "textmate/bundle-development.tmbundle",
    "mandatory": false,
    "default": true,
@@ -25,6 +95,11 @@
    "uuid": "0BB1F01A-4F0A-475A-ACDD-0F5578F2EFC3",
    "category": "Other",
    "description": "Do not uninstall: Support files for other bundles.",
+   "contactName": "",
+   "contactEmailRot13": "",
+   "requires": "2.0.20",
+   "grammars": [],
+   "dependencies": [],
    "repo": "textmate/bundle-support.tmbundle",
    "mandatory": true,
    "default": false,
@@ -35,6 +110,47 @@
    "uuid": "4675A940-6227-11D9-BFB1-000D93589AF6",
    "category": "Languages",
    "description": "Support for the venerable <a href=\"http://en.wikipedia.org/wiki/C_%28programming_language%29\">C programming language</a> and for the leaner C++. The bundle has completion (using \u2325\u238b) for the standard C functions and, in C++, STL algorithms.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Platform",
+     "scope": "source.c.platform",
+     "uuid": "3E3CB242-CEBA-4B61-9806-9A97B5783D2A",
+     "fileTypes": []
+    },
+    {
+     "name": "C",
+     "scope": "source.c",
+     "uuid": "25066DC2-6B1D-11D9-9D5B-000D93589AF6",
+     "fileTypes": [
+      "c",
+      "h"
+     ],
+     "firstLineMatch": "-[*]-( Mode:)? C -[*]-"
+    },
+    {
+     "name": "C++",
+     "scope": "source.c++",
+     "uuid": "26251B18-6B1D-11D9-AFDB-000D93589AF6",
+     "fileTypes": [
+      "cc",
+      "cpp",
+      "cp",
+      "cxx",
+      "c++",
+      "C",
+      "h",
+      "hh",
+      "hpp",
+      "hxx",
+      "h++"
+     ],
+     "firstLineMatch": "-\\*- C\\+\\+ -\\*-"
+    }
+   ],
+   "dependencies": [],
    "repo": "textmate/c.tmbundle",
    "mandatory": false,
    "default": true,
@@ -45,6 +161,21 @@
    "uuid": "4675F24E-6227-11D9-BFB1-000D93589AF6",
    "category": "Languages",
    "description": "The <a href=\"http://www.w3.org/Style/CSS/\">cascading stylesheet language</a> is used in web pages. This bundle has syntax highlight, lots of snippets, validation, and more.",
+   "contactName": "Michael Sheets",
+   "contactEmailRot13": "ohaqyrf@grkgzngr.bet",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "CSS",
+     "scope": "source.css",
+     "uuid": "69AA0917-B7BB-11D9-A7E2-000D93C8BE28",
+     "fileTypes": [
+      "css",
+      "css.erb"
+     ]
+    }
+   ],
+   "dependencies": [],
    "repo": "textmate/css.tmbundle",
    "mandatory": false,
    "default": true,
@@ -55,6 +186,23 @@
    "uuid": "C2D2BFF9-708D-11D9-BD09-0011242E4184",
    "category": "Other",
    "description": "Syntax highlight and <a href=\"http://en.wikipedia.org/wiki/Diff\">diff</a> related functionality, for example see differences between document and last saved version, use a diff file as a patch, etc.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Diff",
+     "scope": "source.diff",
+     "uuid": "7E848FF4-708E-11D9-97B4-0011242E4184",
+     "fileTypes": [
+      "patch",
+      "diff",
+      "rej"
+     ],
+     "firstLineMatch": "(?x)^\n\t\t(===\\ modified\\ file\n\t\t|==== \\s* // .+ \\s - \\s .+ \\s+ ====\n\t\t|Index:\\ \n\t\t|---\\ [^%\\n]\n\t\t|\\*\\*\\*.*\\d{4}\\s*$\n\t\t|\\d+(,\\d+)* (a|d|c) \\d+(,\\d+)* $\n\t\t|diff\\ --git\\ \n\t\t|commit\\ [0-9a-f]{40}$\n\t\t)"
+    }
+   ],
+   "dependencies": [],
    "repo": "textmate/diff.tmbundle",
    "mandatory": false,
    "default": true,
@@ -65,6 +213,52 @@
    "uuid": "EADD4718-EE11-4ABF-A7E6-13351FB3799D",
    "category": "SCM",
    "description": "Support for the Git version control system.",
+   "contactName": "",
+   "contactEmailRot13": "",
+   "requires": "2.0-rc.11",
+   "grammars": [
+    {
+     "name": "Git Config",
+     "scope": "source.git-config",
+     "uuid": "F0EFAC75-4357-45BD-AB08-682DAF8C6FBF",
+     "fileTypes": [
+      ".git/config",
+      "git/config",
+      ".gitconfig",
+      "etc/gitconfig",
+      ".gitmodules"
+     ]
+    },
+    {
+     "name": "Git Commit Message",
+     "scope": "text.git-commit",
+     "uuid": "BFE83C06-8508-44BE-A975-95A57BF619A7",
+     "fileTypes": [
+      "COMMIT_EDITMSG",
+      "MERGE_MSG"
+     ]
+    },
+    {
+     "name": "Git Rebase Message",
+     "scope": "text.git-rebase",
+     "uuid": "7F1CC209-5F6D-486A-8180-09FA282381A1",
+     "fileTypes": [
+      "git-rebase-todo"
+     ]
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "source.diff"
+    },
+    {
+     "grammar": "source.shell"
+    },
+    {
+     "name": "SCM",
+     "uuid": "3BDF79F4-94AE-46C0-BFBF-D5572AD2F515"
+    }
+   ],
    "repo": "textmate/git.tmbundle",
    "mandatory": false,
    "default": true,
@@ -75,6 +269,40 @@
    "uuid": "4676FC6D-6227-11D9-BFB1-000D93589AF6",
    "category": "Languages",
    "description": "Hypertext Markup Language support.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "HTML (Derivative)",
+     "scope": "text.html.derivative",
+     "uuid": "D6692427-BC16-40BC-8340-A8712B8D386D",
+     "fileTypes": []
+    },
+    {
+     "name": "HTML",
+     "scope": "text.html.basic",
+     "uuid": "17994EC8-6B1D-11D9-AC3A-000D93589AF6",
+     "fileTypes": [
+      "html",
+      "htm",
+      "shtml",
+      "xhtml",
+      "inc",
+      "tmpl",
+      "tpl"
+     ],
+     "firstLineMatch": "<(?i:(!DOCTYPE\\s*)?html)"
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "source.js"
+    },
+    {
+     "grammar": "source.css"
+    }
+   ],
    "repo": "textmate/html.tmbundle",
    "mandatory": false,
    "default": true,
@@ -85,6 +313,18 @@
    "uuid": "7592B521-FC5E-4D69-A6DD-5A0DD7529CB4",
    "category": "Other",
    "description": "The commands in this bundle makes it easy to create hyper links for example by searching for the current word or using the clipboard contents. This bundle is much more useful than it sounds!",
+   "contactName": "Brett Terpstra",
+   "contactEmailRot13": "oergg@pvepyrfvkqrfvta.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Hyperlink",
+     "scope": "text.hyperlink",
+     "uuid": "40FCD8FB-8FA6-4966-9B27-F18663188851",
+     "fileTypes": []
+    }
+   ],
+   "dependencies": [],
    "repo": "textmate/hyperlink-helper.tmbundle",
    "mandatory": false,
    "default": true,
@@ -95,6 +335,20 @@
    "uuid": "8BB0DBAF-E65C-4E14-A6A7-467D4AA535E0",
    "category": "Languages",
    "description": "Syntax highlight for <a href=\"http://json.org/\">JavaScript Object Notation</a> files, often used as a lightweight serialization format.",
+   "contactName": "James Edward Gray II",
+   "contactEmailRot13": "wnzrf@tenlcebqhpgvbaf.arg",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "JSON",
+     "scope": "source.json",
+     "uuid": "0C3868E4-F96B-4E55-B204-1DCB5A20748B",
+     "fileTypes": [
+      "json"
+     ]
+    }
+   ],
+   "dependencies": [],
    "repo": "textmate/json.tmbundle",
    "mandatory": false,
    "default": true,
@@ -105,6 +359,41 @@
    "uuid": "AAB4FD74-73F9-11D9-B89A-000D93589AF6",
    "category": "Languages",
    "description": "Support for <a href=\"http://developer.mozilla.org/en/docs/About_JavaScript\">JavaScript</a>.",
+   "contactName": "Jeremy Whitlock",
+   "contactEmailRot13": "wjuvgybpx@ncnpur.bet",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Regular Expressions (JavaScript)",
+     "scope": "source.js.regexp",
+     "uuid": "AC8679DE-3AC7-4056-84F9-69A7ADC29DDD",
+     "fileTypes": []
+    },
+    {
+     "name": "JavaScript",
+     "scope": "source.js",
+     "uuid": "93E017CC-6F27-11D9-90EB-000D93589AF6",
+     "fileTypes": [
+      "js",
+      "_js",
+      "es",
+      "es6",
+      "gs",
+      "htc",
+      "pac",
+      "jsm",
+      "jslib",
+      "jspre",
+      "xsjs",
+      "xsjslib",
+      "jscad",
+      "json5",
+      "jsx"
+     ],
+     "firstLineMatch": "^#!.*\\b(node|iojs|JavaScript)"
+    }
+   ],
+   "dependencies": [],
    "repo": "textmate/javascript.tmbundle",
    "mandatory": false,
    "default": true,
@@ -115,6 +404,33 @@
    "uuid": "385A8908-0733-408E-AFA5-9576D2E3A16B",
    "category": "Other",
    "description": "Support for writing <a href=\"http://www.faqs.org/rfcs/rfc822.html\">email messages</a>.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "uuid": "99F6D23C-2048-4F09-8558-6CECA7E2262A",
+     "scope": "text.mail",
+     "name": "Email Address",
+     "fileTypes": []
+    },
+    {
+     "uuid": "15615A0C-37B0-4B3F-9105-53ED536AFBB4",
+     "firstLineMatch": "^From: .*(?=\\w+@[\\w-]+\\.\\w+)",
+     "scope": "text.mail.markdown",
+     "name": "Mail",
+     "fileTypes": [
+      "mail",
+      "eml",
+      "eml.txt"
+     ]
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "text.html.markdown"
+    }
+   ],
    "repo": "textmate/mail.tmbundle",
    "mandatory": false,
    "default": true,
@@ -125,6 +441,28 @@
    "uuid": "4679297D-6227-11D9-BFB1-000D93589AF6",
    "category": "Build",
    "description": "Minimal syntax highlight and a build (<a href=\"http://www.gnu.org/software/make/\">make</a>) command.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Makefile",
+     "scope": "source.makefile",
+     "uuid": "FF1825E8-6B1C-11D9-B883-000D93589AF6",
+     "fileTypes": [
+      "Makefile",
+      "makefile",
+      "GNUmakefile",
+      "OCamlMakefile",
+      "mk"
+     ]
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "source.shell"
+    }
+   ],
    "repo": "textmate/make.tmbundle",
    "mandatory": false,
    "default": true,
@@ -135,6 +473,28 @@
    "uuid": "D99E8C0C-792F-11D9-A212-000D93B3A10E",
    "category": "Languages",
    "description": "<a href=\"http://daringfireball.net/projects/markdown/\">Markdown</a> allows you to write using an easy-to-read, easy-to-write plain text format, then convert it to structurally valid XHTML. This bundle provides preview functionality, syntax highlighting, and several useful commands.",
+   "contactName": "Michael Sheets",
+   "contactEmailRot13": "zfurrgf@juvgrsnyyf.bet",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Markdown",
+     "scope": "text.html.markdown",
+     "uuid": "0A1D9874-B448-11D9-BD50-000D93B6E43C",
+     "fileTypes": [
+      "md",
+      "mdown",
+      "markdown",
+      "markdn"
+     ],
+     "firstLineMatch": "^# \\[Think different\\]\\[\\]"
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "text.html.basic"
+    }
+   ],
    "repo": "textmate/markdown.tmbundle",
    "mandatory": false,
    "default": true,
@@ -145,6 +505,11 @@
    "uuid": "8A9DDCA2-77E8-11D9-B5A8-000D93589AF6",
    "category": "Other",
    "description": "Support for performing different calculations inside TextMate.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [],
+   "dependencies": [],
    "repo": "textmate/math.tmbundle",
    "mandatory": false,
    "default": true,
@@ -155,6 +520,23 @@
    "uuid": "162dcb4d-4227-11da-a523-000d93c89990",
    "category": "SCM",
    "description": "<a href=\"http://www.selenic.com/mercurial/\">Mercurial</a> is a source Control Management system designed for efficient handling of very large distributed projects.",
+   "contactName": "Fr\u00e9d\u00e9ric Ball\u00e9riaux",
+   "contactEmailRot13": "serqo7@fgnesynz.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Mercurial Commit Message",
+     "scope": "text.hg-commit",
+     "uuid": "7B28C9A0-6D39-40FD-8C99-4DD8A0DE7DD4",
+     "fileTypes": []
+    }
+   ],
+   "dependencies": [
+    {
+     "name": "SCM",
+     "uuid": "3BDF79F4-94AE-46C0-BFBF-D5572AD2F515"
+    }
+   ],
    "repo": "textmate/mercurial.tmbundle",
    "mandatory": false,
    "default": true,
@@ -165,6 +547,59 @@
    "uuid": "4679484F-6227-11D9-BFB1-000D93589AF6",
    "category": "Languages",
    "description": "The language used for writing Cocoa applications. This bundle supports documentation lookups, method completion, and more.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Objective-C++",
+     "scope": "source.objc++",
+     "uuid": "FDAB1813-6B1C-11D9-BCAC-000D93589AF6",
+     "fileTypes": [
+      "mm",
+      "M",
+      "h"
+     ]
+    },
+    {
+     "name": "Objective-C",
+     "scope": "source.objc",
+     "uuid": "F85CC716-6B1C-11D9-9A20-000D93589AF6",
+     "fileTypes": [
+      "m",
+      "h"
+     ]
+    },
+    {
+     "name": "Platform",
+     "scope": "source.objc.platform",
+     "uuid": "3895277D-1B0D-4E74-B6FC-A9DA24BCC9FF",
+     "fileTypes": []
+    },
+    {
+     "name": "Strings File",
+     "scope": "source.strings",
+     "uuid": "429E2DB7-EB4F-4B34-A4DF-DBFD3336C581",
+     "fileTypes": [
+      "strings"
+     ]
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "source.c++"
+    },
+    {
+     "grammar": "source.c"
+    },
+    {
+     "grammar": "source.c.platform"
+    },
+    {
+     "name": "C",
+     "uuid": "4675A940-6227-11D9-BFB1-000D93589AF6"
+    }
+   ],
    "repo": "textmate/objective-c.tmbundle",
    "mandatory": false,
    "default": true,
@@ -175,6 +610,47 @@
    "uuid": "467A1966-6227-11D9-BFB1-000D93589AF6",
    "category": "Languages",
    "description": "<a href=\"http://www.php.net/\">PHP</a> is a widely-used general-purpose scripting language that is especially suited for web development and can be embedded into HTML.",
+   "contactName": "Ciar\u00e1n Walsh",
+   "contactEmailRot13": "pvnjny@tznvy.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "PHP",
+     "scope": "text.html.php",
+     "uuid": "22986475-8CA5-11D9-AEDD-000D93C8BE28",
+     "fileTypes": [
+      "php",
+      "php3",
+      "php4",
+      "php5",
+      "phpt",
+      "phtml",
+      "aw",
+      "ctp"
+     ],
+     "firstLineMatch": "^#!.*(?<!-)php[0-9]{0,1}\\b|<\\?php"
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "text.html.basic"
+    },
+    {
+     "grammar": "text.xml"
+    },
+    {
+     "grammar": "source.sql"
+    },
+    {
+     "grammar": "source.js"
+    },
+    {
+     "grammar": "source.json"
+    },
+    {
+     "grammar": "source.css"
+    }
+   ],
    "repo": "textmate/php.tmbundle",
    "mandatory": false,
    "default": true,
@@ -185,6 +661,36 @@
    "uuid": "467A3CB0-6227-11D9-BFB1-000D93589AF6",
    "category": "Languages",
    "description": "Support for the various forms of Apple\u2019s <a href=\"http://developer.apple.com/documentation/Cocoa/Conceptual/PropertyLists/index.html\">Property List format</a> (originally from NeXT).",
+   "contactName": "Michael Sheets",
+   "contactEmailRot13": "zfurrgf@juvgrsnyyf.bet",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Property List (XML)",
+     "scope": "text.xml.plist",
+     "uuid": "76F96472-7552-4884-80B0-BC73CE4DE635",
+     "fileTypes": [],
+     "firstLineMatch": "\\s*<\\?xml .*\\n\\s*<!DOCTYPE\\s*(?i:plist)\\s"
+    },
+    {
+     "name": "Property List (Old-Style)",
+     "scope": "source.plist",
+     "uuid": "4AF93608-4D0E-4766-802B-44795305E468",
+     "fileTypes": [
+      "plist",
+      "dict",
+      "scriptSuite",
+      "scriptTerminology",
+      "savedSearch"
+     ],
+     "firstLineMatch": "\\A// .*?\\b(?i:property list)\\b"
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "text.xml"
+    }
+   ],
    "repo": "textmate/property-list.tmbundle",
    "mandatory": false,
    "default": true,
@@ -195,6 +701,43 @@
    "uuid": "E3BADC20-6B0E-11D9-9DC9-000D93589AF6",
    "category": "Languages",
    "description": "Support for the <a href=\"http://www.python.org/\">Python</a> programming language.",
+   "contactName": "Brad Miller",
+   "contactEmailRot13": "obarynxr@znp.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Regular Expressions (Python)",
+     "scope": "source.regexp.python",
+     "uuid": "DD867ABF-1EC6-415D-B047-687F550A1D51",
+     "fileTypes": [
+      "re"
+     ]
+    },
+    {
+     "name": "Python",
+     "scope": "source.python",
+     "uuid": "F23DB5B2-7D08-11D9-A709-000D93B6E43C",
+     "fileTypes": [
+      "py",
+      "py3",
+      "rpy",
+      "pyw",
+      "cpy",
+      "SConstruct",
+      "Sconstruct",
+      "sconstruct",
+      "SConscript",
+      "gyp",
+      "gypi"
+     ],
+     "firstLineMatch": "^#!/.*\\bpython[\\d\\.]*\\b"
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "source.sql"
+    }
+   ],
    "repo": "textmate/python.tmbundle",
    "mandatory": false,
    "default": true,
@@ -205,6 +748,104 @@
    "uuid": "467B298F-6227-11D9-BFB1-000D93589AF6",
    "category": "Languages",
    "description": "Support for the <a href=\"http://www.ruby-lang.org/\">Ruby</a> programming language.",
+   "contactName": "James Edward Gray II",
+   "contactEmailRot13": "wnzrf@tenlcebqhpgvbaf.arg",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "HTML (Ruby - ERB)",
+     "scope": "text.html.erb",
+     "uuid": "13FF9439-15D0-4E74-9A8E-83ABF0BAA5E7",
+     "fileTypes": [
+      "erb",
+      "rhtml",
+      "html.erb"
+     ]
+    },
+    {
+     "name": "Gemfile",
+     "scope": "source.ruby.gemfile",
+     "uuid": "410F8BB5-7543-4081-A38D-3B69CA92ACE9",
+     "fileTypes": [
+      "Gemfile"
+     ]
+    },
+    {
+     "name": "Ruby",
+     "scope": "source.ruby",
+     "uuid": "E00B62AC-6B1C-11D9-9B1F-000D93589AF6",
+     "fileTypes": [
+      "rb",
+      "rbx",
+      "rjs",
+      "Rakefile",
+      "rake",
+      "cgi",
+      "fcgi",
+      "gemspec",
+      "irbrc",
+      "Capfile",
+      "ru",
+      "prawn",
+      "Cheffile",
+      "Guardfile",
+      "Hobofile",
+      "Vagrantfile",
+      ".vagrantplugins",
+      "Appraisals",
+      "Rantfile",
+      "Berksfile",
+      "Berksfile.lock",
+      "Thorfile",
+      "Puppetfile",
+      "arb",
+      "Dangerfile",
+      "Brewfile",
+      "Fastfile",
+      "Appfile",
+      "Deliverfile",
+      "Matchfile",
+      "Scanfile",
+      "Snapfile",
+      "Gymfile",
+      "jb",
+      "Podfile"
+     ],
+     "firstLineMatch": "(?x)\n# Hashbang\n^\\#!.*(?:\\s|\\/)\n(?:ruby[\\.\\d]*|macruby|rake|jruby|rbx|ruby_executable_hooks)\n(?:$|\\s)\n|\n# Modeline\n(?i:\n    # Emacs\n    -\\*-(?:\\s*(?=[^:;\\s]+\\s*-\\*-)|(?:.*?[;\\s]|(?<=-\\*-))mode\\s*:\\s*)\n    ruby\n    (?=[\\s;]|(?<![-*])-\\*-).*?-\\*-\n  |\n    # Vim\n    (?:(?:\\s|^)vi(?:m[<=>]?\\d+|m)?|\\sex)\n    (?=:(?=\\s*set?\\s[^\\n:]+:)|:(?!\\s*set?\\s))\n    (?:(?:\\s|\\s*:\\s*)\\w*(?:\\s*=(?:[^\\n\\\\\\s]|\\\\.)*)?)*\n    [\\s:]\n    (?:filetype|ft|syntax)\\s*=\n    ruby\n    (?=\\s|:|$)\n)"
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "text.html.basic"
+    },
+    {
+     "grammar": "text.xml"
+    },
+    {
+     "grammar": "source.sql"
+    },
+    {
+     "grammar": "source.css"
+    },
+    {
+     "grammar": "source.c++"
+    },
+    {
+     "grammar": "source.c"
+    },
+    {
+     "grammar": "source.js"
+    },
+    {
+     "grammar": "source.js.jquery"
+    },
+    {
+     "grammar": "source.shell"
+    },
+    {
+     "grammar": "source.lua"
+    }
+   ],
    "repo": "textmate/ruby.tmbundle",
    "mandatory": false,
    "default": true,
@@ -215,6 +856,11 @@
    "uuid": "3BDF79F4-94AE-46C0-BFBF-D5572AD2F515",
    "category": "SCM",
    "description": "Provides support for the various SCM (source control management) bundles.",
+   "contactName": "Michael Sheets",
+   "contactEmailRot13": "ohaqyrf@grkgzngr.bet",
+   "requires": null,
+   "grammars": [],
+   "dependencies": [],
    "repo": "textmate/scm.tmbundle",
    "mandatory": false,
    "default": true,
@@ -225,6 +871,11 @@
    "uuid": "7A84ECFC-2683-4129-826D-51F05F7E668A",
    "category": "SCM",
    "description": "Show indication in gutter for added/modified lines",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "ohaqyrf@grkgzngr.bet",
+   "requires": "2.0-rc.20",
+   "grammars": [],
+   "dependencies": [],
    "repo": "textmate/scm-diff-gutter.tmbundle",
    "mandatory": false,
    "default": true,
@@ -235,6 +886,22 @@
    "uuid": "AAB4CBF7-73F9-11D9-B89A-000D93589AF6",
    "category": "Languages",
    "description": "Database query language with support for MySQL and PostgreSQL.",
+   "contactName": "Ciar\u00e1n Walsh",
+   "contactEmailRot13": "pvnjny@tznvy.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "SQL",
+     "scope": "source.sql",
+     "uuid": "C49120AC-6ECC-11D9-ACC8-000D93589AF6",
+     "fileTypes": [
+      "sql",
+      "ddl",
+      "dml"
+     ]
+    }
+   ],
+   "dependencies": [],
    "repo": "textmate/sql.tmbundle",
    "mandatory": false,
    "default": true,
@@ -245,6 +912,48 @@
    "uuid": "4694B05E-6227-11D9-BFB1-000D93589AF6",
    "category": "Languages",
    "description": "Support for running and editing shell scripts (using the bash dialect).",
+   "contactName": "Martin Kuehl",
+   "contactEmailRot13": "znegva.xhruy@tznvy.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Shell Script (Bash)",
+     "scope": "source.shell",
+     "uuid": "DDEEA3ED-6B1C-11D9-8B10-000D93589AF6",
+     "fileTypes": [
+      "sh",
+      "bash",
+      "zsh",
+      "bashrc",
+      "bash_profile",
+      "bash_login",
+      "profile",
+      "bash_logout",
+      ".textmate_init"
+     ],
+     "firstLineMatch": "^#!.*\\b(bash|zsh|sh|tcsh)|^#.*-\\*-.*\\bshell-script\\b.*-\\*-"
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "source.ruby"
+    },
+    {
+     "grammar": "source.python"
+    },
+    {
+     "grammar": "source.applescript"
+    },
+    {
+     "grammar": "text.html.basic"
+    },
+    {
+     "grammar": "text.html.markdown"
+    },
+    {
+     "grammar": "text.html.textile"
+    }
+   ],
    "repo": "textmate/shellscript.tmbundle",
    "mandatory": false,
    "default": true,
@@ -255,6 +964,16 @@
    "uuid": "4F45FDC0-62CA-4786-9134-8BC7C1F5606F",
    "category": "Other",
    "description": "Miscellaneous support for working with source code. This bundle is essential, e.g. it allows you to toggle comments on \u2318/.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [],
+   "dependencies": [
+    {
+     "name": "Bundle Support",
+     "uuid": "0BB1F01A-4F0A-475A-ACDD-0F5578F2EFC3"
+    }
+   ],
    "repo": "textmate/source.tmbundle",
    "mandatory": true,
    "default": false,
@@ -265,6 +984,26 @@
    "uuid": "AEAF4DD4-74CD-11D9-BAD4-000A95A89C98",
    "category": "SCM",
    "description": "Provides a nice interface to a multitude of <a href=\"http://subversion.tigris.org/\">Subversion</a> commands.",
+   "contactName": "Chris Thomas",
+   "contactEmailRot13": "puevf@pwnpx.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Subversion Commit Message",
+     "scope": "text.svn-commit",
+     "uuid": "5B201F55-90BC-4A69-9A44-1BABE5A9FE99",
+     "fileTypes": [
+      "svn-commit.tmp",
+      "svn-commit.2.tmp"
+     ]
+    }
+   ],
+   "dependencies": [
+    {
+     "name": "SCM",
+     "uuid": "3BDF79F4-94AE-46C0-BFBF-D5572AD2F515"
+    }
+   ],
    "repo": "textmate/subversion.tmbundle",
    "mandatory": false,
    "default": true,
@@ -275,6 +1014,21 @@
    "uuid": "D08F016D-1D07-4BD8-8339-9AB5D151DF31",
    "category": "Languages",
    "description": "Swift is a general-purpose programming language developed by Apple and built for safety, clarity, and performance.",
+   "contactName": "Michael Sheets",
+   "contactEmailRot13": "ohaqyrf@grkgzngr.bet",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Swift",
+     "scope": "source.swift",
+     "uuid": "8C743E89-9C8D-4833-8149-6500D82AA463",
+     "fileTypes": [
+      "swift"
+     ],
+     "firstLineMatch": "^#!/.*\\bswift"
+    }
+   ],
+   "dependencies": [],
    "repo": "textmate/swift.tmbundle",
    "mandatory": false,
    "default": true,
@@ -285,6 +1039,18 @@
    "uuid": "0B296803-7D51-11D9-859D-000D93B6E43C",
    "category": "Other",
    "description": "If you tag your comments with <tt>TODO</tt>, <tt>FIXME</tt>, or similar, this bundle provides functionality to list all your tagged items, with the ability to jump to either of them.",
+   "contactName": "Stanley Rost",
+   "contactEmailRot13": "Fbelh@freravgl.qr",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "TODO",
+     "scope": "text.todo",
+     "uuid": "94A00B36-AAEF-477A-BA78-9B081B116321",
+     "fileTypes": []
+    }
+   ],
+   "dependencies": [],
    "repo": "textmate/todo.tmbundle",
    "mandatory": false,
    "default": true,
@@ -295,6 +1061,25 @@
    "uuid": "B7BC3FFD-6E4B-11D9-91AF-000D93589AF6",
    "category": "Other",
    "description": "The text bundle has a lot of support for plain text and is a requisite for working with text.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Plain Text",
+     "scope": "text.plain",
+     "uuid": "3130E4FA-B10E-11D9-9F75-000D93589AF6",
+     "fileTypes": [
+      "txt"
+     ]
+    }
+   ],
+   "dependencies": [
+    {
+     "name": "Bundle Support",
+     "uuid": "0BB1F01A-4F0A-475A-ACDD-0F5578F2EFC3"
+    }
+   ],
    "repo": "textmate/text.tmbundle",
    "mandatory": true,
    "default": false,
@@ -305,6 +1090,40 @@
    "uuid": "5A9D4FC6-6CBE-11D9-A21B-000D93589AF6",
    "category": "Other",
    "description": "This bundle has functionality which add to the application but is not related to a specific task (bundle).",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "Format String",
+     "scope": "textmate.format-string",
+     "uuid": "405875FC-5E62-41EE-9303-FAE078694E63",
+     "fileTypes": []
+    },
+    {
+     "name": "Properties",
+     "scope": "source.tm-properties",
+     "uuid": "DE84747E-90A6-4731-92A4-A9C6823D35DE",
+     "fileTypes": [
+      "tm_properties",
+      "tmProperties"
+     ]
+    },
+    {
+     "name": "Regular Expressions (Oniguruma)",
+     "scope": "source.regexp.oniguruma",
+     "uuid": "D609BF3F-BEDB-41AE-BA6F-903CC77A7BB3",
+     "fileTypes": [
+      "re"
+     ]
+    }
+   ],
+   "dependencies": [
+    {
+     "name": "Themes",
+     "uuid": "A4380B27-F366-4C70-A542-B00D26ED997E"
+    }
+   ],
    "repo": "textmate/textmate.tmbundle",
    "mandatory": false,
    "default": true,
@@ -315,6 +1134,11 @@
    "uuid": "A4380B27-F366-4C70-A542-B00D26ED997E",
    "category": "Themes",
    "description": "Themes for syntax highlight and (HTML) output.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "ohaqyrf@grkgzngr.bet",
+   "requires": null,
+   "grammars": [],
+   "dependencies": [],
    "repo": "textmate/themes.tmbundle",
    "mandatory": false,
    "default": true,
@@ -325,6 +1149,41 @@
    "uuid": "4694D53F-6227-11D9-BFB1-000D93589AF6",
    "category": "Languages",
    "description": "Support for the <a href=\"http://www.w3.org/XML/\">eXtensible Markup Language</a>.",
+   "contactName": "Allan Odgaard",
+   "contactEmailRot13": "gz-ohaqyrf@znpebzngrf.pbz",
+   "requires": null,
+   "grammars": [
+    {
+     "name": "XML",
+     "scope": "text.xml",
+     "uuid": "D3C4E6DA-6B1C-11D9-8CC2-000D93589AF6",
+     "fileTypes": [
+      "xml",
+      "xsd",
+      "tld",
+      "jsp",
+      "pt",
+      "cpt",
+      "dtml",
+      "rss",
+      "opml"
+     ]
+    },
+    {
+     "name": "XSL",
+     "scope": "text.xml.xsl",
+     "uuid": "DB8033A1-6D8E-4D80-B8A2-8768AAC6125D",
+     "fileTypes": [
+      "xsl",
+      "xslt"
+     ]
+    }
+   ],
+   "dependencies": [
+    {
+     "grammar": "source.java"
+    }
+   ],
    "repo": "textmate/xml.tmbundle",
    "mandatory": false,
    "default": true,

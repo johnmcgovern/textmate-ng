@@ -89,11 +89,20 @@ def bootstrap(local_copy: str = None) -> int:
         if not html.startswith("https://github.com/"):
             print(f"  skipping {b.get('name')}: not on GitHub ({html})")
             continue
+        # Everything BundlesManager.bundlesFromIndex reads, not just what is
+        # convenient. `grammars` is how a file type finds the bundle that can
+        # open it, and `dependencies` is how a bundle drags in the ones it needs
+        # — an index without them installs but quietly stops matching files.
         wanted.append({
             "name": b["name"],
             "uuid": str(b["uuid"]),
             "category": b.get("category", "Other"),
             "description": b.get("description", ""),
+            "contactName": b.get("contactName", ""),
+            "contactEmailRot13": b.get("contactEmailRot13", ""),
+            "requires": b.get("requires"),
+            "grammars": b.get("grammars", []),
+            "dependencies": b.get("dependencies", []),
             "repo": html[len("https://github.com/"):].rstrip("/"),
             "mandatory": bool(b.get("isMandatory")),
             "default": bool(b.get("isDefault")) or b.get("name") == "Swift",
@@ -102,7 +111,7 @@ def bootstrap(local_copy: str = None) -> int:
         })
 
     wanted.sort(key=lambda x: x["name"])
-    BUNDLE_LIST.write_text(json.dumps({"bundles": wanted}, indent=1) + "\n")
+    BUNDLE_LIST.write_text(json.dumps({"bundles": wanted}, indent=1, default=str) + "\n")
     print(f"  wrote {BUNDLE_LIST.relative_to(ROOT)} with {len(wanted)} bundles")
     print("  commit it. From here on this script needs only GitHub.")
     return 0
@@ -110,8 +119,13 @@ def bootstrap(local_copy: str = None) -> int:
 
 # --------------------------------------------------------------------- build
 
-def newest_sha(repo: str) -> str:
-    return gh_json(f"repos/{repo}/commits?per_page=1")[0]["sha"]
+def newest_commit(repo: str) -> tuple:
+    c = gh_json(f"repos/{repo}/commits?per_page=1")[0]
+    return c["sha"], c["commit"]["committer"]["date"]
+
+
+def commit_date(repo: str, sha: str) -> str:
+    return gh_json(f"repos/{repo}/commits/{sha}")["commit"]["committer"]["date"]
 
 
 def to_binary_plists(root: Path) -> int:
@@ -169,7 +183,16 @@ def write_deterministic_tbz(src: Path, dest: Path, arcname: str) -> None:
 
 def package(entry: dict, out_dir: Path, staging: Path) -> dict:
     name, repo = entry["name"], entry["repo"]
-    sha = entry.get("sha") or newest_sha(repo)
+    # The commit date, not the time this ran. `hasUpdate` is
+    # `downloadLastUpdated > lastUpdated`, comparing the index's timestamp
+    # against when the user installed — so a generation timestamp would mark all
+    # 33 bundles as updated on every mirror run and re-download the lot. A
+    # pinned commit's date is stable, which is what that comparison needs.
+    if entry.get("sha"):
+        sha = entry["sha"]
+        committed = entry.get("committed") or commit_date(repo, sha)
+    else:
+        sha, committed = newest_commit(repo)
 
     work = staging / name
     work.mkdir(parents=True)
@@ -211,15 +234,21 @@ def package(entry: dict, out_dir: Path, staging: Path) -> dict:
     return {
         "name": name,
         "uuid": entry["uuid"],
-        "category": entry["category"],
-        "description": entry["description"],
         "repo": repo,
         "sha": sha,
+        "committed": committed,
         "mandatory": entry["mandatory"],
         "default": entry["default"],
         "file": tbz.name,
         "size": len(blob),
         "sha256": hashlib.sha256(blob).hexdigest(),
+        "category": entry["category"],
+        "description": entry["description"],
+        "contactName": entry.get("contactName", ""),
+        "contactEmailRot13": entry.get("contactEmailRot13", ""),
+        "requires": entry.get("requires"),
+        "grammars": entry.get("grammars", []),
+        "dependencies": entry.get("dependencies", []),
         "plistsConverted": converted,
         "patches": [l.strip() for l in patched.splitlines() if l.strip()],
     }
@@ -262,26 +291,58 @@ def build(only: list, out: Path) -> int:
     # someone else's code.
     if results:
         by_name = {r["name"]: r["sha"] for r in results}
+        dates = {r["name"]: r["committed"] for r in results}
         full = json.loads(BUNDLE_LIST.read_text())
         moved = []
         for e in full["bundles"]:
             new_sha = by_name.get(e["name"])
-            if new_sha and e.get("sha") != new_sha:
-                moved.append((e["name"], e.get("sha"), new_sha))
+            if new_sha and (e.get("sha") != new_sha or not e.get("committed")):
+                if e.get("sha") != new_sha:
+                    moved.append((e["name"], e.get("sha"), new_sha))
                 e["sha"] = new_sha
-        if moved:
-            BUNDLE_LIST.write_text(json.dumps(full, indent=1) + "\n")
+                e["committed"] = dates[e["name"]]
+        if moved or any(not e.get("committed") for e in full["bundles"]):
+            BUNDLE_LIST.write_text(json.dumps(full, indent=1, default=str) + "\n")
             print(f"  pinned {len(moved)} bundle(s) in {BUNDLE_LIST.relative_to(ROOT)}:")
             for n, was, now in moved:
                 print(f"    {n:<20} {(was or 'unpinned')[:12]} -> {now[:12]}")
 
-    index = {
-        "formatVersion": 1,
-        "generated": subprocess.run(["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
-                                    capture_output=True, text=True).stdout.strip(),
-        "bundles": results,
-    }
-    (out / "index.json").write_text(json.dumps(index, indent=1) + "\n")
+    # Emitted in the schema BundlesManager.bundlesFromIndex already parses,
+    # rather than a shape of our own. That keeps the application change to the
+    # two things that genuinely must change — where the index comes from, and
+    # how it is authenticated — instead of also rewriting the parser. The one
+    # added field is `sha256` on each version, which is what lets downloads be
+    # checked by digest instead of by S3 metadata headers.
+    #
+    # `url` is filled in by bin/publish-bundles, which knows the release tag.
+    entries = []
+    for r in results:
+        entries.append({
+            "uuid": r["uuid"],
+            "name": r["name"],
+            "category": r["category"],
+            "description": r["description"],
+            "contactName": r["contactName"],
+            "contactEmailRot13": r["contactEmailRot13"],
+            "html_url": f"https://github.com/{r['repo']}",
+            "isDefault": r["default"],
+            "isMandatory": r["mandatory"],
+            "grammars": r["grammars"],
+            "dependencies": r["dependencies"],
+            # Provenance, for auditing what a user is actually installing.
+            "sourceRepository": r["repo"],
+            "sourceCommit": r["sha"],
+            "versions": [{
+                "size": r["size"],
+                "sha256": r["sha256"],
+                "updated": r["committed"],
+                "file": r["file"],
+            }],
+        })
+        if r["requires"]:
+            entries[-1]["requires"] = r["requires"]
+
+    (out / "index.json").write_text(json.dumps({"bundles": entries}, indent=1, default=str) + "\n")
 
     total = sum(r["size"] for r in results)
     print(f"  ---- {len(results)} bundles, {total/1024/1024:.1f} MB, index.json written to {out}")

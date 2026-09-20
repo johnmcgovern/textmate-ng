@@ -229,8 +229,22 @@ class BundlesManager: NSObject, OakUserDefaultsObserver {
 			if error == nil {
 				UserDefaults.standard.set(Date(), forKey: kUserDefaultsLastBundleUpdateCheckKey)
 			}
-			if wasUpdated {
-				log.log("Bundle index updated: \(unsafeSelf.remoteIndexPath, privacy: .public)")
+			// **Evaluated on every check, not only when the index moved.**
+			//
+			// What to install depends on local state as much as on the index: a
+			// bundle can become missing, or stale, or newly eligible, while the
+			// index is byte-for-byte what it was. Gating this on `wasUpdated`
+			// meant none of that was ever noticed — on 2026-09-20 the fix that
+			// makes an unknown install date count as stale did nothing at all,
+			// because the index had not changed since the release before and so
+			// the decision was never revisited.
+			//
+			// It costs a predicate over a few dozen bundles when nothing is due,
+			// and `installBundles` with an empty list returns immediately.
+			if error == nil {
+				if wasUpdated {
+					log.log("Bundle index updated: \(unsafeSelf.remoteIndexPath, privacy: .public)")
+				}
 
 				DispatchQueue.main.async {
 					let newBundles = unsafeSelf.bundlesByLoadingIndex()

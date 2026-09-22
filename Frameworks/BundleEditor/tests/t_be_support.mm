@@ -151,3 +151,55 @@ void test_rot13_is_its_own_inverse ()
 	OAK_ASSERT_EQ(to_s(BERot13(@"me@example.com")), "zr@rknzcyr.pbz");
 	OAK_ASSERT_EQ(to_s(BERot13(BERot13(@"me@example.com"))), "me@example.com");
 }
+
+// ==============================
+// = The new-bundle template     =
+// ==============================
+
+// `TM_ROT13_EMAIL` fills `contactEmailRot13` in the new-bundle template and is
+// the only thing in the application that reads it.
+//
+// It came from the Address Book until 2026-09-22, which cost the whole
+// application the `personal-information.addressbook` entitlement and a macOS
+// permission prompt — asked of everyone, for a convenience used by the few who
+// author bundles. It is `git config user.email` now.
+//
+// Asserted against git rather than against a fixed string, because the value is
+// whatever this machine is configured with, and a test that hard-coded one would
+// only pass here. On a machine with no git identity the variable is absent,
+// which is also correct: the author types their address, as they would have done
+// when the Address Book had no entry either.
+void test_the_bundle_template_carries_a_rot13_email_when_git_has_one ()
+{
+	NSTask* task = [NSTask new];
+	task.executableURL  = [NSURL fileURLWithPath:@"/usr/bin/git"];
+	task.arguments      = @[ @"config", @"--get", @"user.email" ];
+	task.standardOutput = [NSPipe pipe];
+	task.standardError  = [NSFileHandle fileHandleWithNullDevice];
+	[task launchAndReturnError:nullptr];
+	NSString* email = [[[NSString alloc] initWithData:[[task.standardOutput fileHandleForReading] readDataToEndOfFile] encoding:NSUTF8StringEncoding] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+	[task waitUntilExit];
+
+	NSDictionary* variables = BEDefaultTemplateVariables();
+
+	if(task.terminationStatus == 0 && email.length)
+	{
+		OAK_ASSERT_EQ(to_s(variables[@"TM_ROT13_EMAIL"]), to_s(BERot13(email)));
+		// And it really is obscured, which is the whole point of the field.
+		OAK_ASSERT_EQ((bool)[variables[@"TM_ROT13_EMAIL"] isEqualToString:email], false);
+	}
+	else
+	{
+		OAK_ASSERT_EQ((bool)(variables[@"TM_ROT13_EMAIL"] == nil), true);
+	}
+}
+
+// The rest of the template variables are the environment, and must still be
+// there — this is the control. Without it the test above would pass just as well
+// if BEDefaultTemplateVariables had stopped returning anything at all.
+void test_the_bundle_template_still_carries_the_environment ()
+{
+	NSDictionary* variables = BEDefaultTemplateVariables();
+	OAK_ASSERT_EQ((bool)(variables.count > 1), true);
+	OAK_ASSERT_EQ((bool)(variables[@"TM_FULLNAME"] != nil), true);
+}

@@ -2,9 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- com.apple.security.personal-information.addressbook was here until
+	     2026-09-22. It bought one thing: reading the user's primary email to
+	     pre-fill contactEmailRot13 in the new-bundle template. That is a privacy
+	     grant and a macOS permission prompt, asked of everyone, for a convenience
+	     used by the few who author bundles. BESupport.mm reads
+	     `git config user.email` instead, which needs no permission and is the
+	     same address. -->
 	<key>com.apple.security.automation.apple-events</key>
-	<true/>
-	<key>com.apple.security.personal-information.addressbook</key>
 	<true/>
 	<key>com.apple.security.cs.disable-library-validation</key>
 	<true/>

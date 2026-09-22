@@ -6,5 +6,5 @@ target "${dirname}" {
 
 	sources src/*.{cc,mm,swift}
 	tests tests/*.{mm,swift}
-	frameworks Cocoa AddressBook
+	frameworks Cocoa
 }

@@ -9,7 +9,6 @@
 #import <io/environment.h>
 #import <settings/settings.h>       // variables_for_path
 #import <ns/ns.h>
-#import <AddressBook/AddressBook.h>
 
 // The key order a re-serialized item is written in. Alphabetical would reorder
 // every key of every item the first time it is saved through the editor, so this
@@ -114,6 +113,32 @@ NSDictionary* BEExpandVariables (NSDictionary* plist, NSDictionary<NSString*, NS
 	return ObjectFromAny(expanded);
 }
 
+// The address `git config user.email` reports, or nil.
+//
+// Fixed argv rather than a shell, so nothing here can be influenced by a
+// repository's own configuration beyond the value itself — and the value is
+// rot13'd into a template the author is about to edit, not executed.
+static NSString* BEGitUserEmail (void)
+{
+	NSTask* task = [NSTask new];
+	task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/git"];
+	task.arguments     = @[ @"config", @"--get", @"user.email" ];
+	task.standardOutput = [NSPipe pipe];
+	task.standardError  = [NSFileHandle fileHandleWithNullDevice];
+
+	NSError* error = nil;
+	if(![task launchAndReturnError:&error])
+		return nil;
+
+	NSData* data = [[task.standardOutput fileHandleForReading] readDataToEndOfFile];
+	[task waitUntilExit];
+	if(task.terminationStatus != 0)
+		return nil;
+
+	NSString* res = [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+	return res.length ? res : nil;
+}
+
 NSDictionary<NSString*, NSString*>* BEDefaultTemplateVariables (void)
 {
 	NSMutableDictionary<NSString*, NSString*>* res = [NSMutableDictionary dictionary];
@@ -125,8 +150,19 @@ NSDictionary<NSString*, NSString*>* BEDefaultTemplateVariables (void)
 			res[key] = value;
 	}
 
-	ABMutableMultiValue* value = [ABAddressBook.sharedAddressBook.me valueForProperty:kABEmailProperty];
-	if(NSString* email = [value valueAtIndex:[value indexForIdentifier:value.primaryIdentifier]])
+	// `TM_ROT13_EMAIL` fills `contactEmailRot13` in the new-bundle template, and
+	// that is the only thing in the application that reads it.
+	//
+	// **It used to come from the Address Book**, which cost this application the
+	// `com.apple.security.personal-information.addressbook` entitlement and a
+	// macOS permission prompt — a privacy-sensitive grant, asked of every user,
+	// spent on pre-filling one field for the few who author bundles.
+	//
+	// `git config user.email` is the same value, needs no permission, and is
+	// already set on any machine where somebody is writing a TextMate bundle. If
+	// it is not configured the template gets nothing and the author types their
+	// address, which is what they would do anyway.
+	if(NSString* email = BEGitUserEmail())
 		res[@"TM_ROT13_EMAIL"] = BERot13(email);
 
 	return res;

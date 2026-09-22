@@ -1,4 +1,5 @@
 #include "settings.h"
+#include <os/log.h>
 #include "parser.h"
 #include "track_paths.h"
 #include <plist/plist.h>
@@ -209,19 +210,52 @@ namespace
 		extract(directory, path, scope, orderScopeMatches, filter, defaultSections, kGlob);
 		extract(directory, path, scope, orderScopeMatches, filter, globalSections,  kGlob);
 
+		// **A `.tm_properties` found by walking up from the document may not set
+		// PATH.** Everything above this point came from the application's own
+		// defaults or the user's own `~/.tm_properties`; everything below comes
+		// from whatever directory the document happens to live in, which for a
+		// cloned repository means it came with the code.
+		//
+		// Demonstrated on 2026-09-22, end to end: a `.tm_properties` containing
+		// `PATH = "<repo>/bin:$PATH"`, a `git` executable beside it, open a file
+		// from that repository and run Bundles ▸ Git ▸ Show Uncommitted Changes.
+		// The repository's `git` ran. Cloning a repository and opening one file
+		// was enough to execute code it shipped.
+		//
+		// PATH is denied rather than the whole file, because setting project
+		// variables is what `.tm_properties` is *for* and breaking that would
+		// break the feature. PATH is the one entry that turns any bundle command
+		// into a program of the repository's choosing.
+		//
+		// **This is not the whole of the problem.** `TM_GIT`, `TM_RUBY` and the
+		// other tool-path variables are the same vector through one bundle each,
+		// and they are still allowed, because which variables a bundle treats as
+		// a program is decided by the bundle and cannot be enumerated here. The
+		// real answer is deciding whether a folder is trusted at all, once, the
+		// way other editors do. Recorded in ide/BETA_CRITERIA.md rather than
+		// half-done here.
 		for(auto const& file : paths(directory))
 		{
 			auto const& s = sections(file);
 
+			auto untrusted = [&filter, &file](section_t::assignment_t const& assignment, section_t const& section){
+				if(assignment.key == "PATH")
+				{
+					os_log_error(OS_LOG_DEFAULT, "Ignoring PATH set by %{public}s — a project file may not choose which programs bundle commands run. Move it to ~/.tm_properties if you meant it.", file.c_str());
+					return;
+				}
+				filter(assignment, section);
+			};
+
 			orderScopeMatches.clear();
-			extract(directory, path, scope, orderScopeMatches, filter, s, kUnscoped|kScopeSelector);
+			extract(directory, path, scope, orderScopeMatches, untrusted, s, kUnscoped|kScopeSelector);
 			for(auto const& section : orderScopeMatches)
 			{
 				for(auto const& assignment : section.second->variables)
-					filter(assignment, *section.second);
+					untrusted(assignment, *section.second);
 			}
 
-			extract(directory, path, scope, orderScopeMatches, filter, s, kGlob);
+			extract(directory, path, scope, orderScopeMatches, untrusted, s, kGlob);
 		}
 	}
 

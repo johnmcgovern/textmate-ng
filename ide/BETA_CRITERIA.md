@@ -138,3 +138,28 @@ at the moment someone first tried to check it, which is the moment it matters.
 It is now `bin/reports`, which is in the repository and is run by whoever reads
 this. A criterion that names a command nobody has run is a criterion nobody has
 checked.
+
+## Known, unfixed: a project file can still choose which program a bundle runs
+
+Found and proved 2026-09-22. A `.tm_properties` travels with a repository, and
+until this date it could set `PATH`, which made cloning a repository and opening
+one file enough to run code it shipped: put a `git` in the repository, point
+`PATH` at it, and `Bundles ▸ Git ▸ Show Uncommitted Changes` ran it. Verified end
+to end, not reasoned about.
+
+`PATH` is now refused from any `.tm_properties` found by walking up from the
+document, and the refusal is logged naming the file. The user's own
+`~/.tm_properties` is unaffected, because it is not something a repository can
+write.
+
+**`TM_GIT`, `TM_RUBY` and every other tool-path variable are the same hole
+through one bundle each, and they are still open.** They cannot be enumerated
+here, because which variables a bundle treats as a program is decided by the
+bundle. A denylist would be a guess that looks like a fix.
+
+The real answer is deciding whether a folder is trusted at all — once, when it
+is first opened, the way other editors ask. That is a feature with a prompt and
+a stored answer, not a patch, and it should be a decision rather than something
+slipped into a stability release. **Beta should not be declared while this is
+open**, or the stability promise is being made about software that runs code
+from any repository its user opens.

@@ -1,5 +1,5 @@
 target "${dirname}" {
-	require plist parse bundles regexp scope text io file encoding
+	require plist parse bundles regexp scope text io file encoding settings
 	sources src/*.cc
 	executable "${target}"
 }

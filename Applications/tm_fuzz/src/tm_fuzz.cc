@@ -32,6 +32,8 @@
 #include <parse/grammar.h>
 #include <parse/parse.h>
 #include <encoding/encoding.h>
+#include <settings/parser.h>
+#include <regexp/format_string.h>
 #include <file/encoding.h>
 #include <file/bytes.h>
 #include <test/bundle_index.h>
@@ -216,6 +218,37 @@ static std::vector<std::string> const& transcode_charsets ()
 	return charsets;
 }
 
+// `.tm_properties` — the only parser here whose input arrives by cloning a
+// repository rather than by opening a file the user chose. It is read by walking
+// up from the document, so a checkout brings its own, and on 2026-09-22 one of
+// them turned out to be able to choose which programs bundle commands ran.
+//
+// Two layers, because the parser alone is the smaller half. `parse_ini` splits
+// sections and assignments; `format_string::expand` then substitutes `${VAR}`
+// in every value, which is where a self-referencing or deeply nested expansion
+// would go wrong. The environment handed in is deliberately small and
+// self-referential, so `${a}` resolves to something that mentions `${a}`.
+static void run_settings (std::string const& input)
+{
+	ini_file_t iniFile("fuzz.tm_properties");
+	parse_ini(input.data(), input.data() + input.size(), iniFile);
+
+	std::map<std::string, std::string> environment = {
+		{ "a", "${b}" },
+		{ "b", "${a}" },
+		{ "PATH", "/usr/bin" },
+		{ "TM_FUZZ", "x" },
+	};
+
+	for(auto const& section : iniFile.sections)
+	{
+		for(auto const& name : section.names)
+			format_string::expand(name, environment);
+		for(auto const& value : section.values)
+			environment[value.name] = format_string::expand(value.value, environment);
+	}
+}
+
 static void run_encoding (std::string const& input)
 {
 	encoding::charset_from_bom(input.begin(), input.end());
@@ -396,6 +429,7 @@ int main (int argc, char* argv[])
 		alarm(timeoutSeconds);
 		if(target == "ascii")               run_ascii(input);
 		else if(target == "encoding")       run_encoding(input);
+		else if(target == "settings")       run_settings(input);
 		else if(target == "grammar")        parse_text(grammar, input);
 		else if(target == "grammar-plist")
 		{

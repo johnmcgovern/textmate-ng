@@ -9,6 +9,9 @@
 #   ascii     — every property list under the installed bundles (binary and XML
 #               ones are converted to the ASCII form by the tool itself)
 #   encoding  — source and text files from this tree, plus UTF-16/32 and Latin-1
+#   settings  — .tm_properties: ini parsing and ${...} expansion. The only input
+#               here that arrives by cloning a repository rather than by the user
+#               choosing to open it.
 #               renderings of a few of them
 #   text      — C sources from this tree, for the C grammar
 #
@@ -30,7 +33,7 @@ cd "${0:h}/.."
 seconds=${1:-120}
 shift 2>/dev/null || true
 targets=("$@")
-[[ ${#targets} -eq 0 ]] && targets=(ascii encoding grammar grammar-plist)
+[[ ${#targets} -eq 0 ]] && targets=(ascii encoding grammar grammar-plist settings)
 
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 # Every undefined-behaviour report is a finding, not a log line: halt on it, with a
@@ -51,7 +54,7 @@ tool=build/Debug/tm_fuzz
 corpus=build/fuzz/corpus
 out=build/fuzz/out
 rm -rf "$corpus"
-mkdir -p "$corpus"/{ascii,encoding,text} "$out"
+mkdir -p "$corpus"/{ascii,encoding,text,settings} "$out"
 
 bundles=~/Library/Application\ Support/TextMate/Managed/Bundles
 echo "==> assembling corpus"
@@ -77,11 +80,40 @@ for f in $(ls "$corpus/encoding" | head -6); do
 	done
 done
 printf 'plain line\nodd bytes: \xe9\xe8\xfc \xff\xfe here\n' > "$corpus/encoding/latin1-odd"
+# .tm_properties: the parser whose input arrives by cloning a repository. Real
+# ones from this tree, the application's own default, plus hand-written seeds for
+# the shapes a repository would use and a mutator is unlikely to invent —
+# sections, globs, scope selectors, and ${...} expansion including a
+# self-reference.
+n=0
+for f in $(find . -name '.tm_properties' -not -path './build/*' 2>/dev/null | head -20) \
+         Applications/TextMate/resources/Default.tmProperties; do
+	[[ -f $f ]] && cp "$f" "$corpus/settings/$n" && n=$((n+1))
+done
+cat > "$corpus/settings/seed-sections" <<'PROPS'
+fontName = "Menlo"
+softTabs = true
+[ *.cc ]
+tabSize = 3
+[ source.ruby ]
+TM_RUBY = "/usr/bin/ruby"
+[ "folder/**" ]
+projectVar = "${TM_FUZZ}/x"
+PROPS
+cat > "$corpus/settings/seed-expansion" <<'PROPS'
+a = "${b}"
+b = "${a:-fallback}"
+deep = "${a}${b}${a}${b}"
+quoted = 'single ${a} quoted'
+empty =
+PROPS
+printf 'no-newline-at-end = "x"' > "$corpus/settings/seed-truncated"
+
 n=0
 for f in $(ls vendor/Onigmo/vendor/*.c vendor/Onigmo/vendor/enc/*.c Frameworks/*/src/*.c 2>/dev/null | head -60); do
 	cp "$f" "$corpus/text/$n"; n=$((n+1))
 done
-echo "    ascii: $(ls "$corpus/ascii" | wc -l | tr -d ' ')  encoding: $(ls "$corpus/encoding" | wc -l | tr -d ' ')  text: $(ls "$corpus/text" | wc -l | tr -d ' ')"
+echo "    ascii: $(ls "$corpus/ascii" | wc -l | tr -d ' ')  encoding: $(ls "$corpus/encoding" | wc -l | tr -d ' ')  text: $(ls "$corpus/text" | wc -l | tr -d ' ')  settings: $(ls "$corpus/settings" | wc -l | tr -d ' ')"
 
 # The installed C grammar (the C bundle keeps it as C.plist) when there is one,
 # else the committed XML copy of it.
@@ -97,6 +129,7 @@ for t in $targets; do
 		encoding)      c=$corpus/encoding; extra=() ;;
 		grammar)       c=$corpus/text;     extra=(--grammar "$grammar") ;;
 		grammar-plist) c=$corpus/text;     extra=(--grammar "$grammar") ;;
+		settings)      c=$corpus/settings;  extra=() ;;
 		*) echo "unknown target $t"; exit 2 ;;
 	esac
 	if ! "$tool" "$t" --corpus "$c" --out "$out" --seconds "$seconds" "${extra[@]}"; then

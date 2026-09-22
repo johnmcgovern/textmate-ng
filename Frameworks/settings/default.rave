@@ -1,6 +1,9 @@
 target "${dirname}" {
 	require cf io plist regexp scope text
-	headers src/{settings,keys}.h
+	# parser.h joins the exported set so the ini parser can be fuzzed. It is the
+	# entry point for .tm_properties, which is the one input here that arrives by
+	# cloning a repository, and it could not be reached from outside before.
+	headers src/{settings,keys,parser}.h
 	sources src/*.{cc,rl}
 	tests tests/*.cc
 }

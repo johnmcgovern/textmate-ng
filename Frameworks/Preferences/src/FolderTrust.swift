@@ -102,4 +102,36 @@ final class FolderTrust: NSObject, @unchecked Sendable {
 	}
 
 	@objc var trustedFolders: [String] { Array(trusted).sorted() }
+
+	// Does this folder's own `.tm_properties` try to set environment variables —
+	// the uppercase ones a bundle command can treat as the program it runs?
+	//
+	// Only this folder's file, not the whole walk up to home: the question being
+	// asked is about *this* checkout, and a parent's file is either the user's own
+	// or a folder they were already asked about.
+	//
+	// Deliberately approximate, and in the safe direction. It looks for an
+	// assignment whose name starts with an uppercase letter and does not attempt
+	// to parse sections, continuations or quoting — the settings layer does that
+	// properly and refuses whatever it finds. Being wrong here means asking when
+	// nothing would have been set, which costs a prompt. The opposite error would
+	// cost the whole point.
+	@objc func wouldSetEnvironment(inFolder folder: String) -> Bool {
+		let file = (folder as NSString).appendingPathComponent(".tm_properties")
+		guard let contents = try? String(contentsOfFile: file, encoding: .utf8) else {
+			return false
+		}
+		for line in contents.split(separator: "\n", omittingEmptySubsequences: true) {
+			let trimmed = line.trimmingCharacters(in: .whitespaces)
+			if trimmed.isEmpty || trimmed.hasPrefix("#") || trimmed.hasPrefix("[") {
+				continue
+			}
+			guard let equals = trimmed.firstIndex(of: "=") else { continue }
+			let name = trimmed[trimmed.startIndex..<equals].trimmingCharacters(in: .whitespaces)
+			if let first = name.first, first.isUppercase {
+				return true
+			}
+		}
+		return false
+	}
 }

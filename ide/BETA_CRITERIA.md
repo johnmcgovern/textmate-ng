@@ -152,14 +152,24 @@ document, and the refusal is logged naming the file. The user's own
 `~/.tm_properties` is unaffected, because it is not something a repository can
 write.
 
-**`TM_GIT`, `TM_RUBY` and every other tool-path variable are the same hole
-through one bundle each, and they are still open.** They cannot be enumerated
-here, because which variables a bundle treats as a program is decided by the
-bundle. A denylist would be a guess that looks like a fix.
+**Closed 2026-09-22.** The narrow denial of `PATH` was replaced by the rule it
+should always have been: a `.tm_properties` found by walking up from a document
+sets *settings* always and *environment variables* only from a folder the user
+has vouched for. The split is by case, which is the same split the settings
+layer already made, so it covers `TM_GIT`, `TM_RUBY` and every variable nobody
+has invented yet — none of which could have been enumerated, because which ones
+a bundle treats as a program is decided by the bundle.
 
-The real answer is deciding whether a folder is trusted at all — once, when it
-is first opened, the way other editors ask. That is a feature with a prompt and
-a stored answer, not a patch, and it should be a decision rather than something
-slipped into a stability release. **Beta should not be declared while this is
-open**, or the stability promise is being made about software that runs code
-from any repository its user opens.
+Asked once per folder, as a sheet, defaulting to No. Both answers are
+remembered, so declining is an answer rather than a question asked again every
+time. Verified end to end: declining leaves the planted binary unrun, allowing
+runs it, and a folder already answered for is not asked again.
+
+The cost, measured on this repository: it sets eight uppercase variables, all
+benign, so it asks once and is answered once. Two of them are compiler flags,
+which a hostile checkout could abuse — so asking is right even for the ones that
+look harmless.
+
+`~/.tm_properties` is exempt: a repository cannot write it, and treating it as a
+project file would have silently stripped the environment from every existing
+setup that uses one.

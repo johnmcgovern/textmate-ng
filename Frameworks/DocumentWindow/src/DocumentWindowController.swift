@@ -152,10 +152,53 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 
 				updateExternalAttributes()
 				updateWindowTitle()
+				askAboutFolderTrustIfNeeded()
 			}
 		}
 	}
 	private var _projectPath: String?
+
+	// Ask, once, whether this folder may set environment variables through its
+	// own `.tm_properties`.
+	//
+	// **Why there is a prompt at all.** That file travels with a checkout, so its
+	// contents are whatever the code's author put there, and a bundle command is
+	// free to treat any environment variable as the program it runs — `TM_GIT`
+	// falls back to `git`, `TM_RUBY` to `ruby`, and nine more across the default
+	// bundles. Which variables a bundle treats that way is decided by the bundle,
+	// so it cannot be enumerated here; the only question that can be answered is
+	// whether this folder is one the user vouched for. Proved end to end on
+	// 2026-09-22 that without this, cloning a repository and opening one file was
+	// enough to run code it shipped.
+	//
+	// Deferred to the next turn of the runloop rather than run from the setter:
+	// this is reached while a window is being built, and a sheet presented then
+	// arrives before there is anything to attach it to.
+	private func askAboutFolderTrustIfNeeded() {
+		guard let folder = _projectPath else { return }
+		let trust = TMFolderTrust.shared
+		guard !trust.hasBeenAskedAbout(folder), trust.wouldSetEnvironment(inFolder: folder) else { return }
+
+		DispatchQueue.main.async { [weak self] in
+			guard let window = self?.window, window.isVisible else { return }
+			// Checked again: between the two turns the user may have answered for
+			// this folder in another window opening the same checkout.
+			guard !trust.hasBeenAskedAbout(folder) else { return }
+
+			let alert = NSAlert()
+			alert.messageText = "Let this folder configure how commands run?"
+			alert.informativeText = "“\((folder as NSString).lastPathComponent)” contains a .tm_properties file that sets environment variables. Those can decide which programs bundle commands run — including ones that came with the code, if you did not write this folder yourself.\n\nSyntax highlighting, indentation and the other editor settings in that file are applied either way."
+			alert.addButton(withTitle: "Don’t Allow")
+			alert.addButton(withTitle: "Allow")
+			alert.beginSheetModal(for: window) { response in
+				if response == .alertSecondButtonReturn {
+					trust.trust(folder)
+				} else {
+					trust.refuse(folder)
+				}
+			}
+		}
+	}
 
 	@objc var documentPath: String? {
 		get { _documentPath }

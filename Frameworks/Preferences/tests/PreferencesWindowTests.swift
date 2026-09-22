@@ -31,14 +31,16 @@ final class PreferencesWindowTests: XCTestCase {
 	/// still the signal: a bundle that dies here is a Settings menu that dies.
 	@MainActor
 	func testSharedInstanceConstructsWithoutCrashing() {
-		// `Preferences?` because the hand-written header is unannotated; the
-		// unwrap is the assertion.
+		// Not optional any more: the hand-written header gained NS_ASSUME_NONNULL
+		// on 2026-09-22, when TMFolderTrust was added to it and clang then wanted
+		// nullability for everything in the file. The assertion that mattered here
+		// was never the unwrap — it is that *constructing* this does not crash the
+		// runner, which happens on the line above whatever is written below it.
 		let controller = Preferences.sharedInstance
-		XCTAssertNotNil(controller)
 
 		// The window is built inside init, by NSPanel(contentViewController:) —
 		// which is the call that triggers the KVO subclassing.
-		XCTAssertNotNil(controller?.window)
+		XCTAssertNotNil(controller.window)
 	}
 
 	// **No test loads a pane's view, and that is a known gap rather than an

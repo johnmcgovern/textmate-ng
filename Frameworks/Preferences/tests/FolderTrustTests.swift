@@ -89,4 +89,40 @@ final class FolderTrustTests: XCTestCase {
 		TMFolderTrust.shared.trust("/tmp/a")
 		XCTAssertEqual(TMFolderTrust.shared.trustedFolders, ["/tmp/a", "/tmp/b"])
 	}
+
+	// What decides whether to ask at all. Approximate by design and in the safe
+	// direction: a false yes costs a prompt, a false no costs the point of having
+	// one.
+	private func folder(containing properties: String) -> String {
+		let dir = NSTemporaryDirectory() + "trust-\(UUID().uuidString)"
+		try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+		try? properties.write(toFile: (dir as NSString).appendingPathComponent(".tm_properties"), atomically: true, encoding: .utf8)
+		return dir
+	}
+
+	func testAFolderWithNoPropertiesFileIsNotAskedAbout() {
+		let dir = NSTemporaryDirectory() + "trust-empty-\(UUID().uuidString)"
+		try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+		XCTAssertFalse(TMFolderTrust.shared.wouldSetEnvironment(inFolder: dir))
+	}
+
+	// Settings only. Nothing here can select a program, so there is nothing to
+	// ask about and the user is not interrupted.
+	func testSettingsOnlyDoesNotNeedAsking() {
+		let dir = folder(containing: "fontName = \"Menlo\"\nsoftTabs = true\ntabSize = 3\n")
+		XCTAssertFalse(TMFolderTrust.shared.wouldSetEnvironment(inFolder: dir))
+	}
+
+	func testAnEnvironmentVariableNeedsAsking() {
+		XCTAssertTrue(TMFolderTrust.shared.wouldSetEnvironment(inFolder: folder(containing: "TM_GIT = \"/x/git\"\n")))
+		XCTAssertTrue(TMFolderTrust.shared.wouldSetEnvironment(inFolder: folder(containing: "softTabs = true\nPATH = \"/x:$PATH\"\n")))
+	}
+
+	// Comments and section headers are not assignments. Treating `[ *.cc ]` as one
+	// would ask about every project file that uses a section, which is most of
+	// them, and a prompt nobody can act on teaches people to dismiss it.
+	func testCommentsAndSectionsAreNotAssignments() {
+		let dir = folder(containing: "# TM_GIT = \"/x/git\"\n[ *.cc ]\ntabSize = 3\n")
+		XCTAssertFalse(TMFolderTrust.shared.wouldSetEnvironment(inFolder: dir))
+	}
 }

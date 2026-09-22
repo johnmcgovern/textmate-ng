@@ -35,6 +35,7 @@
 
 // kUserDefaultsHTMLOutputPlacementKey, which ProjectLayoutView observes.
 #import <Preferences/Keys.h>
+#import <Preferences/Preferences.h> // TMFolderTrust, for the project-folder prompt
 
 // What DocumentWindowController itself needs. Deliberately absent from this list
 // is DocumentWindowController.h: it declares the class, and the class is the

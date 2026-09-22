@@ -12,6 +12,13 @@
 // it is framework-internal (no target outside Preferences ever referenced it),
 // and leaving it here would have forced the Swift side to import this header
 // for the protocol and thereby re-collide on the class declarations below.
+// NS_ASSUME_NONNULL over the whole header, not part of it. None of these are
+// ever nil, and annotating only the new declaration made clang demand it of the
+// two above as well — once any nullability appears in a file it wants all of it.
+// Without this, `+shared` and `+sharedInstance` import into Swift as optionals
+// and every call site carries an unwrap that reads like uncertainty.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface Preferences : NSWindowController
 @property (class, readonly) Preferences* sharedInstance;
 @end
@@ -42,4 +49,10 @@
 // Not the same as refusing: the folder is asked about again next time.
 - (void)forget:(NSString*)folder;
 @property (readonly) NSArray<NSString*>* trustedFolders;
+// Does this folder's own .tm_properties try to set environment variables?
+// Deliberately approximate and in the safe direction: wrong here costs a prompt,
+// wrong the other way costs the point.
+- (BOOL)wouldSetEnvironmentInFolder:(NSString*)folder;
 @end
+
+NS_ASSUME_NONNULL_END

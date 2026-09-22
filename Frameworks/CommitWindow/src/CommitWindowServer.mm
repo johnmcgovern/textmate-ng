@@ -12,6 +12,10 @@
 #import <ns/ns.h>
 #import <oak/log.h>
 #import <oak/oak.h>
+#import "CWWire.h"
+#import <sys/socket.h>
+#import <sys/un.h>
+#import <signal.h>
 
 // Read with:
 //   /usr/bin/log stream --predicate 'subsystem == "com.j23software.TextMate-NG"'
@@ -95,28 +99,45 @@ NSString* CWCommitMessageGrammarForSCMName (NSString* scmName)
 // ===================
 
 @implementation CWClientChannel
+// Waiting clients, by the token handed out when their request arrived.
+//
+// The token replaces the Distributed Objects port name the client used to vend,
+// and it keeps the same key in the options dictionary — so the Swift window
+// controller, which carries the value around and hands it back at the end, did
+// not have to change at all.
+//
+// Main thread only: entries are added from the accept handler, which hops to
+// main, and removed here, which the window controller calls on main.
+static NSMutableDictionary<NSString*, NSNumber*>* CWWaitingClients ()
+{
+	static NSMutableDictionary* res = [NSMutableDictionary dictionary];
+	return res;
+}
+
+void CWRegisterWaitingClient (NSString* token, int fd)
+{
+	CWWaitingClients()[token] = @(fd);
+}
+
 + (BOOL)replyToClientPortName:(NSString*)portName stdoutString:(NSString*)stdoutString returnCode:(int)returnCode continueFlag:(BOOL)continueFlag
 {
-	id proxy = [NSConnection rootProxyForConnectionWithRegisteredName:portName host:nil];
-	if(!proxy)
-		return NO;
+	NSNumber* boxed = portName ? CWWaitingClients()[portName] : nil;
+	if(!boxed)
+		return NO;   // the tool gave up, or was answered already
+	[CWWaitingClients() removeObjectForKey:portName];
 
-	[proxy setProtocolForProxy:@protocol(OakCommitWindowClientProtocol)];
+	int fd = boxed.intValue;
+	NSMutableDictionary* reply = [NSMutableDictionary dictionary];
 	if(stdoutString)
 	{
-		[proxy connectFromServerWithOptions:@{
-			kOakCommitWindowStandardOutput: stdoutString,
-			kOakCommitWindowReturnCode:     @(returnCode),
-			kOakCommitWindowContinue:       @(continueFlag),
-		}];
+		reply[kOakCommitWindowStandardOutput] = stdoutString;
+		reply[kOakCommitWindowContinue]       = @(continueFlag);
 	}
-	else
-	{
-		[proxy connectFromServerWithOptions:@{
-			kOakCommitWindowReturnCode:     @(returnCode),
-		}];
-	}
-	return YES;
+	reply[kOakCommitWindowReturnCode] = @(returnCode);
+
+	BOOL const ok = CWWritePlist(fd, reply);
+	close(fd);   // closing is what lets the tool stop reading and exit
+	return ok;
 }
 @end
 
@@ -129,7 +150,7 @@ NSString* CWCommitMessageGrammarForSCMName (NSString* scmName)
 @end
 
 @interface OakCommitWindowServer ()
-@property (nonatomic) NSConnection* connection;
+@property (nonatomic) dispatch_source_t listener;
 @end
 
 @implementation OakCommitWindowServer
@@ -142,15 +163,140 @@ NSString* CWCommitMessageGrammarForSCMName (NSString* scmName)
 - (id)init
 {
 	if(self = [super init])
-	{
-		_connection = [NSConnection new];
-		[_connection setRootObject:self];
-
-		NSString* serviceName = [NSString stringWithFormat:@"%@.CommitWindow.%d", NSBundle.mainBundle.bundleIdentifier, getpid()];
-		if([_connection registerName:serviceName] == NO)
-			os_log_error(OS_LOG_DEFAULT, "Failed to setup connection ‘%@’", serviceName);
-	}
+		[self startListening];
 	return self;
+}
+
+// A UNIX socket where a vended Distributed Objects root object used to be.
+//
+// The old arrangement registered `<bundleid>.CommitWindow.<pid>` and handed
+// `self` to anything that looked it up, which meant any process running as this
+// user could send this object any selector. The name was the only barrier and it
+// was a bundle identifier and a pid.
+//
+// A socket can say who may connect, which is the point: mode 0600, set with
+// fchmod **before** bind, because the mode a bind leaves behind otherwise comes
+// from the ambient umask — and a user running with a lax umask would get a
+// socket their whole group could talk to without ever being told.
+// Sockets from instances that are no longer running.
+//
+// The listener's own path carries this process's pid, so it never collides with
+// a live one — but nothing removes the file when a process goes away. -dealloc
+// does not help: the server is a shared instance that outlives everything and is
+// never deallocated, and a crash or a SIGKILL would skip it regardless.
+//
+// So sweep on the way in, and decide by asking the kernel rather than by
+// trusting the file: kill(pid, 0) succeeds only for a process this user can
+// signal, which for a socket named after our own uid is the right question.
++ (void)removeSocketsOfDepartedInstances
+{
+	NSString* directory = @"/tmp";
+	NSString* prefix = [NSString stringWithFormat:@"textmate-commit-%d-", getuid()];
+	for(NSString* name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:directory error:nullptr])
+	{
+		if(![name hasPrefix:prefix] || ![name hasSuffix:@".sock"])
+			continue;
+
+		NSString* pidPart = [[name substringFromIndex:prefix.length] stringByDeletingPathExtension];
+		pid_t pid = (pid_t)pidPart.intValue;
+		if(pid <= 0 || pid == getpid())
+			continue;
+
+		if(kill(pid, 0) == -1 && errno == ESRCH)
+			unlink([directory stringByAppendingPathComponent:name].fileSystemRepresentation);
+	}
+}
+
+- (void)startListening
+{
+	[OakCommitWindowServer removeSocketsOfDepartedInstances];
+
+	NSString* path = CWSocketPathForApplicationPID(getpid());
+	char const* cPath = path.fileSystemRepresentation;
+
+	if(unlink(cPath) == -1 && errno != ENOENT)
+	{
+		os_log_error(kLogCommitWindow, "commit window: cannot remove stale socket %{public}s: %{public}s", cPath, strerror(errno));
+		return;
+	}
+
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(fd == -1)
+	{
+		os_log_error(kLogCommitWindow, "commit window: socket(): %{public}s", strerror(errno));
+		return;
+	}
+	fcntl(fd, F_SETFD, FD_CLOEXEC);
+
+	struct sockaddr_un addr = { 0, AF_UNIX };
+	if(strlen(cPath) >= sizeof(addr.sun_path))
+	{
+		os_log_error(kLogCommitWindow, "commit window: socket path too long: %{public}s", cPath);
+		close(fd);
+		return;
+	}
+	strcpy(addr.sun_path, cPath);
+	addr.sun_len = SUN_LEN(&addr);
+
+	mode_t const previous = umask(0177);   // 0600 whatever the user's umask is
+	int const bound = bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+	umask(previous);
+
+	if(bound == -1 || listen(fd, 16) == -1)
+	{
+		os_log_error(kLogCommitWindow, "commit window: cannot listen on %{public}s: %{public}s", cPath, strerror(errno));
+		close(fd);
+		return;
+	}
+
+	_listener = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, fd, 0, dispatch_get_main_queue());
+	dispatch_source_set_event_handler(_listener, ^{
+		[self acceptOne:fd];
+	});
+	dispatch_source_set_cancel_handler(_listener, ^{
+		close(fd);
+	});
+	dispatch_resume(_listener);
+
+	os_log(kLogCommitWindow, "commit window listening on %{public}s", cPath);
+}
+
+- (void)acceptOne:(int)listenFD
+{
+	int fd = accept(listenFD, nullptr, nullptr);
+	if(fd == -1)
+		return;
+	fcntl(fd, F_SETFD, FD_CLOEXEC);
+
+	// Read on a background queue: the request is small, but a peer that connects
+	// and sends nothing must not hold the main thread — which, with Distributed
+	// Objects, was exactly what any local process could do.
+	dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+		NSDictionary* request = CWReadPlist(fd);
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if(!request)
+			{
+				close(fd);
+				return;
+			}
+
+			// The token stands where the client's vended port name used to, so the
+			// options dictionary keeps its shape and the Swift side is unchanged.
+			NSString* token = NSUUID.UUID.UUIDString;
+			CWRegisterWaitingClient(token, fd);
+
+			NSMutableDictionary* options = [request mutableCopy];
+			options[kOakCommitWindowClientPortName] = token;
+			[self connectFromClientWithOptions:options];
+		});
+	});
+}
+
+- (void)dealloc
+{
+	if(_listener)
+		dispatch_source_cancel(_listener);
+	unlink(CWSocketPathForApplicationPID(getpid()).fileSystemRepresentation);
 }
 
 - (void)connectFromClientWithOptions:(NSDictionary*)someOptions

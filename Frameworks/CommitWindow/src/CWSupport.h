@@ -1,8 +1,10 @@
 // The deliberately-ObjC boundary the Swift port sits on (Phase 4 pilot).
 // Everything here exists because Swift cannot express it directly:
 //
-//  * NSConnection/Distributed Objects is unavailable in Swift (not merely
-//    deprecated — never exposed), so the client reply channel is wrapped.
+//  * The client reply channel is wrapped because it is a socket write, which
+//    Swift could do but has no reason to know about. It used to be here for a
+//    stronger reason — Distributed Objects was never exposed to Swift at all —
+//    and that went on 2026-09-22 along with the two vended objects. See CWWire.h.
 //  * `variables` (std::map) and `performBundleItem:` (bundles::item_ptr) are
 //    C++-typed ObjC selectors; a Swift class cannot implement them, so
 //    CWInteropAdapter conforms/responds on the window controller's behalf.
@@ -43,9 +45,12 @@ NSString* CWCommitMessageGrammarForSCMName (NSString* _Nullable scmName);
 @property (nonatomic, weak, nullable) NSWindowController* windowController;
 @end
 
-// The Distributed-Objects reply to CommitWindowTool. stdoutString nil ⇒ failure
-// reply (return code only). Returns NO when the client's port has gone away —
-// callers then must not treat the reply as delivered.
+// The reply to CommitWindowTool, written back over the connection its request
+// arrived on. stdoutString nil ⇒ failure reply (return code only). Returns NO
+// when the tool has gone away — callers then must not treat the reply as
+// delivered. `portName` is now a token this server handed out rather than a
+// vended Distributed Objects name; the parameter keeps its name because the
+// Swift window controller carries the value through untouched.
 @interface CWClientChannel : NSObject
 + (BOOL)replyToClientPortName:(NSString*)portName stdoutString:(NSString* _Nullable)stdoutString returnCode:(int)returnCode continueFlag:(BOOL)continueFlag;
 @end

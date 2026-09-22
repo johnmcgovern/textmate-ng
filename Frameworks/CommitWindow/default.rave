@@ -1,6 +1,9 @@
 target "${dirname}" {
 	require OakAppKit OakFoundation OakTextView bundles document io ns plist regexp text
-	headers src/CommitWindow.h
+	# CWWire.h joins the exported set: CommitWindowTool is a separate target and
+	# both sides must agree on the framing, which is why it is one header rather
+	# than two copies.
+	headers src/{CommitWindow,CWWire}.h
 	sources src/*.{mm,swift}
 	tests src/CommitWindowLogic.swift tests/*.swift
 	files @CommitWindowTool "MacOS"

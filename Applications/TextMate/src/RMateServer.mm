@@ -1,4 +1,5 @@
 #include <oak/oak.h>
+#include <sys/stat.h>   // umask
 #include <text/parse.h>
 #include <text/hexdump.h>
 #include <document/OakDocument.h>
@@ -122,7 +123,29 @@ namespace
 			struct sockaddr_un addr = { 0, AF_UNIX };
 			strcpy(addr.sun_path, _socket_path);
 			addr.sun_len = SUN_LEN(&addr);
-			if(bind(fd, (sockaddr*)&addr, sizeof(addr)) == -1)
+
+			// Whoever reaches this socket can open any file the application can read
+			// and, with ‘data-on-close’, have the contents written back down the same
+			// connection. The ‘token’ in the protocol is an opaque string the client
+			// picks so it can match replies to requests — it authenticates nothing. So
+			// the file mode is the whole of the access control here, and it used to be
+			// whatever umask the application happened to inherit: 0755 under the usual
+			// 022, and group-writable under a lax one.
+			//
+			// It has to be owner-only from the moment the socket exists, so this is not
+			// a chmod after bind() — that leaves a window in which it is connectable.
+			// bind() applies the umask, so narrow the umask across the call instead.
+			// Same shape as CommitWindowServer.
+			//
+			// `sudo mate` still works. It resolves this path through SUDO_UID, so it
+			// looks for the invoking user's socket rather than root's, and it connects
+			// either as root or, having dropped back with seteuid(SUDO_UID), as the
+			// socket's own owner. 0600 stops neither.
+			mode_t const previous = umask(0177);
+			int const bound = bind(fd, (sockaddr*)&addr, sizeof(addr));
+			umask(previous);
+
+			if(bound == -1)
 				OakRunIOAlertPanel("Could not bind to socket:\n%s", _socket_path);
 			else if(listen(fd, SOMAXCONN) == -1)
 				OakRunIOAlertPanel("Could not listen to socket");

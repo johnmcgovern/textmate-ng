@@ -1,3 +1,5 @@
+#include <functional>
+
 #ifndef SETTINGS_H_F99MMG5F
 #define SETTINGS_H_F99MMG5F
 
@@ -50,6 +52,17 @@ struct settings_t
 
 	static void set_default_settings_path (std::string const& path);
 	static void set_global_settings_path (std::string const& path);
+
+	// Whether a `.tm_properties` found by walking up from a document may set
+	// **environment** variables — the uppercase ones, which a bundle command can
+	// use to choose which program it runs. Settings (lowercase) are unaffected
+	// and always apply.
+	//
+	// Injected rather than decided here for the reason the two paths above are:
+	// this layer is C++ with no idea what a window or a user is, and the answer
+	// lives in the application. **Until something installs one, nothing is
+	// trusted** — the safe direction, and the one a test gets by default.
+	static void set_trust_predicate (std::function<bool(std::string const& settingsFilePath)> predicate);
 
 private:
 	std::map<std::string, std::string> settings;

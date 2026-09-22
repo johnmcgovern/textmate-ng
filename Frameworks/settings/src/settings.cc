@@ -20,6 +20,26 @@ namespace
 		return res;
 	}
 
+	// Nothing is trusted until the application says so. A test, or any code path
+	// that forgets to install a predicate, gets the safe answer rather than the
+	// convenient one.
+	//
+	// **A named function, not a lambda written twice.** The initial value and
+	// what `set_trust_predicate(nullptr)` restores have to be the same thing, or
+	// the default is untestable: a test that resets and then checks is exercising
+	// the reset, and a mutation of the initial value survives it. That is exactly
+	// what happened on the first version of this.
+	static bool trust_nothing (std::string const&)
+	{
+		return false;
+	}
+
+	static std::function<bool(std::string const&)>& trust_predicate ()
+	{
+		static std::function<bool(std::string const&)> res = trust_nothing;
+		return res;
+	}
+
 	static std::string& global_settings_path ()
 	{
 		static std::string res = NULL_STR;
@@ -238,10 +258,32 @@ namespace
 		{
 			auto const& s = sections(file);
 
-			auto untrusted = [&filter, &file](section_t::assignment_t const& assignment, section_t const& section){
-				if(assignment.key == "PATH")
+			// **Settings always; environment only from a folder the user trusts.**
+			//
+			// The split is by case, and it is the same split `variables_for_path`
+			// already makes when it strips lowercase names: lowercase is a setting
+			// — `fontName`, `softTabs`, `tabSize` — and cannot select a program.
+			// Uppercase is an environment variable, and a bundle command is free
+			// to treat any of them as the program it runs. `TM_GIT` falls back to
+			// `git`, `TM_RUBY` to `ruby`, and eleven more like them across the
+			// bundles installed here — a list that changes whenever a bundle does,
+			// which is why this is a rule about case rather than a list of names.
+			//
+			// Replaces the narrower denial of `PATH` alone, which closed the
+			// general vector and left every per-bundle one open.
+			// `~/.tm_properties` is the user's own file, not a project's. The walk
+			// above reaches it because it stops at home, so without this line every
+			// existing setup that uses it would silently lose its environment the
+			// moment trust was introduced — and the user would have no folder to
+			// trust, because it is not in one.
+			//
+			// Checked here rather than left to the application's predicate: it is a
+			// property of where the walk goes, which is decided in this file.
+			bool const trusted = file == path::join(path::home(), ".tm_properties") || trust_predicate()(file);
+			auto untrusted = [&filter, &file, trusted](section_t::assignment_t const& assignment, section_t const& section){
+				if(!trusted && !assignment.key.empty() && isupper(assignment.key[0]))
 				{
-					os_log_error(OS_LOG_DEFAULT, "Ignoring PATH set by %{public}s — a project file may not choose which programs bundle commands run. Move it to ~/.tm_properties if you meant it.", file.c_str());
+					os_log_error(OS_LOG_DEFAULT, "Ignoring %{public}s set by %{public}s — this folder is not trusted to choose which programs bundle commands run.", assignment.key.c_str(), file.c_str());
 					return;
 				}
 				filter(assignment, section);
@@ -297,6 +339,11 @@ void settings_t::set_default_settings_path (std::string const& path)
 void settings_t::set_global_settings_path (std::string const& path)
 {
 	global_settings_path() = path;
+}
+
+void settings_t::set_trust_predicate (std::function<bool(std::string const&)> predicate)
+{
+	trust_predicate() = predicate ? predicate : trust_nothing;
 }
 
 settings_t settings_for_path (std::string const& path, scope::scope_t const& scope, std::string const& directory, std::map<std::string, std::string> variables)

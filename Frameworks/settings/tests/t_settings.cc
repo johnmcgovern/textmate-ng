@@ -70,42 +70,119 @@ void test_coercion ()
 	OAK_ASSERT_EQ(s.get("string_2",  "0"), "42.0");
 }
 
-// A `.tm_properties` found by walking up from the document may not set PATH.
+// ============================================================
+// = Folder trust                                             =
+// ============================================================
 //
-// Demonstrated end to end on 2026-09-22 before this existed: a repository
+// A `.tm_properties` travels with a checkout, so its contents are whatever the
+// code's author put there. Proved end to end on 2026-09-22: a repository
 // carrying `PATH = "<repo>/bin:$PATH"` and a `git` beside it ran its own `git`
-// as soon as a file from that repository was open and any Git bundle command
-// was used. Cloning and opening one file was the whole attack.
+// as soon as a file from it was open and any Git command was used.
 //
-// The control is the point of the test. `projectVariable` must come through,
-// because if the file were simply not being read this would pass for the wrong
-// reason and say nothing — which is exactly how the first attempt to prove the
-// hole misled me for half an hour.
-void test_a_project_file_may_not_set_path ()
+// The rule is by case, not by a list of names. Lowercase is a setting —
+// `fontName`, `softTabs` — and cannot select a program. Uppercase is an
+// environment variable, and a bundle is free to treat any of them as the program
+// it runs: `TM_GIT` falls back to `git`, `TM_RUBY` to `ruby`, and eleven more
+// across the bundles installed on the development machine. That list changes
+// whenever a bundle does, which is exactly why enumerating it would be a guess
+// wearing the costume of a fix.
+//
+// Each of these installs its own predicate and puts it back, because the state
+// is process-wide and a test that leaves it set would decide the next one.
+
+struct trust_guard_t
+{
+	trust_guard_t (bool answer) { settings_t::set_trust_predicate([answer](std::string const&){ return answer; }); }
+	~trust_guard_t ()           { settings_t::set_trust_predicate(nullptr); }
+};
+
+// The control for everything below: an untrusted folder's settings still apply.
+// Without this, a test asserting that nothing came through would pass just as
+// well if the file were never read, and would say nothing at all.
+void test_an_untrusted_project_file_still_sets_settings ()
 {
 	test::jail_t jail;
-	jail.set_content(".tm_properties", "projectVariable = readMe\nPATH = \"/EVIL:$PATH\"\n");
+	jail.set_content(".tm_properties", "projectSetting = readMe\nTM_GIT = \"/EVIL/git\"\n");
+	trust_guard_t guard(false);
 
-	auto const variables = variables_for_path(std::map<std::string, std::string>{ { "PATH", "/usr/bin" } }, jail.path("file.cc"));
-
-	// Control: the file *is* read, so the refusal below is a refusal.
-	OAK_ASSERT_EQ(settings_for_path(jail.path("file.cc")).get("projectVariable"), "readMe");
-
-	// And PATH is untouched by it.
-	OAK_ASSERT_EQ(variables.find("PATH")->second, "/usr/bin");
+	OAK_ASSERT_EQ(settings_for_path(jail.path("file.cc")).get("projectSetting"), "readMe");
 }
 
-// The user's own settings are not a project file and keep working. Without this
-// the fix above could be "deny PATH everywhere", which would be a different and
-// much worse change.
-void test_the_users_own_settings_may_still_set_path ()
+void test_an_untrusted_project_file_may_not_set_the_environment ()
 {
 	test::jail_t jail;
-	jail.set_content("global.tmProperties", "PATH = \"/mine:$PATH\"\n");
+	jail.set_content(".tm_properties", "projectSetting = readMe\nTM_GIT = \"/EVIL/git\"\nPATH = \"/EVIL:$PATH\"\n");
+	trust_guard_t guard(false);
+
+	auto const variables = variables_for_path(std::map<std::string, std::string>{ { "PATH", "/usr/bin" } }, jail.path("file.cc"));
+	OAK_ASSERT_EQ(variables.find("PATH")->second, "/usr/bin");
+	OAK_ASSERT_EQ((bool)(variables.find("TM_GIT") == variables.end()), true);
+}
+
+// Trust means trust. A folder the user has vouched for gets what it asks for,
+// including the two that are dangerous — that is what being asked was *for*, and
+// a "trusted" folder that still cannot set TM_GIT would make the prompt a lie.
+void test_a_trusted_project_file_may_set_the_environment ()
+{
+	test::jail_t jail;
+	jail.set_content(".tm_properties", "TM_GIT = \"/mine/git\"\nPATH = \"/mine:$PATH\"\n");
+	trust_guard_t guard(true);
+
+	auto const variables = variables_for_path(std::map<std::string, std::string>{ { "PATH", "/usr/bin" } }, jail.path("file.cc"));
+	OAK_ASSERT_EQ(variables.find("TM_GIT")->second, "/mine/git");
+	OAK_ASSERT_EQ(variables.find("PATH")->second, "/mine:/usr/bin");
+}
+
+// Nothing is trusted until the application installs a predicate. A code path
+// that forgets to must get the safe answer, not the convenient one.
+void test_nothing_is_trusted_by_default ()
+{
+	test::jail_t jail;
+	jail.set_content(".tm_properties", "TM_GIT = \"/EVIL/git\"\n");
+	settings_t::set_trust_predicate(nullptr);   // as if the application never spoke
+
+	auto const variables = variables_for_path(std::map<std::string, std::string>(), jail.path("file.cc"));
+	OAK_ASSERT_EQ((bool)(variables.find("TM_GIT") == variables.end()), true);
+}
+
+// The user's own settings are not a project file and are not subject to trust —
+// they cannot be written by a repository. Without this the rule could quietly
+// become "deny the environment everywhere", which is a different and much worse
+// change.
+void test_the_users_own_settings_are_not_subject_to_trust ()
+{
+	test::jail_t jail;
+	jail.set_content("global.tmProperties", "PATH = \"/mine:$PATH\"\nTM_GIT = \"/mine/git\"\n");
 	settings_t::set_global_settings_path(jail.path("global.tmProperties"));
+	trust_guard_t guard(false);
 
 	auto const variables = variables_for_path(std::map<std::string, std::string>{ { "PATH", "/usr/bin" } }, jail.path("file.cc"));
 	OAK_ASSERT_EQ(variables.find("PATH")->second, "/mine:/usr/bin");
+	OAK_ASSERT_EQ(variables.find("TM_GIT")->second, "/mine/git");
 
 	settings_t::set_global_settings_path(NULL_STR);
+}
+
+// `~/.tm_properties` is the user's own, and the walk reaches it because it stops
+// at home. It must not be subject to trust: a repository cannot write it, and if
+// it were untrusted every existing setup using it would silently lose its
+// environment with no folder to trust, because it is not in one.
+//
+// Written against the real home path rather than a jail, because the rule is
+// literally "is this that file" and a jail would test a different string. It
+// reads whatever is actually there, so it asserts a property that holds either
+// way: whatever the home file sets, an untrusted predicate does not change it.
+void test_the_home_properties_file_is_not_subject_to_trust ()
+{
+	std::string const homeFile = path::join(path::home(), ".tm_properties");
+
+	settings_t::set_trust_predicate([](std::string const&){ return true; });
+	auto const whenTrusting = variables_for_path(std::map<std::string, std::string>(), path::join(path::home(), "file.cc"));
+
+	settings_t::set_trust_predicate([](std::string const&){ return false; });
+	auto const whenNotTrusting = variables_for_path(std::map<std::string, std::string>(), path::join(path::home(), "file.cc"));
+
+	settings_t::set_trust_predicate(nullptr);
+
+	OAK_ASSERT_EQ((bool)(whenTrusting == whenNotTrusting), true);
 }

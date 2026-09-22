@@ -84,3 +84,50 @@
 - (void)takeTabSizeFrom:(id)sender;
 - (void)documentMarksDidChange:(NSNotification*)aNotification;
 @end
+
+// ============================================================
+// = GutterView's collaborators, for t_gutter_view.mm         =
+// ============================================================
+//
+// Declared *and defined* here rather than in the test file, for the reason this
+// header exists at all: gen_xctest.rb wraps each test body in a namespace and an
+// ObjC declaration may only appear at global scope. `#import` includes this once
+// per generated implementation file, so the definitions below appear exactly
+// once and there is nothing to duplicate.
+
+// The smallest delegate that answers what the gutter asks. Fixed geometry: every
+// line is 15pt tall starting at y=0, so a failure reads as arithmetic rather
+// than as a mystery of layout.
+@interface GutterTestDelegate : NSObject <GutterViewDelegate>
+@property (nonatomic) NSUInteger lastLineNumber;
+@end
+
+@implementation GutterTestDelegate
+- (GVLineRecord)lineRecordForPosition:(CGFloat)yPos
+{
+	return GVLineRecord(_lastLineNumber, 0, yPos, yPos + 15, yPos + 12);
+}
+
+- (GVLineRecord)lineFragmentForLine:(NSUInteger)aLine column:(NSUInteger)aColumn
+{
+	return GVLineRecord(aLine, 0, aLine * 15, aLine * 15 + 15, aLine * 15 + 12);
+}
+@end
+
+// A column that reports a width of its own, so the gutter's arithmetic over
+// several columns is observable without drawing anything.
+@interface GutterTestColumn : NSObject <GutterViewColumnDataSource>
+@property (nonatomic) CGFloat reportedWidth;
+@end
+
+@implementation GutterTestColumn
+- (NSImage*)imageForLine:(NSUInteger)aLine inColumnWithIdentifier:(id)columnIdentifier state:(GutterViewRowState)rowState
+{
+	return nil;
+}
+
+- (CGFloat)widthForColumnWithIdentifier:(id)columnIdentifier
+{
+	return _reportedWidth;
+}
+@end

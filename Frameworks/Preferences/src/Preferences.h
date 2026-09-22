@@ -15,3 +15,31 @@
 @interface Preferences : NSWindowController
 @property (class, readonly) Preferences* sharedInstance;
 @end
+
+// Which folders may set environment variables through their own
+// `.tm_properties`. Implemented in FolderTrust.swift as @objc(TMFolderTrust);
+// declared here for the same reason the two above are — AppController.mm and
+// DocumentWindowController need it across a target boundary, and a generated
+// *-Swift.h cannot cross one.
+//
+// Rule 23: these signatures must match the Swift @objc names exactly, or the
+// call compiles and does not dispatch. The Swift side is deliberately named
+// `hasBeenAskedAbout(_:)` rather than `hasBeenAsked(about:)` so that the Swift
+// spelling and the selector are the same string — this type is reached both
+// ways, from AppControllerSupport.mm through this header and from the
+// framework's own Swift tests, and two names for one method across a boundary
+// is how three of those tests started and never finished.
+@interface TMFolderTrust : NSObject
+@property (class, readonly) TMFolderTrust* shared;
+// Is this path inside a folder the user vouched for? Trust is a prefix: a
+// checkout is trusted along with everything in it.
+- (BOOL)isTrusted:(NSString*)path;
+// Has the user answered for this folder either way? Distinct from -isTrusted:,
+// which a subfolder of a trusted root also answers yes to.
+- (BOOL)hasBeenAskedAbout:(NSString*)folder;
+- (void)trust:(NSString*)folder;
+- (void)refuse:(NSString*)folder;
+// Not the same as refusing: the folder is asked about again next time.
+- (void)forget:(NSString*)folder;
+@property (readonly) NSArray<NSString*>* trustedFolders;
+@end

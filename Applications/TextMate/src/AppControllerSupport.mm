@@ -3,6 +3,7 @@
 #import <network/tbz.h>
 #import <ns/ns.h>
 #import <settings/settings.h>
+#import <Preferences/Preferences.h>
 #import <TMBundleModel/TMBundleModelCxx.h>
 #import <OakTextView/OakTextView.h>
 #import <text/types.h>
@@ -27,6 +28,15 @@ static std::string const& session_restore_marker ()
 {
 	settings_t::set_default_settings_path([[[NSBundle mainBundle] pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);
 	settings_t::set_global_settings_path(path::join(path::home(), "Library/Application Support/TextMate/Global.tmProperties"));
+
+	// Which folders may set environment variables through their own
+	// `.tm_properties`. The settings layer refuses them from everywhere until
+	// something answers this, which is the safe direction — so this must be
+	// installed before any document is opened, and it is, from
+	// -applicationWillFinishLaunching:.
+	settings_t::set_trust_predicate([](std::string const& settingsFilePath){
+		return (bool)[TMFolderTrust.shared isTrusted:to_ns(settingsFilePath)];
+	});
 }
 
 + (void)installDefaultBundlesIfNeeded

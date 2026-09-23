@@ -3105,7 +3105,7 @@ frame and takes two seconds to find:
 | File browser | open a git repo | Tree populates, SCM badges draw |
 | Find | ⌘F, and Find in Folder | Both windows appear; run one search. Open the **In:** pop-up and its folder submenu (→ on the highlighted row): subfolders in Finder order, then a separator and "Enclosing Folders" up to the volume. **If it appears to hang, look for a privacy prompt** — see "Session 2026-09-14" |
 | Bundle Editor | Bundles ▸ Edit Bundles | Window appears, list populates |
-| Go to File | ⌘T | Panel appears, filtering responds |
+| Go to File | ⌘T — the menu item is **File ▸ Open Quickly…** | Panel appears, filtering responds. Type into it for real: setting the search field's value through accessibility does not fire its change notification, so the list never filters and the check looks like a failure |
 | Commit window | Bundles ▸ … ▸ Commit | Window appears (needs a dirty repo) |
 | Software Update | Check for Updates | Panel appears with a version verdict. **Changed 2026-09-08:** a channel is now wired, so the background scheduler *is* created at launch and does fetch — the log line to look for is `Update manifest failed to parse` or a version verdict, and `defaults read com.j23software.TextMate-NG SoftwareUpdateLastPoll` records every completed check. The **manual** Check Now path still has no automated coverage |
 | HTML output | run any bundle command with HTML output | Window appears |

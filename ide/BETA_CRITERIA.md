@@ -16,11 +16,28 @@ the version stays `2026.N-alpha.M` until all of them hold.
 | --- | --- | --- | --- |
 | 1 | A crash collector is deployed and the application posts to it | `TMCrashCollectorURL` in Info.plist is non-empty, and `Server/crash-collector/bin/reports` answers | **Met 2026-09-18** — deployed, posted to and read back end to end |
 | 2 | Crash reports are arriving, and there are none | `bin/reports`, plus `~/Library/Logs/DiagnosticReports` on every machine running it | **In progress from 2026-09-19** — alpha.30 is the first build carrying the URL, so an empty collector is evidence from here on and was not before |
-| 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Restarted 2026-09-19 with alpha.31**; earliest it can be met is 2026-09-26. Shipping resets this by design — the criterion is about one build, not about the project |
+| 3 | Seven consecutive days of daily use on one build, no crash | The date on the newest crash report versus the release date of the build in use | **Restarted 2026-09-23 with alpha.33**; earliest it can be met is 2026-09-30. Shipping resets this by design — the criterion is about one build, not about the project |
 | 4 | The full suite, the sanitizers and the fuzzer are green on the tagged commit | The Sanitizers workflow on that commit, not merely on `master` | **Met** and enforced weekly |
-| 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | `screencapture` of each window, read directly | **Met on alpha.31** — all four surfaces verified, the commit window included: the Ruby that broke it is fixed and shipped |
+| 5 | The five-minute smoke pass is complete, including the surfaces accessibility cannot reach | `screencapture` of each window, read directly | **Met on alpha.33, 2026-09-23** — all ten surfaces on the notarized build, read by screenshot. It found one real defect, which is not a dead surface and is listed under “Open defects” below |
 | 6 | Nothing unreleased at the tag | `git log <tag>..HEAD` is empty | Met at each release |
 | 7 | The updater has been seen installing a build unattended | Observed for alpha.27 on 2026-09-16; must hold for the beta too | **Met once** |
+
+
+## Open defects
+
+**Git ▸ Status, and up to ~50 commands that load Bundle Support's `ui.rb`, fail
+with `cannot load such file -- plist`.** Found by the alpha.33 smoke pass,
+2026-09-23; present since alpha.32. `Support/shared/private/vendor/plist` in
+`textmate/bundle-support.tmbundle` is a git submodule (`patsplat/plist`), and the
+mirror is built from GitHub tarballs, which do not include submodules — so the
+directory ships empty. It is the only empty directory across all mirrored
+bundles. Reproduces with no application involved, so no app change caused it and
+no app release is needed to fix it: the mirror has to fetch the submodule at the
+commit the pinned tree records, and republish. About 35 of the ~50 are Git
+commands; that count is an upper bound, since Commit does not go through `ui.rb`
+and works.
+
+Beta should not be declared while this is open: it is the most-used bundle.
 
 Criterion 5 was the one most likely to be quietly skipped, because it looked
 like the only one a script could not answer. That turned out to be wrong, and

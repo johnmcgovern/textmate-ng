@@ -23,7 +23,7 @@ the version stays `2026.N-alpha.M` until all of them hold.
 | 7 | The updater has been seen installing a build unattended | Observed for alpha.27 on 2026-09-16; must hold for the beta too | **Met once** |
 
 
-## Open defects
+## Defects found by the smoke pass
 
 **Git ▸ Status, and up to ~50 commands that load Bundle Support's `ui.rb`, fail
 with `cannot load such file -- plist`.** Found by the alpha.33 smoke pass,
@@ -38,6 +38,8 @@ commands; that count is an upper bound, since Commit does not go through `ui.rb`
 and works.
 
 Beta should not be declared while this is open: it is the most-used bundle.
+
+**Fixed 2026-09-23, in the mirror, no app release.** bin/mirror-bundles fills every gitlink at the commit the pinned tree records, and the fixed Bundle Support carries a `revised` date so existing installations take it — they record the index date of what they installed, so new bytes under the old 2021 date would have reached no one. bin/publish-bundles now refuses exactly that. Seen end to end on this machine: the scheduler replaced Bundle Support, the recorded date moved to the revised one, and Git ▸ Status opened its window in the app. Installations pick it up on their next scheduled index check, every three hours.
 
 Criterion 5 was the one most likely to be quietly skipped, because it looked
 like the only one a script could not answer. That turned out to be wrong, and

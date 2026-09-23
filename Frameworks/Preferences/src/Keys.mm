@@ -25,7 +25,17 @@ static NSDictionary* default_settings ()
 		kUserDefaultsShowFileExtensionsKey:      @NO,
 		kUserDefaultsEnvironmentVariablesKey:    default_environment(),
 		kUserDefaultsDisableBundleUpdatesKey:    @NO,
-		kUserDefaultsDisableRMateServerKey:      @NO,
+		// Off by default. This one starts a TCP listener, and a TCP socket has no
+		// owner and no mode — loopback is not a boundary on a machine with more than
+		// one account, and nothing behind it authenticates: the protocol's ‘token’
+		// is an opaque string the client picks to match replies to requests. A
+		// connection can open any file this application can read and, with
+		// ‘data-on-close’, have the contents written back down the connection.
+		//
+		// Local `mate` does not depend on this: the UNIX socket in RMateServer.mm
+		// is bound unconditionally, so turning this off costs nothing unless you
+		// actually run `rmate` over an SSH forward — and then it is one checkbox.
+		kUserDefaultsDisableRMateServerKey:      @YES,
 		kUserDefaultsRMateServerListenKey:       kRMateServerListenLocalhost,
 		kUserDefaultsRMateServerPortKey:         @"52698",
 		kUserDefaultsLineNumbersKey:             @YES,

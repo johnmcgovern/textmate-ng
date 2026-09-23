@@ -79,8 +79,18 @@ def trusted_keys() -> dict:
     return plist.get("TMUpdateManifestKeys", {})
 
 
-def verified_index(url: str) -> dict:
-    wrapper = json.loads(fetch(url))
+class Offline(Exception):
+    """The index could not be fetched at all — as distinct from fetched and
+    refused, which is never something to shrug off."""
+
+
+def verified_index_bytes(url: str) -> bytes:
+    """The signed plist the index wrapper carries, after its signature verifies."""
+    try:
+        raw = fetch(url)
+    except Exception as exc:
+        raise Offline(str(exc)) from exc
+    wrapper = json.loads(raw)
     signed = base64.b64decode(wrapper["manifest"])
     signature = base64.b64decode(wrapper["signature"])
     key_id = wrapper.get("keyID", "")
@@ -101,12 +111,23 @@ def verified_index(url: str) -> dict:
         if r.returncode != 0:
             raise SystemExit(f"error: the index signature does not verify ({r.stdout.strip()}{r.stderr.strip()})")
 
-    return plistlib.loads(signed)
+    return signed
 
 
-def stage(managed: Path, index_url: str, offline_ok: bool) -> int:
+def index_digest(signed: bytes) -> str:
+    """Which published index a staging came from. Taken over the signed bytes, so
+    it names the index's content, not the JSON it happened to travel in."""
+    return hashlib.sha256(signed).hexdigest()
+
+
+def verified_index(url: str) -> dict:
+    return plistlib.loads(verified_index_bytes(url))
+
+
+def stage(managed: Path, index_url: str, offline_ok: bool, stamp: Path = None) -> int:
     try:
-        index = verified_index(index_url)
+        signed = verified_index_bytes(index_url)
+        index = plistlib.loads(signed)
     except SystemExit:
         raise
     except Exception as exc:
@@ -176,17 +197,37 @@ def stage(managed: Path, index_url: str, offline_ok: bool) -> int:
         print(f"error: {len(failed)} of {len(index['bundles'])} bundles could not be staged",
               file=sys.stderr)
         return 1
+    if stamp:
+        # Written only after every bundle staged, so a stamp always describes an
+        # archive that is complete.
+        stamp.write_text(index_digest(signed) + "\n")
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("managed")
+    ap.add_argument("managed", nargs="?")
     ap.add_argument("--index", default=DEFAULT_INDEX)
     ap.add_argument("--offline-ok", action="store_true")
+    ap.add_argument("--stamp", help="write the digest of the index staged from, on success")
+    ap.add_argument("--print-index-digest", action="store_true",
+                    help="verify the published index and print its digest; exit 3 if offline")
     args = ap.parse_args()
-    return stage(Path(args.managed), args.index, args.offline_ok)
+    if args.print_index_digest:
+        # For the build phase, which restages only when this changes. Exit 3 means
+        # the network was not there; any other failure — a bad signature above all
+        # — is an ordinary error and has to stop the build.
+        try:
+            print(index_digest(verified_index_bytes(args.index)))
+            return 0
+        except Offline as exc:
+            print(f"warning: could not fetch the bundle index ({exc})", file=sys.stderr)
+            return 3
+    if not args.managed:
+        ap.error("the managed directory is required unless --print-index-digest is given")
+    return stage(Path(args.managed), args.index, args.offline_ok,
+                 Path(args.stamp) if args.stamp else None)
 
 
 if __name__ == "__main__":

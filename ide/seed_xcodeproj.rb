@@ -1130,15 +1130,26 @@ end
 # reproduces it as the project's first run-script phase.
 BUNDLE_LIST_NAME = "DefaultBundles.tbz.bl"
 BUNDLE_ARCHIVE   = "DefaultBundles.tbz"
+BUNDLE_STAMP     = "DefaultBundles.index-sha256"
 
 def add_default_bundles_phase(project, target, t, targets)
   phase = target.new_shell_script_build_phase("Stage default bundles")
   phase.shell_path   = "/bin/sh"
-  # bin/stage-bundles as an input, so editing it rebuilds the archive. The
-  # committed bundle list is no longer read here: the published index decides
-  # which bundles exist, and it is signed.
-  phase.input_paths  = ["$(SRCROOT)/bin/stage-bundles"]
-  phase.output_paths = ["$(DERIVED_FILE_DIR)/#{BUNDLE_ARCHIVE}"]
+  # **Runs on every build, restages only when the published index changes.**
+  #
+  # This used to declare bin/stage-bundles as its only input, so Xcode skipped it
+  # unless the script itself was edited. The input that actually matters — the
+  # published mirror — is on the network, where Xcode cannot see it. So alpha.33
+  # embedded bundles staged the night before a mirror fix, and a fresh install of
+  # it started with the broken Bundle Support the fix had just replaced. Found on
+  # 2026-09-23 while preparing alpha.34, by opening the archive in the built app.
+  #
+  # Now the phase always runs, asks for the signed index's digest (one small
+  # fetch), and does the real work only when that differs from the digest the
+  # current archive was staged from. The digest ships beside the archive, and
+  # bin/release refuses a build whose digest is not the one currently published.
+  phase.always_out_of_date = "1"
+  phase.output_paths = ["$(DERIVED_FILE_DIR)/#{BUNDLE_ARCHIVE}", "$(DERIVED_FILE_DIR)/#{BUNDLE_STAMP}"]
   # Staged from this fork's published mirror rather than by `bl`.
   #
   # `bl` speaks the old index format — a plist whose signature arrives in S3
@@ -1152,18 +1163,41 @@ def add_default_bundles_phase(project, target, t, targets)
   #
   # --offline-ok keeps a network failure a warning, as it was before: an app
   # without its bundles is worse than one with them, and much better than no app.
+  # Offline with an archive already built, that archive is kept rather than
+  # replaced by an empty one. A stamp of "offline" marks a build that staged
+  # nothing; bin/release refuses to publish one.
   phase.shell_script = <<~SH
     set -u
+    out="$SCRIPT_OUTPUT_FILE_0"
+    stamp="$SCRIPT_OUTPUT_FILE_1"
+    current=$("$SRCROOT/bin/stage-bundles" --print-index-digest)
+    rc=$?
+    if [ $rc -eq 3 ]; then
+      if [ -f "$out" ] && [ -s "$stamp" ]; then
+        echo "warning: bundle index unreachable; keeping the default bundles staged from $(cat "$stamp")"
+        exit 0
+      fi
+      current=""
+    elif [ $rc -ne 0 ]; then
+      exit 1
+    fi
+    if [ -n "$current" ] && [ -f "$out" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$current" ]; then
+      echo "note: default bundles already staged from index $current"
+      exit 0
+    fi
     stage="$DERIVED_FILE_DIR/Managed"
     rm -rf "$stage" && mkdir -p "$stage"
-    "$SRCROOT/bin/stage-bundles" "$stage" --offline-ok || exit 1
-    /usr/bin/tar -cjf "$SCRIPT_OUTPUT_FILE_0" -C "$DERIVED_FILE_DIR" Managed
+    rm -f "$stamp"
+    "$SRCROOT/bin/stage-bundles" "$stage" --offline-ok --stamp "$stamp" || exit 1
+    [ -s "$stamp" ] || echo "offline" > "$stamp"
+    /usr/bin/tar -cjf "$out" -C "$DERIVED_FILE_DIR" Managed
   SH
 
   copy = target.new_copy_files_build_phase("Copy #{BUNDLE_ARCHIVE}")
   copy.symbol_dst_subfolder_spec = :resources
   copy.dst_path = ""
   copy.add_file_reference(project.main_group.new_file("$(DERIVED_FILE_DIR)/#{BUNDLE_ARCHIVE}"))
+  copy.add_file_reference(project.main_group.new_file("$(DERIVED_FILE_DIR)/#{BUNDLE_STAMP}"))
 end
 
 specs.each do |t|

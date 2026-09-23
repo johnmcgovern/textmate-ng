@@ -128,6 +128,27 @@ xcrun stapler validate "$APP" >/dev/null 2>&1 || {
 spctl --assess --type execute "$APP" >/dev/null 2>&1 || {
   echo "error: Gatekeeper does not accept $APP" >&2; exit 1; }
 
+# The bundles a first run unpacks have to be the ones currently published.
+#
+# The build restages them only when the published index changes, and records the
+# index it staged from beside the archive. This compares that record with the
+# index live right now. It exists because alpha.33 shipped an archive staged the
+# night before a mirror fix: every check above passed, the app was perfectly
+# signed, and a fresh install still started with the broken Bundle Support. A
+# stamp of "offline" means the build staged nothing, which is never releasable.
+STAMP="$APP/Contents/Resources/DefaultBundles.index-sha256"
+[ -s "$STAMP" ] || {
+  echo "error: $APP carries no DefaultBundles.index-sha256 — rebuild with the current seed" >&2; exit 1; }
+STAGED=$(cat "$STAMP")
+[ "$STAGED" != "offline" ] || {
+  echo "error: $APP was built offline and embeds no bundles — rebuild with a network" >&2; exit 1; }
+PUBLISHED=$("$ROOT/bin/stage-bundles" --print-index-digest) || {
+  echo "error: could not read the published bundle index to compare against" >&2; exit 1; }
+[ "$STAGED" = "$PUBLISHED" ] || {
+  echo "error: $APP embeds bundles staged from index ${STAGED%${STAGED#????????????}}," >&2
+  echo "       but the published index is ${PUBLISHED%${PUBLISHED#????????????}} — rebuild so a first run gets the current bundles" >&2
+  exit 1; }
+
 # ============================================================
 # = 2. Version, three ways, and they have to agree           =
 # ============================================================

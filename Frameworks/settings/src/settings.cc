@@ -101,10 +101,12 @@ namespace
 	{
 		struct assignment_t
 		{
-			assignment_t (std::string const& key, std::string const& value, size_t lineNumber = 0) : key(key), value(value), line_number(lineNumber) { }
+			assignment_t (std::string const& key, std::string const& value, size_t lineNumber = 0, bool synthesized = false) : key(key), value(value), line_number(lineNumber), synthesized(synthesized) { }
 
 			std::string key, value;
 			size_t line_number;
+			// Added by parse_sections rather than written in the file — see there.
+			bool synthesized;
 		};
 
 		section_t (std::string const& path, std::vector<assignment_t> const& variables, std::string const& section = NULL_STR) : path(path), variables(variables), section(section)
@@ -138,8 +140,17 @@ namespace
 			std::vector<section_t::assignment_t> variables;
 			if(section.names.empty())
 			{
-				variables.emplace_back("CWD", path::parent(path));
-				variables.emplace_back("TM_PROPERTIES_PATH", text::format("%s${TM_PROPERTIES_PATH:+:$TM_PROPERTIES_PATH}", path.c_str()));
+				// These two say where the file *is*, not what it asks for: its own
+				// directory, for values written as "$CWD/…", and the running list of
+				// property files that applied. Marked as ours so folder trust passes
+				// them. Refusing them made `$CWD` in an untrusted folder resolve to
+				// the directory of the nearest *trusted* file instead — the home
+				// folder, or the application's own defaults — which moved relative
+				// settings somewhere else entirely rather than merely dropping them.
+				// The mark is by origin, not by name: a file that writes `CWD = …`
+				// itself is an uppercase assignment like any other.
+				variables.emplace_back("CWD", path::parent(path), 0, true);
+				variables.emplace_back("TM_PROPERTIES_PATH", text::format("%s${TM_PROPERTIES_PATH:+:$TM_PROPERTIES_PATH}", path.c_str()), 0, true);
 			}
 
 			for(auto const& pair : section.values)
@@ -281,7 +292,7 @@ namespace
 			// property of where the walk goes, which is decided in this file.
 			bool const trusted = file == path::join(path::home(), ".tm_properties") || trust_predicate()(file);
 			auto untrusted = [&filter, &file, trusted](section_t::assignment_t const& assignment, section_t const& section){
-				if(!trusted && !assignment.key.empty() && isupper(assignment.key[0]))
+				if(!trusted && !assignment.synthesized && !assignment.key.empty() && isupper(assignment.key[0]))
 				{
 					os_log_error(OS_LOG_DEFAULT, "Ignoring %{public}s set by %{public}s — this folder is not trusted to choose which programs bundle commands run.", assignment.key.c_str(), file.c_str());
 					return;

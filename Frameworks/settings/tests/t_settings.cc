@@ -186,3 +186,56 @@ void test_the_home_properties_file_is_not_subject_to_trust ()
 
 	OAK_ASSERT_EQ((bool)(whenTrusting == whenNotTrusting), true);
 }
+
+// `CWD` and `TM_PROPERTIES_PATH` are not the file's to set: parse_sections adds
+// both to the top of every `.tm_properties` it reads — the file's own directory,
+// and the list of property files that applied. They say where the file *is*, not
+// what it asks for, so they cannot select a program and trust has nothing to
+// withhold from them. The trusted half of each test is the control: it shows the
+// fixture measures what it claims, so a failure in the untrusted half is about
+// trust and nothing else.
+void test_an_untrusted_project_file_can_still_refer_to_its_own_directory ()
+{
+	test::jail_t jail;
+	jail.set_content(".tm_properties", "projectDirectory = \"$CWD/sub\"\n");
+
+	{
+		trust_guard_t guard(true);
+		OAK_ASSERT_EQ(settings_for_path(jail.path("file.cc")).get("projectDirectory"), jail.path("sub"));
+	}
+	{
+		trust_guard_t guard(false);
+		OAK_ASSERT_EQ(settings_for_path(jail.path("file.cc")).get("projectDirectory"), jail.path("sub"));
+	}
+}
+
+void test_an_untrusted_project_file_is_still_listed_in_TM_PROPERTIES_PATH ()
+{
+	test::jail_t jail;
+	jail.set_content(".tm_properties", "projectSetting = readMe\n");
+
+	auto listed = [&jail](){
+		auto const variables = variables_for_path(std::map<std::string, std::string>{ }, jail.path("file.cc"));
+		auto const it = variables.find("TM_PROPERTIES_PATH");
+		return it != variables.end() && it->second.find(jail.path(".tm_properties")) != std::string::npos;
+	};
+	{
+		trust_guard_t guard(true);
+		OAK_ASSERT_EQ(listed(), true);
+	}
+	{
+		trust_guard_t guard(false);
+		OAK_ASSERT_EQ(listed(), true);
+	}
+}
+
+// And the exemption is by origin, not by name. A file that writes `CWD` itself is
+// making an uppercase assignment like any other, and an untrusted one is refused.
+void test_an_untrusted_project_file_may_not_set_CWD_itself ()
+{
+	test::jail_t jail;
+	jail.set_content(".tm_properties", "CWD = \"/EVIL\"\nprojectDirectory = \"$CWD/sub\"\n");
+	trust_guard_t guard(false);
+
+	OAK_ASSERT_EQ(settings_for_path(jail.path("file.cc")).get("projectDirectory"), jail.path("sub"));
+}

@@ -2,6 +2,60 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-22 (v2026.9-alpha.33)
+
+**A repository you clone can no longer decide what your editor runs.** Ten
+commits since alpha.32, nearly all of it security work. If you are on alpha.24
+or later this should arrive on its own.
+
+What is in it:
+
+* **Opening a project no longer lets it choose the programs your bundle commands
+  run.** A `.tm_properties` file travels with a checkout and was read and applied
+  in full, environment variables included. Setting `PATH` — or `TM_GIT`, or any
+  of eleven tool-path variables the installed bundles honour — was enough to have
+  a cloned repository's own `git` run the moment you picked something from
+  Bundles ▸ Git. This was proved end to end before it was fixed; the planted
+  `git` ran three times.
+
+  Settings from such a file still always apply — font, tab size, soft tabs, all
+  of it. Environment variables now apply only for folders you have vouched for.
+  The first time you open a project whose `.tm_properties` sets any, a sheet asks
+  once, with **Don't Allow** as the default button, and both answers are
+  remembered — so it is a question rather than a nag. Your own
+  `~/.tm_properties` is exempt and behaves exactly as before.
+* **rmate connections are off unless you ask for them.** The editor listened on
+  TCP port 52698 out of the box. Unlike the socket the local `mate` command uses,
+  a TCP port has no owner and no file permissions, “loopback” is not a boundary
+  between accounts on a shared machine, and nothing behind it authenticates — so
+  anything that could connect could ask the editor to open any file it can read
+  and have the contents handed back. Local `mate` does not go through it and is
+  unaffected. If you edit over SSH with `rmate`, switch it back on in
+  Settings ▸ Terminal.
+* **The contacts permission prompt is gone.** The application asked macOS for
+  access to your Address Book, and everyone was asked. It bought one thing:
+  pre-filling an email field in the template for people authoring a new bundle.
+  That now comes from `git config user.email`, which needs no permission at all.
+  One fewer entitlement in the signed build.
+* **Two local sockets tightened.** The commit window used to reach the
+  application through Distributed Objects, so any process running as you could
+  look up a name and send it messages — a mechanism Apple deprecated in 10.13 for
+  that reason. It is one request and one reply over a socket only you can open
+  now. Separately, the `mate` socket took whatever permissions your umask
+  happened to give it; it is owner-only regardless of umask now.
+* **Less visible.** `.tm_properties` parsing is now fuzzed — 685,315 runs, no
+  findings — and the gutter is pinned by tests ahead of the editor port.
+
+**A gap worth knowing about.** There is no screen yet for reviewing or undoing
+folder trust. If you allow a folder by mistake, `defaults delete
+com.j23software.TextMate-NG TrustedProjectFolders` clears every answer you have
+given and you will be asked again.
+
+**Where to look if something is off.** Open a project that carries its own
+`.tm_properties` — you should be asked once, and your font and tab settings
+should apply whichever way you answer. Settings ▸ Terminal, if you use `rmate`.
+Bundles ▸ Edit Bundles, if you author bundles.
+
 ## 2026-09-20 (v2026.9-alpha.32)
 
 **A first run now works without a network, and crash reports now actually

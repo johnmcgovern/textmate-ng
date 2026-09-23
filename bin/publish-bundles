@@ -125,6 +125,39 @@ def verify_wrapper(path: Path) -> bool:
         return r.returncode == 0
 
 
+def undelivered_changes(index: dict, tag: str) -> list:
+    """Bundles whose payload differs from what is published but whose date does
+    not advance past it.
+
+    **Such a payload is published and then never installed by anyone.** An
+    installation records the index's `updated` for the version it installed, and
+    Bundle.hasUpdate only fetches again when the index offers a later date. So new
+    bytes under the old date fix the mirror and reach nobody — which is exactly
+    what would have happened to the vendor/plist fix of 2026-09-23 without the
+    `revised` date it carries. The remedy is a `revised` date in ide/bundles.json,
+    not a way round this check.
+    """
+    import urllib.error
+    import urllib.request
+    url = DOWNLOAD.format(repo=REPO, tag=tag, file="bundles.json")
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            wrapper = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return []  # nothing published yet, so nothing can be undelivered
+        raise
+    published = plistlib.loads(base64.b64decode(wrapper["manifest"]))
+    before = {b["uuid"]: b["versions"][0] for b in published["bundles"]}
+    stale = []
+    for b in index["bundles"]:
+        old = before.get(b["uuid"])
+        new = b["versions"][0]
+        if old and new["sha256"] != old["sha256"] and not new["updated"] > old["updated"]:
+            stale.append((b["name"], old["updated"], new["updated"]))
+    return stale
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -154,6 +187,19 @@ def main() -> int:
               "Nothing published.", file=sys.stderr)
         return 1
     print("    verified against the key in bin/update-sign public-key")
+
+    print(f"==> checking that every changed payload will actually be installed")
+    stale = undelivered_changes(index, args.tag)
+    if stale:
+        print(f"error: {len(stale)} payload(s) changed without their date advancing, so no "
+              f"existing installation would ever download them. Nothing published.",
+              file=sys.stderr)
+        for name, was, now in stale:
+            print(f"    {name:<22} published {was}, this build {now}", file=sys.stderr)
+        print("  Add a `revised` date to each in ide/bundles.json and rebuild the mirror.",
+              file=sys.stderr)
+        return 1
+    print("    every changed payload carries a later date than the one it replaces")
 
     if args.dry_run:
         print("==> --dry-run: nothing published")

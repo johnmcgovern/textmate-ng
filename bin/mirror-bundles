@@ -181,6 +181,104 @@ def write_deterministic_tbz(src: Path, dest: Path, arcname: str) -> None:
                 tf.addfile(ti)
 
 
+def fetch_tree(repo: str, sha: str, dest: Path, tgz: Path) -> None:
+    """Unpack `repo` at `sha` into `dest`, which must exist."""
+    url = CODELOAD.format(repo=repo, sha=sha)
+    with urllib.request.urlopen(url, timeout=120) as r, open(tgz, "wb") as f:
+        shutil.copyfileobj(r, f)
+    with tarfile.open(tgz) as tf:
+        # GitHub wraps everything in <repo>-<sha>/; strip it.
+        members = []
+        for m in tf.getmembers():
+            parts = m.name.split("/", 1)
+            if len(parts) != 2 or not parts[1]:
+                continue
+            m.name = parts[1]
+            members.append(m)
+        # No `filter=` here either: it is Python 3.12+, and this has to run
+        # wherever the mirror is built. Members were filtered by hand above.
+        for m in members:
+            if m.name.startswith("/") or ".." in Path(m.name).parts:
+                raise ValueError(f"archive member escapes the destination: {m.name}")
+        tf.extractall(dest, members=members)
+    tgz.unlink()
+
+
+def github_repo(url: str) -> str:
+    """owner/name from a submodule URL, or an error. Only GitHub is fetched: the
+    whole mirror rests on codeload, and a submodule hosted anywhere else is a
+    decision for a person, not something to follow silently."""
+    for prefix in ("https://github.com/", "http://github.com/", "git://github.com/",
+                   "git@github.com:", "ssh://git@github.com/"):
+        if url.startswith(prefix):
+            path = url[len(prefix):].rstrip("/")
+            if path.endswith(".git"):
+                path = path[:-4]
+            if path.count("/") == 1:
+                return path
+    raise ValueError(f"submodule is not a GitHub repository: {url}")
+
+
+def fetch_submodules(repo: str, sha: str, dest: Path, scratch: Path, prefix: str = "") -> list:
+    """Fill in every submodule of `repo` at `sha`, at the commit its tree records.
+
+    **A GitHub tarball carries a submodule's path and nothing else.** So until
+    this existed, Bundle Support shipped `Support/shared/private/vendor/plist` as
+    an empty directory, `require 'plist'` failed, and every command going through
+    Bundle Support's ui.rb — Git ▸ Status among roughly fifty — failed with it.
+    Found by the alpha.33 smoke pass, 2026-09-23. It had been that way since the
+    mirror replaced api.textmate.org, and nothing in the build noticed, because an
+    empty directory is a perfectly good directory.
+
+    The commit comes from the gitlink in the pinned tree, never from the
+    submodule's own default branch, so a rebuild reproduces the same bytes. And a
+    gitlink this cannot fill is an error rather than a skip: silently shipping the
+    hole is the bug this replaces.
+    """
+    tree = gh_json(f"repos/{repo}/git/trees/{sha}?recursive=1")
+    if tree.get("truncated"):
+        # Truncated means some gitlinks may be missing from what we were told, and
+        # "found none" would then be a guess.
+        raise ValueError(f"tree listing for {repo}@{sha[:12]} is truncated")
+    links = [e for e in tree["tree"] if e["type"] == "commit"]
+    if not links:
+        return []
+
+    gitmodules = dest / ".gitmodules"
+    if not gitmodules.exists():
+        raise ValueError(f"{repo}@{sha[:12]} has gitlinks but no .gitmodules")
+    urls = {}
+    out = run(["git", "config", "--file", str(gitmodules), "--get-regexp",
+               r"^submodule\..*\.(path|url)$"]).stdout
+    pending = {}
+    for line in out.splitlines():
+        key, value = line.split(" ", 1)
+        name, field = key[len("submodule."):].rsplit(".", 1)
+        pending.setdefault(name, {})[field] = value
+    for fields in pending.values():
+        if "path" in fields and "url" in fields:
+            urls[fields["path"]] = fields["url"]
+
+    fetched = []
+    for link in links:
+        path = link["path"]
+        if path not in urls:
+            raise ValueError(f"gitlink {path} in {repo} has no URL in .gitmodules")
+        if path.startswith("/") or ".." in Path(path).parts:
+            raise ValueError(f"submodule path escapes the bundle: {path}")
+        sub_repo = github_repo(urls[path])
+        target = dest / path
+        target.mkdir(parents=True, exist_ok=True)
+        if any(target.iterdir()):
+            raise ValueError(f"submodule {path} is not empty before fetching it")
+        fetch_tree(sub_repo, link["sha"], target, scratch / "submodule.tar.gz")
+        if not any(target.iterdir()):
+            raise ValueError(f"submodule {path} ({sub_repo}@{link['sha'][:12]}) came back empty")
+        fetched.append({"path": prefix + path, "repo": sub_repo, "sha": link["sha"]})
+        fetched += fetch_submodules(sub_repo, link["sha"], target, scratch, prefix + path + "/")
+    return fetched
+
+
 def package(entry: dict, out_dir: Path, staging: Path, refresh: bool = False) -> dict:
     name, repo = entry["name"], entry["repo"]
     # The commit date, not the time this ran. `hasUpdate` is
@@ -200,28 +298,10 @@ def package(entry: dict, out_dir: Path, staging: Path, refresh: bool = False) ->
 
     work = staging / name
     work.mkdir(parents=True)
-    tgz = work / "src.tar.gz"
-    url = CODELOAD.format(repo=repo, sha=sha)
-    with urllib.request.urlopen(url, timeout=120) as r, open(tgz, "wb") as f:
-        shutil.copyfileobj(r, f)
-
     src = work / "src"
     src.mkdir()
-    with tarfile.open(tgz) as tf:
-        # GitHub wraps everything in <repo>-<sha>/; strip it.
-        members = []
-        for m in tf.getmembers():
-            parts = m.name.split("/", 1)
-            if len(parts) != 2 or not parts[1]:
-                continue
-            m.name = parts[1]
-            members.append(m)
-        # No `filter=` here either: it is Python 3.12+, and this has to run
-        # wherever the mirror is built. Members were filtered by hand above.
-        for m in members:
-            if m.name.startswith("/") or ".." in Path(m.name).parts:
-                raise ValueError(f"archive member escapes the destination: {m.name}")
-        tf.extractall(src, members=members)
+    fetch_tree(repo, sha, src, work / "src.tar.gz")
+    submodules = fetch_submodules(repo, sha, src, work)
 
     # The bundle has to be named <Name>.tmbundle inside the archive, because
     # that is the directory the installer drops into place.
@@ -260,6 +340,11 @@ def package(entry: dict, out_dir: Path, staging: Path, refresh: bool = False) ->
         "dependencies": entry.get("dependencies", []),
         "plistsConverted": converted,
         "patches": [l.strip() for l in patched.splitlines() if l.strip()],
+        "submodules": submodules,
+        # When this mirror last changed the payload for a reason other than the
+        # pin moving — a patch, a submodule it had been dropping. See `updated`
+        # in build() for why that has to be a date and has to be committed.
+        "revised": entry.get("revised"),
     }
 
 
@@ -344,10 +429,23 @@ def build(only: list, out: Path, refresh: bool = False) -> int:
             "versions": [{
                 "size": r["size"],
                 "sha256": r["sha256"],
-                "updated": r["committed"],
+                # **The later of the pin's commit date and `revised`.** An
+                # installed bundle is only replaced when this is newer than the
+                # date it was installed (Bundle.hasUpdate), so a payload that
+                # changes while its pin does not — a patch, a submodule fixed
+                # here — reaches no existing installation unless the date moves
+                # with it. `revised` is that move, written into bundles.json by
+                # hand and reviewed with the change that needs it;
+                # bin/publish-bundles refuses a changed payload whose date
+                # did not advance. ISO 8601 in UTC compares correctly as text.
+                "updated": max(r["committed"], r["revised"] or r["committed"]),
                 "file": r["file"],
             }],
         })
+        if r["submodules"]:
+            # Provenance again: which commit of which repository each vendored
+            # directory came from.
+            entries[-1]["sourceSubmodules"] = r["submodules"]
         if r["requires"]:
             entries[-1]["requires"] = r["requires"]
 

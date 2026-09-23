@@ -2,6 +2,35 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-23 (v2026.9-alpha.34)
+
+**Two follow-ups to alpha.33, both found by testing it.** Six commits since
+alpha.33. If you are on alpha.24 or later this should arrive on its own.
+
+What is in it:
+
+* **Git ▸ Status works again, along with roughly fifty other commands.** They
+  share a small library in the Bundle Support bundle that this project's bundle
+  mirror had been shipping as an empty folder since alpha.32 — it comes from a
+  separate repository, and the way the mirror downloads bundles left it out.
+  The mirror has been fixed and republished, so if you are on alpha.32 or
+  alpha.33 the repaired Bundle Support replaces yours within about three hours,
+  with nothing to do. What this build adds is the same fix for a *fresh*
+  install: alpha.33's built-in bundles had been prepared the night before the
+  repair, so a new installation of it started with the broken copy. The build
+  now refreshes them whenever the mirror changes, and refuses to ship them stale.
+* **Settings that refer to their own folder work in folders you have not
+  trusted.** alpha.33 withheld environment variables from untrusted folders, and
+  in doing so also withheld two that TextMate adds itself, including `CWD` — the
+  folder a `.tm_properties` file sits in. So a setting written as `"$CWD/…"`
+  quietly pointed at your home folder instead. Those two are allowed again,
+  because they say where the file is rather than anything it asks for; a folder
+  that sets `CWD` itself is still refused like any other variable.
+
+**Where to look if something is off.** Bundles ▸ Git ▸ Status on any project.
+A project with its own `.tm_properties` that you chose not to trust — its
+settings should apply as though you had.
+
 ## 2026-09-22 (v2026.9-alpha.33)
 
 **A repository you clone can no longer decide what your editor runs.** Ten

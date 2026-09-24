@@ -135,7 +135,13 @@ spctl --assess --type execute "$APP" >/dev/null 2>&1 || {
 # every Mach-O in the bundle rather than only the main executable.
 RELAXED=$(find "$APP/Contents" -type f -perm +111 2>/dev/null | while read -r f; do
   file -b "$f" | grep -q 'Mach-O' || continue
-  codesign -d --entitlements - --xml "$f" 2>/dev/null | grep -q 'disable-library-validation' && echo "${f#$APP/}"
+  # `if`, not `grep -q … && echo`: this script runs under set -e, and /bin/sh
+  # (bash 3.2) exits a command substitution on an && list that fails as the last
+  # command of a loop body. That ended the alpha.35 release silently, right after
+  # "verifying", the first time this check ran for real.
+  if codesign -d --entitlements - --xml "$f" 2>/dev/null | grep -q 'disable-library-validation'; then
+    echo "${f#$APP/}"
+  fi
 done)
 [ -z "$RELAXED" ] || {
   echo "error: these binaries relax library validation, which a release must not:" >&2

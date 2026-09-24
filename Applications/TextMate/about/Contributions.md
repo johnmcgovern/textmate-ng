@@ -1,56 +1,41 @@
 Title: Contributions
 CSS: css/contributions.css
-JS: js/contributions.js
 
 # Contributions
 
-See [commits at GitHub][1].
+TextMate-NG is built on [TextMate 2][tm2], written by Allan Odgaard, with
+contributions from everyone below. The full history is in the
+[repository on GitHub][commits].
 
 <div>
-<%# this wrapping div prevents Markdown from trying to parse the ERB blocks %>
+<%# (No blank lines inside this div: gen_html runs Markdown *before* ERB, and a blank
+    line would end the HTML block and hand the rest to Markdown to mangle.)
+    Names only, from this checkout's own git history, most commits first.
+    This page used to show every commit since 2012, each with an avatar
+    loaded from gravatar.com — over a thousand requests to a third party
+    every time the tab was opened, telling it who was running the editor,
+    and publishing an MD5 of each contributor's email address. Building it
+    also asked the GitHub API about every author, so an About page needed
+    the network and a rate limit to compile. It was 2.4 MB, and grew with
+    every commit.
+    No email addresses, no images, no network: the same checkout always
+    produces the same page. Without git history (a source archive, say) the
+    page says so rather than failing the build. %>
 <%
-last_group_heading = ''
-require File.join(File.dirname(__FILE__), 'bin/gen_credits')
-generate_credits(File.expand_path('~/Library/Caches/com.j23software.TextMate-NG/githubcredits'), warn) do |hash, author, subject, body, userpic, date, github_user|
-  group_heading = date.strftime('%b %e, %Y')
-  if last_group_heading != group_heading
-    if last_group_heading != ''
-        _erbout << "</ol>\n"
-    end
-%>
-<h3 class="commit-group-heading"><%= group_heading %></h3>
-
-<ol class="commit-group">
-<%
-    last_group_heading = group_heading
-  end
-%>
-  <li class="commit commit-group-item">
-    <img class="gravatar" src="<%= userpic %>" height="36" width="36">
-    <p class="commit-title">
-      <a href="https://github.com/johnmcgovern/textmate-ng/commit/<%= hash %>" class="message"><%= subject %></a>
-      <% if body != '' %><span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span><% end %>
-    </p>
-    <% if body != '' %><div class="commit-desc"><pre><%= body %></pre></div><% end %>
-    <div class="commit-meta">
-      <div class="commit-links">
-        <a href="https://github.com/johnmcgovern/textmate-ng/commit/<%= hash %>" class="gobutton">
-          <span class="sha"><%= hash[0,10] %><span class="mini-icon mini-icon-arr-right-mini"></span></span>
-        </a>
-        <a href="https://github.com/johnmcgovern/textmate-ng/tree/<%= hash %>" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
-      </div>
-      <div class="authorship">
-        <span class="author-name"><% if github_user %><a href="https://github.com/<%= github_user %>"><% end %><%= author %><% if github_user %></a><% end %></span>
-        authored <time class="js-relative-date" datetime="<%= date.strftime('%Y-%m-%dT%H:%M:%S%:z') %>" title="<%= date.strftime('%Y-%m-%d %H:%M:%S') %>"><%= date.strftime('%B %e, %Y') %></time>
-      </div>
-    </div>
-  </li>
-<%
-end
-if last_group_heading != ''
-    _erbout << "</ol>\n"
-end
-%>
+  require 'cgi'
+  root  = ENV['SRCROOT'] || Dir.pwd
+  names = `git -C "#{root}" shortlog -s -n --no-merges HEAD 2>/dev/null`.lines.map { |line| line.split("\t", 2)[1].to_s.strip }.reject(&:empty?)
+-%>
+<% if names.empty? -%>
+<p class="contributors-missing">This copy was built without its git history, so the list of contributors is not available here.</p>
+<% else -%>
+<ol class="contributors">
+<% names.each do |name| -%>
+  <li><%= CGI.escapeHTML(name) %></li>
+<% end -%>
+</ol>
+<% end -%>
 </div>
 
-[1]: https://github.com/johnmcgovern/textmate-ng/commits/master
+[tm2]: https://github.com/textmate/textmate
+[commits]: https://github.com/johnmcgovern/textmate-ng/commits/master

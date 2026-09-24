@@ -771,6 +771,10 @@ the same lib graph and bundle identity again.
   GitHub username lookups to `~/Library/Caches/com.macromates.TextMate/githubcredits`
   and queries `api.github.com/legacy/...`, a long-deprecated endpoint — likely
   degrading silently to no GitHub links today, not a build break.)
+  **Deleted 2026-09-23.** The Contributions page no longer uses it: it lists
+  contributors by name from `git shortlog`, with no images and no network. The
+  old page loaded 1,128 avatars from gravatar.com each time it was opened and
+  weighed 2.4 MB in the shipped app; the new one is 3 KB.
 - ~~**`bin/CxxTest`**~~ **Deleted 2026-07-26**, along with its `.gitmodules` entry —
   a 3.8 MB vendored submodule that existed for 4 files. See "GUI harnesses → real
   tests" below for the rewrite that unblocked it. Also removed with it:

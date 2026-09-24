@@ -1,5 +1,7 @@
 #include "settings.h"
 #include <os/log.h>
+#include <mutex>
+#include <set>
 #include "parser.h"
 #include "track_paths.h"
 #include <plist/plist.h>
@@ -294,7 +296,19 @@ namespace
 			auto untrusted = [&filter, &file, trusted](section_t::assignment_t const& assignment, section_t const& section){
 				if(!trusted && !assignment.synthesized && !assignment.key.empty() && isupper(assignment.key[0]))
 				{
-					os_log_error(OS_LOG_DEFAULT, "Ignoring %{public}s set by %{public}s — this folder is not trusted to choose which programs bundle commands run.", assignment.key.c_str(), file.c_str());
+					// Once per file and variable, at the default level. It is the rule
+					// working, not an error, and it used to be logged at error level on
+					// every settings lookup — 30 identical lines in ten seconds for one
+					// open file, measured in the alpha.34 smoke pass.
+					static std::mutex mutex;
+					static std::set<std::string> reported;
+					bool first;
+					{
+						std::lock_guard<std::mutex> lock(mutex);
+						first = reported.insert(file + '\n' + assignment.key).second;
+					}
+					if(first)
+						os_log(OS_LOG_DEFAULT, "Ignoring %{public}s set by %{public}s — this folder is not trusted to choose which programs bundle commands run.", assignment.key.c_str(), file.c_str());
 					return;
 				}
 				filter(assignment, section);

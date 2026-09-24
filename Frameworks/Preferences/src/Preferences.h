@@ -49,6 +49,10 @@ NS_ASSUME_NONNULL_BEGIN
 // Not the same as refusing: the folder is asked about again next time.
 - (void)forget:(NSString*)folder;
 @property (readonly) NSArray<NSString*>* trustedFolders;
+// The nearest folder from here upward — stopping at home, as the settings walk
+// does — whose own .tm_properties would set environment variables and that
+// nobody has answered for. nil when there is nothing to ask.
+- (nullable NSString*)folderToAskAboutStartingAt:(NSString*)folder NS_SWIFT_NAME(folderToAskAbout(startingAt:));
 // Does this folder's own .tm_properties try to set environment variables?
 // Deliberately approximate and in the safe direction: wrong here costs a prompt,
 // wrong the other way costs the point.

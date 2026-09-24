@@ -103,12 +103,45 @@ final class FolderTrust: NSObject, @unchecked Sendable {
 
 	@objc var trustedFolders: [String] { Array(trusted).sorted() }
 
+	// The nearest folder, from `folder` upward, whose own `.tm_properties` would
+	// set environment variables and that nobody has answered for — or nil.
+	//
+	// **Upward, because the settings layer reads upward.** A file's settings come
+	// from every `.tm_properties` between its directory and home, so a project
+	// opened one level inside a checkout is still configured by the checkout's
+	// file. Until 2026-09-23 only the project folder itself was looked at, on the
+	// theory that a parent's file was either the user's own or one they had
+	// already been asked about. The alpha.34 smoke pass showed that was wrong:
+	// opening a single file from `src/` made `src` the project, the checkout's
+	// variables were withheld — the safe direction — and the user was never asked.
+	//
+	// Stops where the settings walk stops: at home, whose own `.tm_properties` is
+	// the user's and exempt; and for anything outside home, at `/`. That includes
+	// shared places like /tmp, where a file left by another account would
+	// otherwise configure this one's commands.
+	// The selector is spelled out because Swift would otherwise generate
+	// `folderToAskAboutWithStartingAt:` — "startingAt" is not a preposition, so it
+	// inserts "With" — while Preferences.h declares `folderToAskAboutStartingAt:`.
+	// Found by the tests below crashing on doesNotRecognizeSelector (rule 23).
+	@objc(folderToAskAboutStartingAt:) func folderToAskAbout(startingAt folder: String) -> String? {
+		let home = (NSHomeDirectory() as NSString).standardizingPath
+		var current = (folder as NSString).standardizingPath
+		while current != home {
+			if !hasBeenAskedAbout(current) && wouldSetEnvironment(inFolder: current) {
+				return current
+			}
+			let parent = (current as NSString).deletingLastPathComponent
+			if parent.isEmpty || parent == current {
+				break
+			}
+			current = parent
+		}
+		return nil
+	}
+
 	// Does this folder's own `.tm_properties` try to set environment variables —
 	// the uppercase ones a bundle command can treat as the program it runs?
-	//
-	// Only this folder's file, not the whole walk up to home: the question being
-	// asked is about *this* checkout, and a parent's file is either the user's own
-	// or a folder they were already asked about.
+	// `folderToAskAbout(startingAt:)` is what walks upward; this looks at one file.
 	//
 	// Deliberately approximate, and in the safe direction. It looks for an
 	// assignment whose name starts with an uppercase letter and does not attempt

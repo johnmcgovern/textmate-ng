@@ -174,28 +174,46 @@ class DocumentWindowController: NSResponder, NSWindowDelegate, NSTouchBarDelegat
 	// Deferred to the next turn of the runloop rather than run from the setter:
 	// this is reached while a window is being built, and a sheet presented then
 	// arrives before there is anything to attach it to.
+	//
+	// **Which folder.** Not necessarily the project folder: the settings layer
+	// reads every `.tm_properties` from a file up to home, so the question is about
+	// the nearest folder on that walk that wants to set variables and has not been
+	// answered for (FolderTrust.folderToAskAbout). A project opened inside a
+	// checkout is asked about the checkout. After each answer this looks again, in
+	// case a folder further up needs its own.
+	//
+	// **Once across windows.** Two windows opening the same checkout used to each
+	// present the sheet, and whichever was answered last won. A folder whose
+	// question is on screen is now left to that window; the others see it in
+	// `foldersBeingAsked` and stay quiet, and the answer applies to all of them.
+	private static var foldersBeingAsked = Set<String>()
+
 	private func askAboutFolderTrustIfNeeded() {
-		guard let folder = _projectPath else { return }
+		guard let project = _projectPath else { return }
 		let trust = TMFolderTrust.shared
-		guard !trust.hasBeenAskedAbout(folder), trust.wouldSetEnvironment(inFolder: folder) else { return }
+		guard trust.folderToAskAbout(startingAt: project) != nil else { return }
 
 		DispatchQueue.main.async { [weak self] in
-			guard let window = self?.window, window.isVisible else { return }
-			// Checked again: between the two turns the user may have answered for
-			// this folder in another window opening the same checkout.
-			guard !trust.hasBeenAskedAbout(folder) else { return }
+			guard let self, let window = self.window, window.isVisible else { return }
+			// Looked up again: between the two turns another window may have
+			// answered, or be asking.
+			guard let folder = trust.folderToAskAbout(startingAt: project),
+			      !Self.foldersBeingAsked.contains(folder) else { return }
+			Self.foldersBeingAsked.insert(folder)
 
 			let alert = NSAlert()
 			alert.messageText = "Let this folder configure how commands run?"
 			alert.informativeText = "“\((folder as NSString).lastPathComponent)” contains a .tm_properties file that sets environment variables. Those can decide which programs bundle commands run — including ones that came with the code, if you did not write this folder yourself.\n\nSyntax highlighting, indentation and the other editor settings in that file are applied either way."
 			alert.addButton(withTitle: "Don’t Allow")
 			alert.addButton(withTitle: "Allow")
-			alert.beginSheetModal(for: window) { response in
+			alert.beginSheetModal(for: window) { [weak self] response in
 				if response == .alertSecondButtonReturn {
 					trust.trust(folder)
 				} else {
 					trust.refuse(folder)
 				}
+				Self.foldersBeingAsked.remove(folder)
+				self?.askAboutFolderTrustIfNeeded()
 			}
 		}
 	}

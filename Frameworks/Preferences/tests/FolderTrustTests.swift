@@ -118,6 +118,47 @@ final class FolderTrustTests: XCTestCase {
 		XCTAssertTrue(TMFolderTrust.shared.wouldSetEnvironment(inFolder: folder(containing: "softTabs = true\nPATH = \"/x:$PATH\"\n")))
 	}
 
+	// The walk upward. `tree` builds a checkout with an inner folder, each with or
+	// without its own file, so the tests say which folder *should* be asked about.
+	private func tree(outer: String?, inner: String?) -> (outer: String, inner: String) {
+		let outerDir = NSTemporaryDirectory() + "trust-walk-\(UUID().uuidString)"
+		let innerDir = (outerDir as NSString).appendingPathComponent("src")
+		try? FileManager.default.createDirectory(atPath: innerDir, withIntermediateDirectories: true)
+		if let outer { try? outer.write(toFile: (outerDir as NSString).appendingPathComponent(".tm_properties"), atomically: true, encoding: .utf8) }
+		if let inner { try? inner.write(toFile: (innerDir as NSString).appendingPathComponent(".tm_properties"), atomically: true, encoding: .utf8) }
+		return ((outerDir as NSString).standardizingPath, (innerDir as NSString).standardizingPath)
+	}
+
+	// The case the smoke pass found: a project opened one level inside the
+	// checkout that carries the file. The checkout is what needs an answer.
+	func testAProjectInsideACheckoutAsksAboutTheCheckout() {
+		let t = tree(outer: "TM_GIT = \"/x/git\"\n", inner: nil)
+		XCTAssertEqual(TMFolderTrust.shared.folderToAskAbout(startingAt: t.inner), t.outer)
+	}
+
+	func testTheNearestUnansweredFolderIsAskedFirst() {
+		let t = tree(outer: "TM_GIT = \"/x/git\"\n", inner: "TM_RUBY = \"/x/ruby\"\n")
+		XCTAssertEqual(TMFolderTrust.shared.folderToAskAbout(startingAt: t.inner), t.inner)
+		// Once that is answered, the next one up is the question.
+		TMFolderTrust.shared.refuse(t.inner)
+		XCTAssertEqual(TMFolderTrust.shared.folderToAskAbout(startingAt: t.inner), t.outer)
+	}
+
+	// Trust is a prefix, so vouching for the checkout answers for everything in it,
+	// including an inner folder with a file of its own.
+	func testATrustedCheckoutAnswersForWhatIsInsideIt() {
+		let t = tree(outer: "TM_GIT = \"/x/git\"\n", inner: "TM_RUBY = \"/x/ruby\"\n")
+		TMFolderTrust.shared.trust(t.outer)
+		XCTAssertNil(TMFolderTrust.shared.folderToAskAbout(startingAt: t.inner))
+	}
+
+	// The control: with nothing that sets a variable anywhere on the way up there
+	// is nothing to ask, so the tests above are about the walk and not a default.
+	func testNothingToAskWhenNoFileSetsAVariable() {
+		let t = tree(outer: "tabSize = 3\n", inner: nil)
+		XCTAssertNil(TMFolderTrust.shared.folderToAskAbout(startingAt: t.inner))
+	}
+
 	// Comments and section headers are not assignments. Treating `[ *.cc ]` as one
 	// would ask about every project file that uses a section, which is most of
 	// them, and a prompt nobody can act on teaches people to dismiss it.

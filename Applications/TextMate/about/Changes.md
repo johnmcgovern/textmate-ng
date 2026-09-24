@@ -2,6 +2,43 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-24 (v2026.9-alpha.35)
+
+**Only this project's own plug-ins load now, the download is 40% smaller, and
+folder trust can be reviewed in Settings.** Six commits since alpha.34. If you
+are on alpha.24 or later this should arrive on its own.
+
+What is in it:
+
+* **Third-party plug-ins no longer load.** TextMate-NG loaded, at launch, any
+  plug-in placed in `~/Library/Application Support/TextMate/PlugIns` — a folder
+  any program on your Mac can write to — and ran it inside the editor with the
+  editor's permissions. That was tested by placing one there before this was
+  changed; it ran. Now only plug-ins signed by this project's developer load,
+  which covers everything the application ships with. **If you used a
+  third-party plug-in such as Emmet, it will stop working**, and installing one
+  now says why instead of appearing to succeed.
+* **Settings ▸ Variables ▸ Project Folders** lists every folder you have
+  answered the folder-trust question for. Tick or untick *Allowed* to change
+  your answer, or remove a folder to be asked again the next time it opens. The
+  prompt itself is also better behaved: opening a single file from inside a
+  project now asks about the project, two windows on the same project ask once
+  rather than twice, and the log no longer fills with the same line.
+* **The download is 12 MB, down from 20; installed, 20 MB down from 33.**
+  Document icons in Finder are now drawn by macOS from the application icon —
+  **so files TextMate-NG opens by default look different** — instead of 54
+  separate icon files that were a quarter of the application. A helper for the
+  commit window had been built with far more than it used and is now a
+  seventieth of its size.
+* **The About window's Contributions tab no longer contacts anyone.** It showed
+  every commit since 2012, each with a picture fetched from gravatar.com —
+  over a thousand requests to a third party every time it was opened. It is now
+  a plain list of the people who have contributed.
+
+**Where to look if something is off.** Settings ▸ Variables, with a project that
+has its own `.tm_properties`. Anything you had installed under
+`~/Library/Application Support/TextMate/PlugIns`. About ▸ Contributions.
+
 ## 2026-09-23 (v2026.9-alpha.34)
 
 **Two follow-ups to alpha.33, both found by testing it.** Six commits since

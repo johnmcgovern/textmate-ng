@@ -1,4 +1,5 @@
 import AppKit
+import Security
 
 // Ported from TMPlugInController.mm (2026-09-01). Loads and installs .tmplugin
 // bundles. The C++ it used to hold is in TMPlugInSupport; the class itself is
@@ -58,6 +59,53 @@ class TMPlugInController: NSObject, TMPlugInControllerProtocol {
 		return alert.runModal()
 	}
 
+	// ============================================================
+	// = Whether a plug-in can be loaded at all                    =
+	// ============================================================
+	//
+	// **Only plug-ins signed by this application's own team load.** Until
+	// 2026-09-23 the application disabled library validation so third-party
+	// plug-ins could load — which meant it loaded, at launch, any bundle placed in
+	// ~/Library/Application Support/TextMate/PlugIns, a folder anything running as
+	// the user can write to. A probe dropped there ran inside the notarized
+	// alpha.34. Validation is on now, and the system refuses such a bundle at
+	// dlopen whatever this code does.
+	//
+	// This asks the same question first, so the answer is a sentence rather than
+	// a dlopen failure: install says why it cannot, and launch logs one clear line
+	// instead of attempting a load that cannot succeed. The requirement is the one
+	// validation enforces — a certificate chain to Apple naming our Team ID.
+	//
+	// An ad-hoc developer build has no Team ID and keeps validation relaxed (see
+	// Entitlements.plist), so there is nothing to match and everything is allowed,
+	// exactly as the system will allow it.
+
+	private static let ownTeamIdentifier: String? = {
+		var code: SecCode?
+		guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+		var staticCode: SecStaticCode?
+		guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+		var info: CFDictionary?
+		guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+		      let dict = info as? [String: Any] else { return nil }
+		return dict[kSecCodeInfoTeamIdentifier as String] as? String
+	}()
+
+	static func plugInIsLoadable(atPath path: String) -> Bool {
+		guard let team = ownTeamIdentifier else {
+			return true
+		}
+		var staticCode: SecStaticCode?
+		guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: path) as CFURL, [], &staticCode) == errSecSuccess, let staticCode else {
+			return false
+		}
+		var requirement: SecRequirement?
+		guard SecRequirementCreateWithString("anchor apple generic and certificate leaf[subject.OU] = \"\(team)\"" as CFString, [], &requirement) == errSecSuccess, let requirement else {
+			return false
+		}
+		return SecStaticCodeCheckValidity(staticCode, SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSCheckNestedCode), requirement) == errSecSuccess
+	}
+
 	private static func alert(_ messageText: String, _ informativeText: String, buttons: [String]) -> NSApplication.ModalResponse {
 		return MainActor.assumeIsolated { runAlert(messageText, informativeText, buttons: buttons) }
 	}
@@ -107,6 +155,13 @@ class TMPlugInController: NSObject, TMPlugInControllerProtocol {
 
 		guard (bundle.object(forInfoDictionaryKey: "TMPlugInAPIVersion") as? NSNumber)?.intValue == TMPlugInController.kPlugInAPIVersion else {
 			NSLog("Skip incompatible plug-in: %@, path %@", name ?? identifier, aPath)
+			return
+		}
+
+		// Before the crash marker below, so a plug-in that could never load is not
+		// mistaken for one that crashed while loading.
+		guard Self.plugInIsLoadable(atPath: aPath) else {
+			NSLog("Skip plug-in not signed by this application's developer: %@, path %@", name ?? identifier, aPath)
 			return
 		}
 
@@ -181,6 +236,14 @@ class TMPlugInController: NSObject, TMPlugInControllerProtocol {
 		let blacklist = UserDefaults.standard.stringArray(forKey: TMPlugInController.kUserDefaultsDisabledPlugInsKey)
 		if let identifier = plugInBundle?.object(forInfoDictionaryKey: "CFBundleIdentifier") as? String, blacklist?.contains(identifier) == true {
 			_ = Self.alert("Cannot Install Plug-in", "The \(plugInName) plug-in should not be used with this version of TextMate because of stability problems.", buttons: ["Continue"])
+			return
+		}
+
+		// Refused here rather than installed and then silently skipped at launch:
+		// copying it and asking for a relaunch would promise something the system
+		// will not allow.
+		if !Self.plugInIsLoadable(atPath: src) {
+			_ = Self.alert("Cannot Install Plug-in", "“\(plugInName)” is not signed by the developer of TextMate-NG, so this version cannot load it.\n\nTextMate-NG only loads plug-ins signed by its own developer. Any program on your Mac can place a plug-in where TextMate-NG would load it, so allowing others would let that program run inside the editor.", buttons: ["Continue"])
 			return
 		}
 

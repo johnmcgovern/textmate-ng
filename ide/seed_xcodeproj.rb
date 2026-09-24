@@ -542,7 +542,12 @@ def generate_entitlements(name, src_rel)
   out_rel = "#{GEN_INCLUDE.sub('include', 'entitlements')}/#{name}.plist"
   out_abs = File.join(ROOT, out_rel)
   FileUtils.mkdir_p(File.dirname(out_abs))
-  File.write(out_abs, File.read(File.join(ROOT, src_rel)).gsub("${CS_GET_TASK_ALLOW}", "false"))
+  text = File.read(File.join(ROOT, src_rel)).gsub("${CS_GET_TASK_ALLOW}", "false")
+  # Library validation is relaxed only for ad-hoc builds — see the comment in the
+  # entitlements file. With a real identity the Team IDs match and the relaxation
+  # would only serve to load code from someone else.
+  text = text.gsub(/^[ \t]*<!-- BEGIN ADHOC-ONLY -->.*?<!-- END ADHOC-ONLY -->\n/m, "") if ENV["TM_CODE_SIGN_IDENTITY"]
+  File.write(out_abs, text)
   out_rel
 end
 
@@ -554,22 +559,20 @@ end
 # to satisfy with an ad-hoc signature, which carries no Team ID at all.
 #
 # So this is what keeps a plain unsigned `xcodebuild` build usable. With a real
-# Developer ID the Team IDs match and it becomes redundant; it is kept regardless
-# because the app itself needs the same entitlement permanently for third-party
-# plug-ins (NOTARIZATION_HANDOFF.md §2a finding ③), so nested tools sharing it
-# widens nothing that is not already true of the process loading them.
+# Developer ID the Team IDs match and it is redundant, so since 2026-09-23 it is
+# left out: the application no longer relaxes validation for third-party
+# plug-ins either, which was the reason this used to be kept regardless.
 def generate_nested_entitlements
   out_rel = "#{GEN_INCLUDE.sub('include', 'entitlements')}/NestedTool.plist"
   out_abs = File.join(ROOT, out_rel)
   FileUtils.mkdir_p(File.dirname(out_abs))
+  relax = ENV["TM_CODE_SIGN_IDENTITY"] ? "" : "\t<key>com.apple.security.cs.disable-library-validation</key>\n\t<true/>\n"
   File.write(out_abs, <<~PLIST)
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
     <plist version="1.0">
     <dict>
-    \t<key>com.apple.security.cs.disable-library-validation</key>
-    \t<true/>
-    </dict>
+    #{relax}</dict>
     </plist>
   PLIST
   out_rel

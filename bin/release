@@ -128,6 +128,21 @@ xcrun stapler validate "$APP" >/dev/null 2>&1 || {
 spctl --assess --type execute "$APP" >/dev/null 2>&1 || {
   echo "error: Gatekeeper does not accept $APP" >&2; exit 1; }
 
+# No binary in the shipped app may relax library validation. With it relaxed,
+# the application loads code that is not signed by its own team — which is how a
+# plug-in dropped into the user-writable PlugIns folder ran inside alpha.34. The
+# seed strips it for Developer ID builds; this is the check that it did, over
+# every Mach-O in the bundle rather than only the main executable.
+RELAXED=$(find "$APP/Contents" -type f -perm +111 2>/dev/null | while read -r f; do
+  file -b "$f" | grep -q 'Mach-O' || continue
+  codesign -d --entitlements - --xml "$f" 2>/dev/null | grep -q 'disable-library-validation' && echo "${f#$APP/}"
+done)
+[ -z "$RELAXED" ] || {
+  echo "error: these binaries relax library validation, which a release must not:" >&2
+  printf '         %s\n' $RELAXED >&2
+  echo "       re-seed with TM_CODE_SIGN_IDENTITY set, then rebuild" >&2
+  exit 1; }
+
 # The bundles a first run unpacks have to be the ones currently published.
 #
 # The build restages them only when the published index changes, and records the

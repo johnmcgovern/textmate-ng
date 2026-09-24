@@ -11,8 +11,27 @@
 	     same address. -->
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
+	<!-- Library validation: relaxed in ad-hoc developer builds only.
+
+	     This was on in every build until 2026-09-23, for third-party plug-ins. It
+	     meant the application loaded, at launch, any bundle it found in
+	     ~/Library/Application Support/TextMate/PlugIns — a folder anything running
+	     as the user can write to — and ran it with the application's automation
+	     rights and whatever file access the user had granted it. Proved before
+	     removing it: an ad-hoc-signed probe dropped there ran inside the notarized
+	     alpha.34. Everything the application ships is signed with the release
+	     Team ID, so with validation on only code from that team loads; a
+	     third-party plug-in no longer does.
+
+	     The block below survives only when no signing identity is configured.
+	     An ad-hoc signature carries no Team ID, so validation would reject the
+	     application's own embedded dylibs and a plain `xcodebuild` would not
+	     launch. ide/seed_xcodeproj.rb strips the block for Developer ID builds,
+	     and bin/release refuses any build that still has it. -->
+	<!-- BEGIN ADHOC-ONLY -->
 	<key>com.apple.security.cs.disable-library-validation</key>
 	<true/>
+	<!-- END ADHOC-ONLY -->
 	<key>com.apple.security.get-task-allow</key>
 	<${CS_GET_TASK_ALLOW}/>
 </dict>

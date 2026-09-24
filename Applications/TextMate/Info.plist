@@ -64,11 +64,16 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Document icons are drawn by macOS from the application icon
+	     (CFBundleTypeIconSystemGenerated), and the TextMate types it exports carry
+	     a short UTTypeIconText label. Until 2026-09-23 each type named its own
+	     .icns from the icons submodule: 54 files, 5.9 MB, a quarter of the app, used
+	     only by Finder — and 30 of the names they gave did not ship at all. The
+	     in-app icons in tabs and the file browser come from Resources/DocumentTypes
+	     (TMFileReference) and are unaffected. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>ADA</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -77,10 +82,10 @@
 			<array>
 				<string>public.ada-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>AppleScript</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -89,10 +94,10 @@
 			<array>
 				<string>com.apple.applescript.text</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>AppleScript</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -101,10 +106,10 @@
 			<array>
 				<string>com.apple.applescript.script</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>ActionScript</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -113,10 +118,10 @@
 			<array>
 				<string>com.adobe.actionscript</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>ASP</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -125,10 +130,10 @@
 			<array>
 				<string>com.microsoft.asp</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>ASPNET</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -137,10 +142,10 @@
 			<array>
 				<string>com.microsoft.asp.net</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>BibTeX</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -149,10 +154,10 @@
 			<array>
 				<string>org.tug.tex.bibtex</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>C</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -161,10 +166,10 @@
 			<array>
 				<string>public.c-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>C++</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -173,10 +178,10 @@
 			<array>
 				<string>public.c-plus-plus-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>C#</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -185,10 +190,10 @@
 			<array>
 				<string>com.microsoft.c-sharp</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>CoffeeScript</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -197,10 +202,10 @@
 			<array>
 				<string>org.coffeescript.coffeescript</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>CFDG</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -209,10 +214,10 @@
 			<array>
 				<string>org.contextfreeart.contextfree</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Text</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -221,10 +226,10 @@
 			<array>
 				<string>public.comma-separated-values-text</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Text</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -233,10 +238,10 @@
 			<array>
 				<string>public.tab-separated-values-text</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>CGI</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -245,10 +250,10 @@
 			<array>
 				<string>com.macromates.textmate.cgi-script</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Config</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -257,10 +262,10 @@
 			<array>
 				<string>com.macromates.textmate.config-file</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>CSS</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -269,10 +274,10 @@
 			<array>
 				<string>org.w3.css</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Blank</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -281,10 +286,10 @@
 			<array>
 				<string>org.dlang.d</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Diff</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -293,10 +298,10 @@
 			<array>
 				<string>public.patch-file</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>DTD</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -305,10 +310,10 @@
 			<array>
 				<string>org.w3.xml-dtd</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Dylan</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -317,10 +322,10 @@
 			<array>
 				<string>public.dylan-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Erlang</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -329,10 +334,10 @@
 			<array>
 				<string>org.erlang.erlang</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>F-Script</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -341,10 +346,10 @@
 			<array>
 				<string>org.fscript.fscript</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Fortran</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -353,10 +358,10 @@
 			<array>
 				<string>public.fortran-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Fortran</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -365,10 +370,10 @@
 			<array>
 				<string>public.fortran-77-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Fortran</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -377,10 +382,10 @@
 			<array>
 				<string>public.fortran-90-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Fortran</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -389,10 +394,10 @@
 			<array>
 				<string>public.fortran-95-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>H</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -401,10 +406,10 @@
 			<array>
 				<string>public.c-header</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>H++</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -413,10 +418,10 @@
 			<array>
 				<string>public.c-plus-plus-header</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>GTD</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -425,10 +430,10 @@
 			<array>
 				<string>com.macromates.textmate.gtd</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Haskell</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -437,10 +442,10 @@
 			<array>
 				<string>org.haskell.haskell</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>HTML</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -449,10 +454,10 @@
 			<array>
 				<string>public.html</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Inc</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -461,10 +466,10 @@
 			<array>
 				<string>com.macromates.textmate.include-file</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>iCal</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -473,10 +478,10 @@
 			<array>
 				<string>com.apple.ical.ics</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>INI</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -485,10 +490,10 @@
 			<array>
 				<string>com.microsoft.ini</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Io</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -497,10 +502,10 @@
 			<array>
 				<string>org.iolanguage.io</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Java</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -509,10 +514,10 @@
 			<array>
 				<string>com.sun.java-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Java</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -521,10 +526,10 @@
 			<array>
 				<string>org.beanshell.beanshell</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Java</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -533,10 +538,10 @@
 			<array>
 				<string>com.sun.java-properties</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>JavaScript</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -545,10 +550,10 @@
 			<array>
 				<string>com.netscape.javascript-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>JSP</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -557,10 +562,10 @@
 			<array>
 				<string>com.sun.java-server-pages</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>JSON</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -569,10 +574,10 @@
 			<array>
 				<string>public.json</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Blank</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -581,10 +586,10 @@
 			<array>
 				<string>org.ietf.ldap-data-interchange-format</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Lisp</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -593,10 +598,10 @@
 			<array>
 				<string>com.macromates.textmate.lisp</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Blank</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -605,10 +610,10 @@
 			<array>
 				<string>com.apple.log</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Logo</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -617,10 +622,10 @@
 			<array>
 				<string>com.macromates.textmate.logo</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Lua</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -629,10 +634,10 @@
 			<array>
 				<string>org.lua.lua</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Markdown</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -641,10 +646,10 @@
 			<array>
 				<string>net.daringfireball.markdown</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Wiki</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -653,10 +658,10 @@
 			<array>
 				<string>org.mediawiki.wiki-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>ASM</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -665,10 +670,10 @@
 			<array>
 				<string>com.mips.mips-assembler</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Modula</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -677,10 +682,10 @@
 			<array>
 				<string>com.dec.modula-3</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Wiki</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -689,10 +694,10 @@
 			<array>
 				<string>in.moinmo.wiki-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Obj-C</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -701,10 +706,10 @@
 			<array>
 				<string>public.objective-c-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Obj-C++</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -713,10 +718,10 @@
 			<array>
 				<string>public.objective-c-plus-plus-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>OCaml</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -725,10 +730,10 @@
 			<array>
 				<string>org.ocaml.ocaml</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Pascal</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -737,10 +742,10 @@
 			<array>
 				<string>public.pascal-source</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Perl</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -749,10 +754,10 @@
 			<array>
 				<string>public.perl-script</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>PHP</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -761,10 +766,10 @@
 			<array>
 				<string>public.php-script</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>PostScript</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -773,10 +778,10 @@
 			<array>
 				<string>com.adobe.postscript</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>PostScript</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -785,10 +790,10 @@
 			<array>
 				<string>com.adobe.encapsulated-postscript</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Plist</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -797,10 +802,10 @@
 			<array>
 				<string>com.apple.property-list</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Python</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -809,10 +814,10 @@
 			<array>
 				<string>public.python-script</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>R</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -821,10 +826,10 @@
 			<array>
 				<string>org.r-project.r</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Ragel</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -833,10 +838,10 @@
 			<array>
 				<string>org.complang.ragel</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Blank</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -845,10 +850,10 @@
 			<array>
 				<string>com.roaringpenguin.remind</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>reST</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -857,10 +862,10 @@
 			<array>
 				<string>org.python.restructuredtext</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>RHTML</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -869,10 +874,10 @@
 			<array>
 				<string>org.ruby-lang.eruby</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>SQL</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -881,10 +886,10 @@
 			<array>
 				<string>org.rubyonrails.erb-sql</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Ruby</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -893,10 +898,10 @@
 			<array>
 				<string>public.ruby-script</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Scheme</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -905,10 +910,10 @@
 			<array>
 				<string>com.macromates.textmate.scheme</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Blank</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -917,10 +922,10 @@
 			<array>
 				<string>com.macromates.textmate.setext</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Shell</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -929,10 +934,10 @@
 			<array>
 				<string>public.shell-script</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Slate</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -941,10 +946,10 @@
 			<array>
 				<string>org.slatelanguage.slate</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>SQL</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -953,10 +958,10 @@
 			<array>
 				<string>org.iso.sql</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>SML</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -965,10 +970,10 @@
 			<array>
 				<string>com.macromates.textmate.standard-ml</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Strings</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -977,10 +982,10 @@
 			<array>
 				<string>com.apple.xcode.strings-text</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>SVG</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -989,10 +994,10 @@
 			<array>
 				<string>public.svg-image</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>SWIG</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1001,10 +1006,10 @@
 			<array>
 				<string>org.swig.swig</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Tcl</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1013,10 +1018,10 @@
 			<array>
 				<string>tk.tcl.tcl</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TeX</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1025,10 +1030,10 @@
 			<array>
 				<string>org.tug.tex</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Text</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1037,10 +1042,10 @@
 			<array>
 				<string>public.plain-text</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Textile</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1049,10 +1054,10 @@
 			<array>
 				<string>com.textpattern.textile</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>XHTML</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1061,10 +1066,10 @@
 			<array>
 				<string>public.xhtml</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>XML</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1073,10 +1078,10 @@
 			<array>
 				<string>public.xml</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>XSL</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1085,10 +1090,10 @@
 			<array>
 				<string>org.w3.xsl</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Blank</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1097,10 +1102,10 @@
 			<array>
 				<string>public.vcard</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>VisualBasic</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1109,10 +1114,10 @@
 			<array>
 				<string>com.microsoft.visual-basic</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>YAML</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1121,10 +1126,10 @@
 			<array>
 				<string>org.yaml.yaml</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TextMate Snippet</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1133,10 +1138,10 @@
 			<array>
 				<string>com.macromates.textmate.snippet</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TextMate Macro</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1145,10 +1150,10 @@
 			<array>
 				<string>com.macromates.textmate.macro</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TextMate Grammar</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1157,10 +1162,10 @@
 			<array>
 				<string>com.macromates.textmate.language</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TextMate Settings</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1169,10 +1174,10 @@
 			<array>
 				<string>com.macromates.textmate.preferences</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TextMate Command</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1181,10 +1186,10 @@
 			<array>
 				<string>com.macromates.textmate.command</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TextMate Bundle Item</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1193,10 +1198,10 @@
 			<array>
 				<string>com.macromates.textmate.drag-command</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TextMate Theme</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1205,10 +1210,10 @@
 			<array>
 				<string>com.macromates.textmate.theme</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>Text</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1217,10 +1222,10 @@
 			<array>
 				<string>com.macromates.textmate.release-notes</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TextMate Bundle</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1229,10 +1234,10 @@
 			<array>
 				<string>com.macromates.textmate.bundle</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>TextMate PlugIn</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -1241,18 +1246,20 @@
 			<array>
 				<string>com.macromates.textmate.plugin</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
 			<key>CFBundleTypeExtensions</key>
 			<array>
 				<string>nfo</string>
 			</array>
-			<key>CFBundleTypeIconFile</key>
-			<string>Text</string>
 			<key>CFBundleTypeName</key>
 			<string>Text document</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
 			<key>CFBundleTypeExtensions</key>
@@ -1270,12 +1277,12 @@
 				<string>fxscript</string>
 				<string>lgt</string>
 			</array>
-			<key>CFBundleTypeIconFile</key>
-			<string>Blank</string>
 			<key>CFBundleTypeName</key>
 			<string>Source</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
 			<key>CFBundleTypeExtensions</key>
@@ -1307,16 +1314,14 @@
 				<string>yy</string>
 				<string>*</string>
 			</array>
-			<key>CFBundleTypeIconFile</key>
-			<string>Blank</string>
 			<key>CFBundleTypeName</key>
 			<string>Document</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
-			<key>CFBundleTypeIconFile</key>
-			<string>GenericDocumentIcon</string>
 			<key>CFBundleTypeName</key>
 			<string>Document</string>
 			<key>CFBundleTypeOSTypes</key>
@@ -1329,6 +1334,8 @@
 			<array>
 				<string>public.data</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
 			<key>CFBundleTypeRole</key>
@@ -1339,6 +1346,8 @@
 				<string>com.apple.bundle</string>
 				<string>com.apple.resolvable</string>
 			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
 		</dict>
 	</array>
 	<key>UTImportedTypeDeclarations</key>
@@ -1350,8 +1359,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Ada source</string>
-			<key>UTTypeIconFile</key>
-			<string>ADA</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.ada-source</string>
 			<key>UTTypeReferenceURL</key>
@@ -1375,8 +1382,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>AppleScript source</string>
-			<key>UTTypeIconFile</key>
-			<string>AppleScript</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.apple.applescript.text</string>
 			<key>UTTypeTagSpecification</key>
@@ -1394,8 +1399,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Compiled AppleScript</string>
-			<key>UTTypeIconFile</key>
-			<string>AppleScript</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.apple.applescript.script</string>
 			<key>UTTypeTagSpecification</key>
@@ -1415,8 +1418,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>ActionScript source</string>
-			<key>UTTypeIconFile</key>
-			<string>ActionScript</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.adobe.actionscript</string>
 			<key>UTTypeReferenceURL</key>
@@ -1438,8 +1439,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>ASP document</string>
-			<key>UTTypeIconFile</key>
-			<string>ASP</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.microsoft.asp</string>
 			<key>UTTypeReferenceURL</key>
@@ -1460,8 +1459,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>ASP.NET document</string>
-			<key>UTTypeIconFile</key>
-			<string>ASPNET</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.microsoft.asp.net</string>
 			<key>UTTypeReferenceURL</key>
@@ -1484,8 +1481,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>BibTeX Database</string>
-			<key>UTTypeIconFile</key>
-			<string>BibTeX</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.tug.tex.bibtex</string>
 			<key>UTTypeTagSpecification</key>
@@ -1503,8 +1498,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>C source</string>
-			<key>UTTypeIconFile</key>
-			<string>C</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.c-source</string>
 			<key>UTTypeTagSpecification</key>
@@ -1522,8 +1515,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>C++ source</string>
-			<key>UTTypeIconFile</key>
-			<string>C++</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.c-plus-plus-source</string>
 			<key>UTTypeTagSpecification</key>
@@ -1545,8 +1536,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>C# source</string>
-			<key>UTTypeIconFile</key>
-			<string>C#</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.microsoft.c-sharp</string>
 			<key>UTTypeReferenceURL</key>
@@ -1566,8 +1555,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>CoffeeScript source</string>
-			<key>UTTypeIconFile</key>
-			<string>CoffeeScript</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.coffeescript.coffeescript</string>
 			<key>UTTypeReferenceURL</key>
@@ -1587,8 +1574,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>ContextFree Design Document</string>
-			<key>UTTypeIconFile</key>
-			<string>CFDG</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.contextfreeart.contextfree</string>
 			<key>UTTypeReferenceURL</key>
@@ -1618,8 +1603,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Comma Separated Values</string>
-			<key>UTTypeIconFile</key>
-			<string>Text</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.comma-separated-values-text</string>
 			<key>UTTypeReferenceURL</key>
@@ -1644,8 +1627,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Tab Separated Values</string>
-			<key>UTTypeIconFile</key>
-			<string>Text</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.tab-separated-values-text</string>
 			<key>UTTypeTagSpecification</key>
@@ -1665,8 +1646,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>CGI script</string>
-			<key>UTTypeIconFile</key>
-			<string>CGI</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.cgi-script</string>
 			<key>UTTypeTagSpecification</key>
@@ -1685,8 +1664,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Configuration file</string>
-			<key>UTTypeIconFile</key>
-			<string>Config</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.config-file</string>
 			<key>UTTypeTagSpecification</key>
@@ -1707,8 +1684,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Cascading Style Sheet</string>
-			<key>UTTypeIconFile</key>
-			<string>CSS</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.w3.css</string>
 			<key>UTTypeReferenceURL</key>
@@ -1730,8 +1705,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>D source</string>
-			<key>UTTypeIconFile</key>
-			<string>D</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.dlang.d</string>
 			<key>UTTypeReferenceURL</key>
@@ -1752,8 +1725,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Differences File</string>
-			<key>UTTypeIconFile</key>
-			<string>Diff</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.patch-file</string>
 			<key>UTTypeReferenceURL</key>
@@ -1773,8 +1744,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Document Type Definition</string>
-			<key>UTTypeIconFile</key>
-			<string>DTD</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.w3.xml-dtd</string>
 			<key>UTTypeReferenceURL</key>
@@ -1796,8 +1765,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Dylan source</string>
-			<key>UTTypeIconFile</key>
-			<string>Dylan</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.dylan-source</string>
 			<key>UTTypeReferenceURL</key>
@@ -1817,8 +1784,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Erlang source</string>
-			<key>UTTypeIconFile</key>
-			<string>Erlang</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.erlang.erlang</string>
 			<key>UTTypeReferenceURL</key>
@@ -1839,8 +1804,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>F-Script source</string>
-			<key>UTTypeIconFile</key>
-			<string>F-Script</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.fscript.fscript</string>
 			<key>UTTypeReferenceURL</key>
@@ -1860,8 +1823,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Fortran source</string>
-			<key>UTTypeIconFile</key>
-			<string>Fortran</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.fortran-source</string>
 			<key>UTTypeTagSpecification</key>
@@ -1881,8 +1842,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Fortran source</string>
-			<key>UTTypeIconFile</key>
-			<string>Fortran</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.fortran-77-source</string>
 			<key>UTTypeTagSpecification</key>
@@ -1900,8 +1859,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Fortran source</string>
-			<key>UTTypeIconFile</key>
-			<string>Fortran</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.fortran-90-source</string>
 			<key>UTTypeTagSpecification</key>
@@ -1919,8 +1876,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Fortran source</string>
-			<key>UTTypeIconFile</key>
-			<string>Fortran</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.fortran-95-source</string>
 			<key>UTTypeTagSpecification</key>
@@ -1938,8 +1893,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Header</string>
-			<key>UTTypeIconFile</key>
-			<string>H</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.c-header</string>
 			<key>UTTypeTagSpecification</key>
@@ -1958,8 +1911,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>C++ Header</string>
-			<key>UTTypeIconFile</key>
-			<string>H++</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.c-plus-plus-header</string>
 			<key>UTTypeTagSpecification</key>
@@ -1980,8 +1931,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>GTD document</string>
-			<key>UTTypeIconFile</key>
-			<string>GTD</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.gtd</string>
 			<key>UTTypeReferenceURL</key>
@@ -2002,8 +1951,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Haskell source</string>
-			<key>UTTypeIconFile</key>
-			<string>Haskell</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.haskell.haskell</string>
 			<key>UTTypeReferenceURL</key>
@@ -2024,8 +1971,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>HTML document</string>
-			<key>UTTypeIconFile</key>
-			<string>HTML</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.html</string>
 			<key>UTTypeReferenceURL</key>
@@ -2052,8 +1997,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Include file</string>
-			<key>UTTypeIconFile</key>
-			<string>Inc</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.include-file</string>
 			<key>UTTypeTagSpecification</key>
@@ -2073,8 +2016,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>iCalendar schedule</string>
-			<key>UTTypeIconFile</key>
-			<string>iCal</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.apple.ical.ics</string>
 			<key>UTTypeReferenceURL</key>
@@ -2097,8 +2038,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>MS Windows initialization file</string>
-			<key>UTTypeIconFile</key>
-			<string>INI</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.microsoft.ini</string>
 			<key>UTTypeTagSpecification</key>
@@ -2116,8 +2055,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Io source</string>
-			<key>UTTypeIconFile</key>
-			<string>Io</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.iolanguage.io</string>
 			<key>UTTypeReferenceURL</key>
@@ -2137,8 +2074,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Java source</string>
-			<key>UTTypeIconFile</key>
-			<string>Java</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.sun.java-source</string>
 			<key>UTTypeReferenceURL</key>
@@ -2159,8 +2094,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>BeanShell script</string>
-			<key>UTTypeIconFile</key>
-			<string>Java</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.beanshell.beanshell</string>
 			<key>UTTypeReferenceURL</key>
@@ -2180,8 +2113,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Java Properties File</string>
-			<key>UTTypeIconFile</key>
-			<string>Java</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.sun.java-properties</string>
 			<key>UTTypeReferenceURL</key>
@@ -2202,8 +2133,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>JavaScript source</string>
-			<key>UTTypeIconFile</key>
-			<string>JavaScript</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.netscape.javascript-source</string>
 			<key>UTTypeReferenceURL</key>
@@ -2228,8 +2157,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Java Server Page</string>
-			<key>UTTypeIconFile</key>
-			<string>JSP</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.sun.java-server-pages</string>
 			<key>UTTypeReferenceURL</key>
@@ -2249,8 +2176,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>JSON file</string>
-			<key>UTTypeIconFile</key>
-			<string>JSON</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.json</string>
 			<key>UTTypeReferenceURL</key>
@@ -2272,8 +2197,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>LDAP Data Interchange Format</string>
-			<key>UTTypeIconFile</key>
-			<string>Blank</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.ietf.ldap-data-interchange-format</string>
 			<key>UTTypeReferenceURL</key>
@@ -2293,8 +2216,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Lisp source</string>
-			<key>UTTypeIconFile</key>
-			<string>Lisp</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.lisp</string>
 			<key>UTTypeTagSpecification</key>
@@ -2317,8 +2238,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Log File</string>
-			<key>UTTypeIconFile</key>
-			<string>Blank</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.apple.log</string>
 			<key>UTTypeTagSpecification</key>
@@ -2336,8 +2255,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Logo source</string>
-			<key>UTTypeIconFile</key>
-			<string>Logo</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.logo</string>
 			<key>UTTypeTagSpecification</key>
@@ -2355,8 +2272,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Lua source</string>
-			<key>UTTypeIconFile</key>
-			<string>Lua</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.lua.lua</string>
 			<key>UTTypeReferenceURL</key>
@@ -2376,8 +2291,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Markdown document</string>
-			<key>UTTypeIconFile</key>
-			<string>Markdown</string>
 			<key>UTTypeIdentifier</key>
 			<string>net.daringfireball.markdown</string>
 			<key>UTTypeReferenceURL</key>
@@ -2400,8 +2313,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Mediawiki document</string>
-			<key>UTTypeIconFile</key>
-			<string>Wiki</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.mediawiki.wiki-source</string>
 			<key>UTTypeReferenceURL</key>
@@ -2423,8 +2334,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>MIPS assembler source</string>
-			<key>UTTypeIconFile</key>
-			<string>ASM</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.mips.mips-assembler</string>
 			<key>UTTypeTagSpecification</key>
@@ -2445,8 +2354,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Modula-3 source</string>
-			<key>UTTypeIconFile</key>
-			<string>Modula</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.dec.modula-3</string>
 			<key>UTTypeTagSpecification</key>
@@ -2465,8 +2372,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>MoinMoin document</string>
-			<key>UTTypeIconFile</key>
-			<string>Wiki</string>
 			<key>UTTypeIdentifier</key>
 			<string>in.moinmo.wiki-source</string>
 			<key>UTTypeReferenceURL</key>
@@ -2486,8 +2391,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Objective-C source</string>
-			<key>UTTypeIconFile</key>
-			<string>Obj-C</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.objective-c-source</string>
 			<key>UTTypeReferenceURL</key>
@@ -2507,8 +2410,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Objective-C++ source</string>
-			<key>UTTypeIconFile</key>
-			<string>Obj-C++</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.objective-c-plus-plus-source</string>
 			<key>UTTypeReferenceURL</key>
@@ -2528,8 +2429,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>OCaml source</string>
-			<key>UTTypeIconFile</key>
-			<string>OCaml</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.ocaml.ocaml</string>
 			<key>UTTypeReferenceURL</key>
@@ -2552,8 +2451,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Pascal source</string>
-			<key>UTTypeIconFile</key>
-			<string>Pascal</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.pascal-source</string>
 			<key>UTTypeTagSpecification</key>
@@ -2572,8 +2469,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Patch file</string>
-			<key>UTTypeIconFile</key>
-			<string>Patch</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.patch-file</string>
 			<key>UTTypeTagSpecification</key>
@@ -2591,8 +2486,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Perl source</string>
-			<key>UTTypeIconFile</key>
-			<string>Perl</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.perl-script</string>
 			<key>UTTypeReferenceURL</key>
@@ -2617,8 +2510,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>PHP source</string>
-			<key>UTTypeIconFile</key>
-			<string>PHP</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.php-script</string>
 			<key>UTTypeReferenceURL</key>
@@ -2649,8 +2540,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>PostScript</string>
-			<key>UTTypeIconFile</key>
-			<string>PostScript</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.adobe.postscript</string>
 			<key>UTTypeReferenceURL</key>
@@ -2672,8 +2561,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Encapsulated PostScript</string>
-			<key>UTTypeIconFile</key>
-			<string>PostScript</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.adobe.encapsulated-postscript</string>
 			<key>UTTypeReferenceURL</key>
@@ -2700,8 +2587,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Property List</string>
-			<key>UTTypeIconFile</key>
-			<string>Plist</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.apple.property-list</string>
 			<key>UTTypeReferenceURL</key>
@@ -2724,8 +2609,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Python source</string>
-			<key>UTTypeIconFile</key>
-			<string>Python</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.python-script</string>
 			<key>UTTypeReferenceURL</key>
@@ -2750,8 +2633,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>R source</string>
-			<key>UTTypeIconFile</key>
-			<string>R</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.r-project.r</string>
 			<key>UTTypeReferenceURL</key>
@@ -2772,8 +2653,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Ragel source</string>
-			<key>UTTypeIconFile</key>
-			<string>Ragel</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.complang.ragel</string>
 			<key>UTTypeReferenceURL</key>
@@ -2794,8 +2673,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Remind document</string>
-			<key>UTTypeIconFile</key>
-			<string>Blank</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.roaringpenguin.remind</string>
 			<key>UTTypeReferenceURL</key>
@@ -2816,8 +2693,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>reStructuredText document</string>
-			<key>UTTypeIconFile</key>
-			<string>reST</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.python.restructuredtext</string>
 			<key>UTTypeReferenceURL</key>
@@ -2838,8 +2713,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>HTML with embedded Ruby</string>
-			<key>UTTypeIconFile</key>
-			<string>RHTML</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.ruby-lang.eruby</string>
 			<key>UTTypeReferenceURL</key>
@@ -2859,8 +2732,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>SQL with embedded Ruby</string>
-			<key>UTTypeIconFile</key>
-			<string>SQL</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.rubyonrails.erb-sql</string>
 			<key>UTTypeTagSpecification</key>
@@ -2878,8 +2749,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Ruby source</string>
-			<key>UTTypeIconFile</key>
-			<string>Ruby</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.ruby-script</string>
 			<key>UTTypeReferenceURL</key>
@@ -2904,8 +2773,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Scheme source</string>
-			<key>UTTypeIconFile</key>
-			<string>Scheme</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.scheme</string>
 			<key>UTTypeReferenceURL</key>
@@ -2926,8 +2793,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Setext document</string>
-			<key>UTTypeIconFile</key>
-			<string>Blank</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.setext</string>
 			<key>UTTypeReferenceURL</key>
@@ -2947,8 +2812,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Shell script</string>
-			<key>UTTypeIconFile</key>
-			<string>Shell</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.shell-script</string>
 			<key>UTTypeTagSpecification</key>
@@ -2972,8 +2835,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Slate source</string>
-			<key>UTTypeIconFile</key>
-			<string>Slate</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.slatelanguage.slate</string>
 			<key>UTTypeReferenceURL</key>
@@ -2993,8 +2854,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>SQL source</string>
-			<key>UTTypeIconFile</key>
-			<string>SQL</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.iso.sql</string>
 			<key>UTTypeTagSpecification</key>
@@ -3014,8 +2873,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Standard ML source</string>
-			<key>UTTypeIconFile</key>
-			<string>SML</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.standard-ml</string>
 			<key>UTTypeTagSpecification</key>
@@ -3033,8 +2890,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Strings document</string>
-			<key>UTTypeIconFile</key>
-			<string>Strings</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.apple.xcode.strings-text</string>
 			<key>UTTypeTagSpecification</key>
@@ -3052,8 +2907,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Scalable vector graphics (SVG)</string>
-			<key>UTTypeIconFile</key>
-			<string>SVG</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.svg-image</string>
 			<key>UTTypeReferenceURL</key>
@@ -3081,8 +2934,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>SWIG source</string>
-			<key>UTTypeIconFile</key>
-			<string>SWIG</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.swig.swig</string>
 			<key>UTTypeReferenceURL</key>
@@ -3103,8 +2954,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Tcl source</string>
-			<key>UTTypeIconFile</key>
-			<string>Tcl</string>
 			<key>UTTypeIdentifier</key>
 			<string>tk.tcl.tcl</string>
 			<key>UTTypeReferenceURL</key>
@@ -3126,8 +2975,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>TeX document</string>
-			<key>UTTypeIconFile</key>
-			<string>TeX</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.tug.tex</string>
 			<key>UTTypeReferenceURL</key>
@@ -3149,8 +2996,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Plain text document</string>
-			<key>UTTypeIconFile</key>
-			<string>Text</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.plain-text</string>
 			<key>UTTypeTagSpecification</key>
@@ -3178,8 +3023,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Textile document</string>
-			<key>UTTypeIconFile</key>
-			<string>Textile</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.textpattern.textile</string>
 			<key>UTTypeTagSpecification</key>
@@ -3197,8 +3040,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>XHTML document</string>
-			<key>UTTypeIconFile</key>
-			<string>XHTML</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.xhtml</string>
 			<key>UTTypeReferenceURL</key>
@@ -3222,8 +3063,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>XML document</string>
-			<key>UTTypeIconFile</key>
-			<string>XML</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.xml</string>
 			<key>UTTypeReferenceURL</key>
@@ -3255,8 +3094,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>XSL stylesheet</string>
-			<key>UTTypeIconFile</key>
-			<string>XSL</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.w3.xsl</string>
 			<key>UTTypeReferenceURL</key>
@@ -3280,8 +3117,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Electronic business card</string>
-			<key>UTTypeIconFile</key>
-			<string>Blank</string>
 			<key>UTTypeIdentifier</key>
 			<string>public.vcard</string>
 			<key>UTTypeTagSpecification</key>
@@ -3310,8 +3145,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>VisualBasic</string>
-			<key>UTTypeIconFile</key>
-			<string>Visual Basic source</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.microsoft.visual-basic</string>
 			<key>UTTypeReferenceURL</key>
@@ -3331,8 +3164,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>YAML document</string>
-			<key>UTTypeIconFile</key>
-			<string>YAML</string>
 			<key>UTTypeIdentifier</key>
 			<string>org.yaml.yaml</string>
 			<key>UTTypeReferenceURL</key>
@@ -3356,8 +3187,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>TextMate Snippet</string>
-			<key>UTTypeIconFile</key>
-			<string>TextMate Snippet</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.snippet</string>
 			<key>UTTypeTagSpecification</key>
@@ -3367,6 +3196,11 @@
 					<string>tmSnippet</string>
 				</array>
 			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Snippet</string>
+			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
@@ -3374,8 +3208,6 @@
 				<string>com.apple.property-list</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>TextMate Macro</string>
-			<key>UTTypeIconFile</key>
 			<string>TextMate Macro</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.macro</string>
@@ -3386,6 +3218,11 @@
 					<string>tmMacro</string>
 				</array>
 			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Macro</string>
+			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
@@ -3394,8 +3231,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>TextMate Language Grammar</string>
-			<key>UTTypeIconFile</key>
-			<string>TextMate Grammar</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.language</string>
 			<key>UTTypeTagSpecification</key>
@@ -3405,6 +3240,11 @@
 					<string>tmLanguage</string>
 				</array>
 			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Grammar</string>
+			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
@@ -3413,8 +3253,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>TextMate Preferences</string>
-			<key>UTTypeIconFile</key>
-			<string>TextMate Settings</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.preferences</string>
 			<key>UTTypeTagSpecification</key>
@@ -3424,6 +3262,11 @@
 					<string>tmPreferences</string>
 				</array>
 			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Settings</string>
+			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
@@ -3431,8 +3274,6 @@
 				<string>com.apple.property-list</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>TextMate Command</string>
-			<key>UTTypeIconFile</key>
 			<string>TextMate Command</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.command</string>
@@ -3443,6 +3284,11 @@
 					<string>tmCommand</string>
 				</array>
 			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Command</string>
+			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
@@ -3451,8 +3297,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>TextMate Drag Command</string>
-			<key>UTTypeIconFile</key>
-			<string>TextMate Bundle Item</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.drag-command</string>
 			<key>UTTypeTagSpecification</key>
@@ -3462,6 +3306,11 @@
 					<string>tmDragCommand</string>
 				</array>
 			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Drag</string>
+			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
@@ -3469,8 +3318,6 @@
 				<string>com.apple.property-list</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>TextMate Theme</string>
-			<key>UTTypeIconFile</key>
 			<string>TextMate Theme</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.theme</string>
@@ -3482,6 +3329,11 @@
 					<string>tmtheme</string>
 				</array>
 			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Theme</string>
+			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
@@ -3490,8 +3342,6 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>TextMate release notes</string>
-			<key>UTTypeIconFile</key>
-			<string>Text</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.release-notes</string>
 			<key>UTTypeTagSpecification</key>
@@ -3501,6 +3351,11 @@
 					<string>tmReleaseNotes</string>
 				</array>
 			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Notes</string>
+			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
@@ -3508,8 +3363,6 @@
 				<string>com.apple.package</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>TextMate Bundle</string>
-			<key>UTTypeIconFile</key>
 			<string>TextMate Bundle</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.bundle</string>
@@ -3521,6 +3374,11 @@
 					<string>tmbundle</string>
 				</array>
 			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Bundle</string>
+			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
@@ -3528,8 +3386,6 @@
 				<string>com.apple.package</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>TextMate PlugIn</string>
-			<key>UTTypeIconFile</key>
 			<string>TextMate PlugIn</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.macromates.textmate.plugin</string>
@@ -3541,6 +3397,11 @@
 					<string>tmPlugin</string>
 					<string>tmplugin</string>
 				</array>
+			</dict>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Plug-in</string>
 			</dict>
 		</dict>
 	</array>

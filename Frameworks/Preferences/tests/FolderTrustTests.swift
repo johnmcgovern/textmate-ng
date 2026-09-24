@@ -90,6 +90,16 @@ final class FolderTrustTests: XCTestCase {
 		XCTAssertEqual(TMFolderTrust.shared.trustedFolders, ["/tmp/a", "/tmp/b"])
 	}
 
+	// Settings lists both answers, so each list has to hold exactly its own.
+	func testRefusedFoldersAreListedForSettingsSeparately() {
+		TMFolderTrust.shared.trust("/tmp/yes")
+		TMFolderTrust.shared.refuse("/tmp/no")
+		XCTAssertEqual(TMFolderTrust.shared.trustedFolders, ["/tmp/yes"])
+		XCTAssertEqual(TMFolderTrust.shared.refusedFolders, ["/tmp/no"])
+		TMFolderTrust.shared.trust("/tmp/no")
+		XCTAssertEqual(TMFolderTrust.shared.refusedFolders, [])
+	}
+
 	// What decides whether to ask at all. Approximate by design and in the safe
 	// direction: a false yes costs a prompt, a false no costs the point of having
 	// one.

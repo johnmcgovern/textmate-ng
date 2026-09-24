@@ -49,6 +49,7 @@ NS_ASSUME_NONNULL_BEGIN
 // Not the same as refusing: the folder is asked about again next time.
 - (void)forget:(NSString*)folder;
 @property (readonly) NSArray<NSString*>* trustedFolders;
+@property (readonly) NSArray<NSString*>* refusedFolders;
 // The nearest folder from here upward — stopping at home, as the settings walk
 // does — whose own .tm_properties would set environment variables and that
 // nobody has answered for. nil when there is nothing to ask.

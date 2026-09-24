@@ -103,6 +103,9 @@ final class FolderTrust: NSObject, @unchecked Sendable {
 
 	@objc var trustedFolders: [String] { Array(trusted).sorted() }
 
+	// For Settings, which lists both answers so either can be changed or forgotten.
+	@objc var refusedFolders: [String] { Array(refused).sorted() }
+
 	// The nearest folder, from `folder` upward, whose own `.tm_properties` would
 	// set environment variables and that nobody has answered for — or nil.
 	//

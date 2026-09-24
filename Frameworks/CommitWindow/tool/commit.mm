@@ -1,6 +1,13 @@
-#include <CommitWindow/CommitWindow.h>
-#include <CommitWindow/CWWire.h>
-#include <oak/oak.h>
+// Relative includes and no framework dependency, on purpose. Asking for
+// CommitWindow's headers used to make the build link the whole CommitWindow
+// framework and everything it requires — 43 static libraries and the Swift
+// runtime — into a program that opens a socket and sends one message. It was
+// 4.6 MB. The two things it needs are the key names, which are `static` in
+// CommitWindow.h, and CWWire.mm, which this target compiles itself.
+#import <Foundation/Foundation.h>
+#include "../src/CommitWindow.h"
+#include "../src/CWWire.h"
+#include <sysexits.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>

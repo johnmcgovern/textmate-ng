@@ -11,7 +11,9 @@ target "${dirname}" {
 }
 
 target "${dirname}Tool" {
-	require_headers CommitWindow
-	sources tool/*.mm
+	# No require: that would link the CommitWindow framework and its whole closure.
+	# CWWire.mm is compiled here as well as in the framework; see tool/commit.mm.
+	sources tool/*.mm src/CWWire.mm
+	frameworks Foundation
 	executable "${target}"
 }

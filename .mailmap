@@ -1,0 +1,23 @@
+# Canonical author identities, so one person is counted once — in `git shortlog`,
+# `git log --use-mailmap`, and the About ▸ Contributions page (which is built from
+# `git shortlog`). Left of each line is the name/email to show; the trailing
+# <email> (and optional name) is the commit identity it replaces. This changes
+# nothing in history, only how identities are displayed.
+
+# Same person, two email addresses
+Allan Odgaard <git@abetarda.com> <github@simplit.com>
+Ronald Wampler <rdwampler@gmail.com> <hannahwampler@Hannahs-Mac-mini.local>
+Jake Kirshner <jake.kirshner@gmail.com> <jake.kirshner@icloud.com>
+
+# Jacob Bandes-Storch committed as "jtbandes" and under two emails
+Jacob Bandes-Storch <jtbandes@gmail.com>
+Jacob Bandes-Storch <jtbandes@gmail.com> <jacob@bandes-stor.ch>
+
+# Names that also appear in a different Unicode form; map by email to unify both
+Boris Dušek <me@dusek.me>
+Boris Dušek <me@dusek.me> <dusek@brailcom.org>
+Martin Kühl <m.kuehl@ewerk.com>
+Martin Kühl <m.kuehl@ewerk.com> <martin.kuehl@gmail.com>
+
+# John McGovern's personal and work accounts
+John McGovern <johnmcg7@gmail.com> johnmcgovern-s1 <john.mcgovern@sentinelone.com>

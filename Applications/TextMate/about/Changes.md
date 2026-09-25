@@ -2,6 +2,39 @@ Title: Release Notes
 
 # Changes
 
+## 2026-09-25 (v2026.9-alpha.36)
+
+**The dialog plug-ins no longer accept commands from any program on your Mac, and
+the last deprecated web view is gone.** Nine commits since alpha.35, mostly
+security cleanup you should not notice. If you are on alpha.24 or later this
+should arrive on its own.
+
+What is in it:
+
+* **Dialogs, menus and HTML tooltips are now driven only over a private
+  channel.** Both dialog plug-ins — the current one and the legacy one that some
+  bundles still use — accepted requests through a mechanism any other program
+  running as you could reach; a request names the files a command reads and
+  writes, so this mattered. They now use a socket only your account can open, the
+  same fix already applied to the commit window and the `mate` command. Nothing
+  you do changes.
+* **HTML tooltips are drawn with the current web engine.** The tooltip a bundle
+  shows with `--html` was the last thing in the application still using Apple's
+  old, deprecated web view; it uses the same modern engine as the rest of the
+  editor now.
+* **Per-file state carries the project's own name.** Bookmarks, fold state and
+  the cursor position are remembered in a file's extended attributes; these moved
+  from a `com.macromates.*` name to `com.j23software.*`, to match the rest of the
+  application. **Your existing bookmarks and fold state are kept** — a file is
+  migrated the first time you open it. One consequence: this per-file state is no
+  longer shared with a separate TextMate 2 installation editing the same files.
+* **The Contributions list counts each person once.** A `.mailmap` folds together
+  the several names and email addresses some contributors committed under.
+
+**Where to look if something is off.** Any bundle command that shows a dialog,
+menu or `--html` tooltip (for example Bundles ▸ … ▸ commands that prompt). A file
+where you had set a bookmark or folded a section — both should still be there.
+
 ## 2026-09-24 (v2026.9-alpha.35)
 
 **Only this project's own plug-ins load now, the download is 40% smaller, and

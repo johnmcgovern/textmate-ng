@@ -10,9 +10,87 @@
 #import <string>
 #import <sys/stat.h>
 
+#import <sys/socket.h>
+#import <sys/un.h>
 #import "TMDSemaphore.h"
 #include "TMDSemaphore.mm"  // TODO we should really export this from the plugin instead and link against the plugin
 #import "Dialog.h"
+#import "Dialog1Wire.h"
+
+// A stand-in for the Distributed Objects rootProxy. Each protocol method is one
+// socket round trip to the plug-in: connect, send { method, arguments }, read
+// { result }, close. The call sites below are unchanged — they still send these
+// selectors to `proxy` and use the returned property lists. See Dialog1Wire.h.
+@interface TMDialog1Client : NSObject <TextMateDialogServerProtocol>
+@end
+
+@implementation TMDialog1Client
+static id Dialog1Invoke (NSString* method, NSArray* args, BOOL* reachable)
+{
+	if(reachable)
+		*reachable = NO;
+
+	char const* path = getenv("DIALOG_1_PORT_NAME");
+	if(!path)
+		return nil;
+
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(fd == -1)
+		return nil;
+
+	struct sockaddr_un addr = { 0, AF_UNIX };
+	if(strlen(path) >= sizeof(addr.sun_path)) { close(fd); return nil; }
+	strcpy(addr.sun_path, path);
+	addr.sun_len = SUN_LEN(&addr);
+	if(connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) { close(fd); return nil; }
+
+	NSMutableArray* marshalled = [NSMutableArray array];
+	for(id arg in args)
+		[marshalled addObject:arg ?: NSNull.null];
+
+	id result = nil;
+	if(Dialog1WriteMessage(fd, @{ @"method": method, @"arguments": marshalled }))
+	{
+		if(NSDictionary* reply = Dialog1ReadMessage(fd))
+		{
+			if(reachable)
+				*reachable = YES;
+			result = reply[@"result"];
+		}
+	}
+	close(fd);
+	return result;
+}
+
+// nil when the server cannot be reached — validate_proxy prints the right message.
+- (NSNumber*)serverProtocolVersionOrNil
+{
+	BOOL reachable = NO;
+	id v = Dialog1Invoke(@"textMateDialogServerProtocolVersion", @[], &reachable);
+	return reachable ? (v ?: @0) : nil;
+}
+
+- (NSInteger)textMateDialogServerProtocolVersion
+{
+	id v = Dialog1Invoke(@"textMateDialogServerProtocolVersion", @[], NULL);
+	return [v respondsToSelector:@selector(integerValue)] ? [v integerValue] : 0;
+}
+
+- (id)showNib:(NSString*)aNibPath withParameters:(id)someParameters andInitialValues:(NSDictionary*)initialValues dynamicClasses:(NSDictionary*)dynamicClasses modal:(BOOL)flag center:(BOOL)shouldCenter async:(BOOL)async
+{
+	return Dialog1Invoke(@"showNib", @[ aNibPath ?: NSNull.null, someParameters ?: NSNull.null, initialValues ?: NSNull.null, dynamicClasses ?: NSNull.null, @(flag), @(shouldCenter), @(async) ], NULL);
+}
+
+- (id)listNibTokens                                      { return Dialog1Invoke(@"listNibTokens", @[], NULL); }
+- (id)updateNib:(id)token withParameters:(id)someParameters { return Dialog1Invoke(@"updateNib", @[ token ?: NSNull.null, someParameters ?: NSNull.null ], NULL); }
+- (id)closeNib:(id)token                                 { return Dialog1Invoke(@"closeNib", @[ token ?: NSNull.null ], NULL); }
+- (id)retrieveNibResults:(id)token                       { return Dialog1Invoke(@"retrieveNibResults", @[ token ?: NSNull.null ], NULL); }
+- (id)showAlertForPath:(NSString*)filePath withParameters:(NSDictionary*)parameters modal:(BOOL)modal
+{
+	return Dialog1Invoke(@"showAlertForPath", @[ filePath ?: NSNull.null, parameters ?: NSNull.null, @(modal) ], NULL);
+}
+- (id)showMenuWithOptions:(NSDictionary*)someOptions     { return Dialog1Invoke(@"showMenuWithOptions", @[ someOptions ?: NSNull.null ], NULL); }
+@end
 
 static char const* const AppName    = "tm_dialog";
 static char const* const AppVersion = "1.1";
@@ -137,14 +215,11 @@ BOOL validate_proxy (id* outProxy)
 	// (during the very short life of an instance of this tool)
 	if(!proxyValid)
 	{
-		NSString* portName = @"TextMate dialog server";
-		if(char const* var = getenv("DIALOG_1_PORT_NAME"))
-			portName = [NSString stringWithUTF8String:var];
+		TMDialog1Client* client = [TMDialog1Client new];
+		NSNumber* version = [client serverProtocolVersionOrNil];   // nil ⇒ unreachable
+		proxy = version ? client : nil;
 
-		proxy = [NSConnection rootProxyForConnectionWithRegisteredName:portName host:nil];
-		[proxy setProtocolForProxy:@protocol(TextMateDialogServerProtocol)];
-
-		if([proxy textMateDialogServerProtocolVersion] == TextMateDialogServerProtocolVersion)
+		if(version && [version integerValue] == TextMateDialogServerProtocolVersion)
 		{
 			proxyValid = YES;
 		}
@@ -152,7 +227,7 @@ BOOL validate_proxy (id* outProxy)
 		{
 			if(proxy)
 			{
-				int pluginVersion = [proxy textMateDialogServerProtocolVersion];
+				int pluginVersion = [version intValue];
 				int toolVersion = TextMateDialogServerProtocolVersion;
 				if(pluginVersion < toolVersion)
 				{

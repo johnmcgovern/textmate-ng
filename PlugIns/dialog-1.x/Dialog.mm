@@ -1,8 +1,11 @@
 #import <string>
 #import <sys/stat.h>
+#import <sys/socket.h>
+#import <sys/un.h>
 #import "Dialog.h"
 #import "TMDSemaphore.h"
 #import "TMDChameleon.h"
+#import "Dialog1Wire.h"
 
 @interface TMDWindowController : NSObject <NSWindowDelegate>
 {
@@ -421,7 +424,7 @@ static NSUInteger sNextWindowControllerToken = 1;
 @end
 
 @interface Dialog : NSObject <TextMateDialogServerProtocol>
-@property (nonatomic) NSConnection* connection;
+@property (nonatomic) dispatch_source_t listener;
 - (id)initWithPlugInController:(id <TMPlugInController>)aController;
 @end
 
@@ -431,18 +434,144 @@ static NSUInteger sNextWindowControllerToken = 1;
 	NSApp = NSApplication.sharedApplication;
 	if(self = [super init])
 	{
-		_connection = [NSConnection new];
-		[_connection setRootObject:self];
-
-		NSString* portName = [NSString stringWithFormat:@"%@.%d", @"com.macromates.dialog_1", getpid()];
-		if([_connection registerName:portName] == NO)
-			NSLog(@"couldn't setup port: %@", portName), NSBeep();
-		setenv("DIALOG_1_PORT_NAME", [portName UTF8String], 1);
+		[self startListening];
 
 		if(NSString* path = [[NSBundle bundleForClass:[self class]] pathForResource:@"tm_dialog" ofType:nil])
 			setenv(getenv("DIALOG") ? "DIALOG_1" : "DIALOG", [path UTF8String], 1);
 	}
 	return self;
+}
+
+// A UNIX socket where a vended Distributed Objects root object used to be — the
+// same move the 2.x plug-in and the commit window made. mode 0600, set by
+// narrowing the umask across bind() (not chmod after, which leaves a window in
+// which another user can connect). Only this user can reach it, which is the
+// point: a request drives dialogs and names the files they read and write.
+- (void)startListening
+{
+	[Dialog removeSocketsOfDepartedInstances];
+
+	NSString* path = Dialog1SocketPathForServerPID(getpid());
+	char const* cPath = path.fileSystemRepresentation;
+
+	if(unlink(cPath) == -1 && errno != ENOENT)
+		return (void)(NSLog(@"dialog 1.x: cannot remove stale socket %s: %s", cPath, strerror(errno)), NSBeep());
+
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(fd == -1)
+		return (void)(NSLog(@"dialog 1.x: socket(): %s", strerror(errno)), NSBeep());
+	fcntl(fd, F_SETFD, FD_CLOEXEC);
+
+	struct sockaddr_un addr = { 0, AF_UNIX };
+	if(strlen(cPath) >= sizeof(addr.sun_path))
+	{
+		NSLog(@"dialog 1.x: socket path too long: %s", cPath);
+		close(fd);
+		return;
+	}
+	strcpy(addr.sun_path, cPath);
+	addr.sun_len = SUN_LEN(&addr);
+
+	mode_t const previous = umask(0177);   // 0600 whatever the user's umask is
+	int const bound = bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+	umask(previous);
+
+	if(bound == -1 || listen(fd, 16) == -1)
+	{
+		NSLog(@"dialog 1.x: cannot listen on %s: %s", cPath, strerror(errno)), NSBeep();
+		close(fd);
+		return;
+	}
+
+	setenv("DIALOG_1_PORT_NAME", cPath, 1);
+
+	_listener = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, fd, 0, dispatch_get_main_queue());
+	dispatch_source_set_event_handler(_listener, ^{ [self acceptOne:fd]; });
+	dispatch_source_set_cancel_handler(_listener, ^{ close(fd); });
+	dispatch_resume(_listener);
+}
+
+// Same sweep as CommitWindowServer / the 2.x plug-in: the socket file can outlive
+// a killed process, so remove any whose pid no longer exists.
++ (void)removeSocketsOfDepartedInstances
+{
+	NSString* directory = @"/tmp";
+	NSString* prefix = [NSString stringWithFormat:@"textmate-dialog1-%d-", getuid()];
+	for(NSString* name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:directory error:nullptr])
+	{
+		if(![name hasPrefix:prefix] || ![name hasSuffix:@".sock"])
+			continue;
+		pid_t pid = (pid_t)[[name substringFromIndex:prefix.length] stringByDeletingPathExtension].intValue;
+		if(pid <= 0 || pid == getpid())
+			continue;
+		if(kill(pid, 0) == -1 && errno == ESRCH)
+			unlink([directory stringByAppendingPathComponent:name].fileSystemRepresentation);
+	}
+}
+
+- (void)acceptOne:(int)listenFD
+{
+	int fd = accept(listenFD, nullptr, nullptr);
+	if(fd == -1)
+		return;
+	fcntl(fd, F_SETFD, FD_CLOEXEC);
+
+	// Read the request off the main thread; run it on the main thread, where the
+	// dialog work belongs and where the modal/menu calls spin their nested
+	// runloops — exactly where Distributed Objects delivered these messages. The
+	// reply goes back on the same connection, then it is closed.
+	dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+		NSDictionary* request = Dialog1ReadMessage(fd);
+		if(!request)
+		{
+			close(fd);
+			return;
+		}
+		dispatch_async(dispatch_get_main_queue(), ^{
+			NSDictionary* reply = [self handleRequest:request];
+			Dialog1WriteMessage(fd, reply ?: @{});
+			close(fd);
+		});
+	});
+}
+
+- (void)dealloc
+{
+	if(_listener)
+		dispatch_source_cancel(_listener);
+	unlink(Dialog1SocketPathForServerPID(getpid()).fileSystemRepresentation);
+}
+
+// Map one request to the method it names. The selectors and their result types
+// are unchanged from the Distributed Objects protocol; only the transport moved.
+// NSNull in the arguments is a nil argument; a nil result becomes an empty reply.
+- (NSDictionary*)handleRequest:(NSDictionary*)request
+{
+	NSString* method = request[@"method"];
+	NSArray* args = request[@"arguments"] ?: @[];
+	id (^nilable)(NSUInteger) = ^id(NSUInteger i){ id a = i < args.count ? args[i] : nil; return a == NSNull.null ? nil : a; };
+
+	id result = nil;
+	if([method isEqualToString:@"textMateDialogServerProtocolVersion"])
+		result = @([self textMateDialogServerProtocolVersion]);
+	else if([method isEqualToString:@"showNib"])
+		result = [self showNib:nilable(0) withParameters:nilable(1) andInitialValues:nilable(2) dynamicClasses:nilable(3) modal:[args[4] boolValue] center:[args[5] boolValue] async:[args[6] boolValue]];
+	else if([method isEqualToString:@"listNibTokens"])
+		result = [self listNibTokens];
+	else if([method isEqualToString:@"updateNib"])
+		result = [self updateNib:nilable(0) withParameters:nilable(1)];
+	else if([method isEqualToString:@"closeNib"])
+		result = [self closeNib:nilable(0)];
+	else if([method isEqualToString:@"retrieveNibResults"])
+		result = [self retrieveNibResults:nilable(0)];
+	else if([method isEqualToString:@"showAlertForPath"])
+		result = [self showAlertForPath:nilable(0) withParameters:nilable(1) modal:[args[2] boolValue]];
+	else if([method isEqualToString:@"showMenuWithOptions"])
+		result = [self showMenuWithOptions:nilable(0)];
+	else
+		NSLog(@"dialog 1.x: unknown method %@", method);
+
+	return result ? @{ @"result": result } : @{};
 }
 
 - (NSInteger)textMateDialogServerProtocolVersion

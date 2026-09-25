@@ -1,5 +1,5 @@
 target "tm_dialog" {
-	sources    tm_dialog.mm
+	sources    tm_dialog.mm Dialog1Wire.mm
 	executable "${target}"
 	frameworks Foundation
 }
@@ -13,7 +13,7 @@ target "Dialog" {
 	files @tm_dialog    "Resources"
 	files Info.plist    "."
 
-	sources Dialog.mm TMDChameleon.mm TMDSemaphore.mm
+	sources Dialog.mm TMDChameleon.mm TMDSemaphore.mm Dialog1Wire.mm
 	executable "MacOS/${target}"
 	frameworks Cocoa
 }

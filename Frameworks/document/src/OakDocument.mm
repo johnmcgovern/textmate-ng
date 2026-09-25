@@ -29,6 +29,47 @@
 #import <file/reader.h>
 #import <encoding/encoding.h>
 
+// Per-file metadata — bookmarks, fold state, cursor/selection, and the fields of a
+// crash backup — is stored in extended attributes on the user's own files. These
+// used a com.macromates.* prefix until 2026-09-24 (shared with a real TextMate 2
+// install); they are com.j23software.* now, to match the application's namespace.
+//
+// Existing files are migrated transparently: a read prefers the new name and falls
+// back to the old, and a write sets the new name and clears the old twin so a stale
+// old value cannot resurface through that fallback. The trade-off, recorded for
+// whoever wonders: TextMate 2 and TextMate-NG no longer share this per-file state
+// on the same files. (The com.macromates.textmate.* file-format UTIs in Info.plist
+// are a separate, public matter and are deliberately left unchanged.)
+static std::string const kDocAttrPrefix   = "com.j23software.";
+static std::string const kDocAttrPrefixOld = "com.macromates.";
+
+static std::string doc_attr (std::string const& path, std::string const& suffix)
+{
+	std::string v = path::get_attr(path, kDocAttrPrefix + suffix);
+	return v != NULL_STR ? v : path::get_attr(path, kDocAttrPrefixOld + suffix);
+}
+
+static std::string doc_attr (std::map<std::string, std::string> const& attrs, std::string const& suffix)
+{
+	auto it = attrs.find(kDocAttrPrefix + suffix);
+	if(it != attrs.end())
+		return it->second;
+	it = attrs.find(kDocAttrPrefixOld + suffix);
+	return it != attrs.end() ? it->second : NULL_STR;
+}
+
+// For a write map already keyed com.j23software.*, clear each com.macromates.* twin
+// (set to NULL_STR ⇒ removed) so the read fallback above never sees a stale value.
+static void clear_legacy_attr_twins (std::map<std::string, std::string>& attrs)
+{
+	std::vector<std::string> suffixes;
+	for(auto const& kv : attrs)
+		if(kv.first.compare(0, kDocAttrPrefix.size(), kDocAttrPrefix) == 0)
+			suffixes.push_back(kv.first.substr(kDocAttrPrefix.size()));
+	for(auto const& suffix : suffixes)
+		attrs[kDocAttrPrefixOld + suffix] = NULL_STR;
+}
+
 namespace document
 {
 	// =========
@@ -116,7 +157,7 @@ namespace document
 		{
 			std::map<text::pos_t, std::string> res;
 
-			std::string const str = path::get_attr(path, "com.macromates.bookmarks");
+			std::string const str = doc_attr(path, "bookmarks");
 			if(str == NULL_STR)
 				return res;
 
@@ -344,18 +385,18 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	if(self = [self init])
 	{
 		std::string const path = to_s(backupPath);
-		_identifier     = [[NSUUID alloc] initWithUUIDString:to_ns(path::get_attr(path, "com.macromates.backup.identifier"))];
+		_identifier     = [[NSUUID alloc] initWithUUIDString:to_ns(doc_attr(path, "backup.identifier"))];
 		_backupPath     = backupPath;
 
-		_path           = to_ns(path::resolve(path::get_attr(path, "com.macromates.backup.path")));
+		_path           = to_ns(path::resolve(doc_attr(path, "backup.path")));
 		_onDisk         = _path && access([_path fileSystemRepresentation], F_OK) == 0;
-		_fileType       = to_ns(path::get_attr(path, "com.macromates.backup.file-type"));
-		_diskEncoding   = to_ns(path::get_attr(path, "com.macromates.backup.encoding"));
-		_diskNewlines   = to_ns(path::get_attr(path, "com.macromates.backup.newlines"));
-		_customName     = to_ns(path::get_attr(path, "com.macromates.backup.custom-name"));
-		_untitledCount  = atoi(path::get_attr(path, "com.macromates.backup.untitled-count").c_str());
+		_fileType       = to_ns(doc_attr(path, "backup.file-type"));
+		_diskEncoding   = to_ns(doc_attr(path, "backup.encoding"));
+		_diskNewlines   = to_ns(doc_attr(path, "backup.newlines"));
+		_customName     = to_ns(doc_attr(path, "backup.custom-name"));
+		_untitledCount  = atoi(doc_attr(path, "backup.untitled-count").c_str());
 
-		if(path::get_attr(path, "com.macromates.backup.modified") == "YES")
+		if(doc_attr(path, "backup.modified") == "YES")
 			_savedRevision = _revision-1;
 	}
 	return self;
@@ -407,7 +448,7 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	for(auto dirEntry : path::entries(dir))
 	{
 		std::string const path = path::join(dir, dirEntry->d_name);
-		std::string const uuid = path::get_attr(path, "com.macromates.backup.identifier");
+		std::string const uuid = doc_attr(path, "backup.identifier");
 		if(uuid != NULL_STR && [anIdentifier isEqual:[[NSUUID alloc] initWithUUIDString:to_ns(uuid)]])
 		{
 			if(OakDocument* res = [[OakDocument alloc] initWithBackupPath:to_ns(path)])
@@ -540,20 +581,17 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	for(OakDocumentEditor* editor in self.documentEditors)
 		[editor documentWillSave:self];
 
-	// These com.macromates.* names are deliberately NOT renamed alongside the
-	// 2026-07-26 CFBundleIdentifier move. They are extended attributes written onto
-	// *the user's own files*, not app identity — renaming them would silently orphan
-	// every bookmark, selection and fold state on every file ever opened, and would
-	// drop interop with a real TextMate install. Keeping them is a feature: someone
-	// migrating from TextMate keeps their per-file state. Same reasoning keeps the
-	// com.macromates.textmate.* file-format UTIs in Info.plist.
+	// These are com.j23software.* as of 2026-09-24 (they were com.macromates.* — see
+	// the migration note by the doc_attr helpers at the top of this file). The
+	// com.macromates.textmate.* file-format UTIs in Info.plist are a separate, public
+	// matter and are deliberately left unchanged.
 	std::map<std::string, std::string> res = {
-		{ "com.macromates.bookmarks",      to_s([self stringifyMarksOfType:OakDocumentBookmarkIdentifier]) },
-		{ "com.macromates.selectionRange", to_s(_selection) },
-		{ "com.macromates.visibleIndex",   _visibleIndex ? to_s(_visibleIndex) : NULL_STR },
-		{ "com.macromates.crc32",          NULL_STR },
-		{ "com.macromates.folded",         NULL_STR },
-		{ "com.macromates.visibleRect",    NULL_STR }, // Clear legacy attribute
+		{ "com.j23software.bookmarks",      to_s([self stringifyMarksOfType:OakDocumentBookmarkIdentifier]) },
+		{ "com.j23software.selectionRange", to_s(_selection) },
+		{ "com.j23software.visibleIndex",   _visibleIndex ? to_s(_visibleIndex) : NULL_STR },
+		{ "com.j23software.crc32",          NULL_STR },
+		{ "com.j23software.folded",         NULL_STR },
+		{ "com.j23software.visibleRect",    NULL_STR }, // Clear our own legacy attribute
 	};
 
 	if(_buffer && OakNotEmptyString(_folded))
@@ -563,10 +601,11 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 			crc32.process_bytes(bytes, len);
 		});
 
-		res["com.macromates.crc32"]  = text::format("%04x", crc32.checksum());
-		res["com.macromates.folded"] = to_s(_folded);
+		res["com.j23software.crc32"]  = text::format("%04x", crc32.checksum());
+		res["com.j23software.folded"] = to_s(_folded);
 	}
 
+	clear_legacy_attr_twins(res);   // migrate: drop the com.macromates.* twins
 	return res;
 }
 
@@ -649,17 +688,18 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 
 		auto attr = [self extendedAttributeds];
 
-		attr["com.macromates.backup.path"]           = to_s(_path);
-		attr["com.macromates.backup.identifier"]     = to_s(_identifier);
-		attr["com.macromates.backup.file-type"]      = to_s(_fileType);
-		attr["com.macromates.backup.encoding"]       = to_s(_diskEncoding);
-		attr["com.macromates.backup.newlines"]       = to_s(_diskNewlines);
-		attr["com.macromates.backup.untitled-count"] = _path || _customName ? NULL_STR : std::to_string(_untitledCount);
-		attr["com.macromates.backup.custom-name"]    = to_s(_customName);
-		attr["com.macromates.backup.modified"]       = self.isDocumentEdited ? "YES" : NULL_STR;
-		attr["com.macromates.backup.tab-size"]       = std::to_string(self.tabSize);
-		attr["com.macromates.backup.soft-tabs"]      = self.softTabs ? "YES" : NULL_STR;
+		attr["com.j23software.backup.path"]           = to_s(_path);
+		attr["com.j23software.backup.identifier"]     = to_s(_identifier);
+		attr["com.j23software.backup.file-type"]      = to_s(_fileType);
+		attr["com.j23software.backup.encoding"]       = to_s(_diskEncoding);
+		attr["com.j23software.backup.newlines"]       = to_s(_diskNewlines);
+		attr["com.j23software.backup.untitled-count"] = _path || _customName ? NULL_STR : std::to_string(_untitledCount);
+		attr["com.j23software.backup.custom-name"]    = to_s(_customName);
+		attr["com.j23software.backup.modified"]       = self.isDocumentEdited ? "YES" : NULL_STR;
+		attr["com.j23software.backup.tab-size"]       = std::to_string(self.tabSize);
+		attr["com.j23software.backup.soft-tabs"]      = self.softTabs ? "YES" : NULL_STR;
 
+		clear_legacy_attr_twins(attr);   // migrate: drop the com.macromates.* twins (base + backup.*)
 		path::set_attributes(temp, attr);
 
 		if(!path::rename_or_copy(temp, to_s(self.backupPath)))
@@ -850,24 +890,24 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	if(_path)
 		document::marks.move_to_buffer(to_s(_path), *_buffer);
 
-	auto folded = attributes.find("com.macromates.folded");
-	if(folded != attributes.end())
+	std::string const folded = doc_attr(attributes, "folded");
+	if(folded != NULL_STR)
 	{
-		auto crc32 = attributes.find("com.macromates.crc32");
-		if(crc32 != attributes.end() && crc32->second == text::format("%04x", content->crc32()))
-			_folded = to_ns(folded->second);
+		std::string const crc32 = doc_attr(attributes, "crc32");
+		if(crc32 != NULL_STR && crc32 == text::format("%04x", content->crc32()))
+			_folded = to_ns(folded);
 	}
 
 	if(!_selection)
 	{
-		auto sel = attributes.find("com.macromates.selectionRange");
-		_selection = sel != attributes.end() ? to_ns(sel->second) : nil;
+		std::string const sel = doc_attr(attributes, "selectionRange");
+		_selection = sel != NULL_STR ? to_ns(sel) : nil;
 
-		auto idx = attributes.find("com.macromates.visibleIndex");
-		if(idx != attributes.end())
+		std::string const idx = doc_attr(attributes, "visibleIndex");
+		if(idx != NULL_STR)
 		{
 			size_t index = SIZE_T_MAX, carry = 0;
-			sscanf(idx->second.c_str(), "%zu:%zu", &index, &carry);
+			sscanf(idx.c_str(), "%zu:%zu", &index, &carry);
 			_visibleIndex = ng::index_t(_buffer->sanitize_index(index), carry);
 		}
 	}

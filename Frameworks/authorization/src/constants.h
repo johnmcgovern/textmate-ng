@@ -9,7 +9,7 @@
 // and fight over one socket.
 //
 // Consequence: a machine that already installed the old helper keeps an orphaned
-// com.macromates.auth_server daemon + plist. Nothing removes it — worth an
+// com.j23software.auth_server daemon + plist. Nothing removes it — worth an
 // uninstall note whenever this helper is next touched (it is already due an
 // SMAppService rewrite; see NOTARIZATION_HANDOFF.md).
 #define kAuthJobName     "com.j23software.auth_server"

@@ -3,26 +3,50 @@
 //  Created by Allan Odgaard on 2007-09-22.
 //
 
-#import "Dialog2.h"
+#import <Foundation/Foundation.h>
+#import "DialogWire.h"
+#import <sys/socket.h>
+#import <sys/un.h>
+#import <sys/stat.h>
+#import <unistd.h>
 
 static double const AppVersion = 2.0;
 
-id connect ()
+// Connect to the plug-in's socket, the path in DIALOG_PORT_NAME (the plug-in sets
+// it). Returns a connected fd, or -1. This used to be a Distributed Objects
+// rootProxy; see DialogWire.h for why it is a socket now.
+static int connect_to_server ()
 {
-	NSString* portName = kDialogServerConnectionName;
-	if(char const* var = getenv("DIALOG_PORT_NAME"))
-		portName = @(var);
+	char const* path = getenv("DIALOG_PORT_NAME");
+	if(!path)
+		return -1;
 
-	id proxy = [NSConnection rootProxyForConnectionWithRegisteredName:portName host:nil];
-	[proxy setProtocolForProxy:@protocol(DialogServerProtocol)];
-	return proxy;
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(fd == -1)
+		return -1;
+
+	struct sockaddr_un addr = { 0, AF_UNIX };
+	if(strlen(path) >= sizeof(addr.sun_path))
+	{
+		close(fd);
+		return -1;
+	}
+	strcpy(addr.sun_path, path);
+	addr.sun_len = SUN_LEN(&addr);
+
+	if(connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
+	{
+		close(fd);
+		return -1;
+	}
+	return fd;
 }
 
 char const* create_pipe (char const* name)
 {
 	char* filename;
 	asprintf(&filename, "%s/dialog_fifo_%d_%s", getenv("TMPDIR") ?: "/tmp", getpid(), name);
-	int res = mkfifo(filename, 0666);
+	int res = mkfifo(filename, 0600);   // only this user; the socket already enforces that
 	if((res == -1) && (errno != EEXIST))
 	{
 		perror("Error creating the named pipe");
@@ -56,8 +80,8 @@ int main (int argc, char const* argv[])
 		execv(getenv("DIALOG_1"), (char* const*)argv);
 
 	@autoreleasepool{
-		id<DialogServerProtocol> proxy = connect();
-		if(!proxy)
+		int serverFd = connect_to_server();
+		if(serverFd == -1)
 		{
 			fprintf(stderr, "error reaching server\n");
 			exit(EX_UNAVAILABLE);
@@ -80,7 +104,15 @@ int main (int argc, char const* argv[])
 			@"arguments":   args,
 		};
 
-		[proxy connectFromClientWithOptions:dict];
+		// One request, then close the write side. The command's output comes back
+		// over the fifos named above, not over this socket.
+		bool sent = DialogWriteRequest(serverFd, dict);
+		close(serverFd);
+		if(!sent)
+		{
+			fprintf(stderr, "error sending request to server\n");
+			exit(EX_UNAVAILABLE);
+		}
 
 		int inputFd  = open_pipe(stdinName, O_WRONLY);
 		int outputFd = open_pipe(stdoutName, O_RDONLY);

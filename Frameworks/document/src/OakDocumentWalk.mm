@@ -8,7 +8,7 @@
 #import <oak/debug.h>
 
 @implementation OakDocumentWalk
-+ (void)enumerateDocumentsAtPaths:(NSArray*)items options:(NSDictionary*)someOptions openDocumentsInDirectory:(OakDocumentWalkOpenDocuments)openDocuments usingBlock:(void(^)(OakDocument* document, BOOL* stop))block
++ (void)enumerateDocumentsAtPaths:(NSArray*)items options:(NSDictionary*)someOptions openDocumentsInDirectory:(OakDocumentWalkOpenDocuments)openDocuments isCancelled:(BOOL(^)(void))isCancelled usingBlock:(void(^)(OakDocument* document, BOOL* stop))block
 {
 	BOOL stop = NO;
 
@@ -94,6 +94,13 @@
 
 	while(stop == NO && !dirs.empty())
 	{
+		// Poll cancellation per directory, not only when a file is yielded below: a
+		// depth-first crawl of a huge, file-sparse tree (e.g. "/") can otherwise descend
+		// for seconds between file callbacks, long past the point the caller asked it to
+		// stop. Checked here it ends within one directory's scan.
+		if(isCancelled && isCancelled())
+			break;
+
 		std::string dir = dirs.front();
 		dirs.pop_front();
 

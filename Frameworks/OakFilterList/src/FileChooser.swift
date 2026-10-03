@@ -303,7 +303,10 @@ class FileChooser: OakChooser {
 			final class Flag { var didSignal = false }
 			let flag = Flag()
 
-			OakDocumentController.sharedInstance.enumerateDocuments(atPath: path, options: options) { document, stop in
+			// Polled per directory by the walk: a superseded search (newer token) is
+			// abandoned deep in a file-sparse tree rather than only at the next file yielded,
+			// so a crawl of a huge root path stops promptly when the chooser tears it down.
+			OakDocumentController.sharedInstance.enumerateDocuments(atPath: path, options: options, isCancelled: { searchToken != state.currentToken }, using: { document, stop in
 				guard let document else {
 					return
 				}
@@ -316,7 +319,7 @@ class FileChooser: OakChooser {
 				if !state.append(document, ifToken: searchToken) {
 					stop?.pointee = true
 				}
-			}
+			})
 
 			if flag.didSignal == false {
 				sem.signal()

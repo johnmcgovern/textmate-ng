@@ -1,4 +1,5 @@
 #import "../src/FileChooser.h"
+#import "../src/FileChooserSupport.h"
 #import <objc/runtime.h>
 
 // Written against the ObjC++ FileChooser, before the Swift port (rule 18). The ⌘T "Open
@@ -32,6 +33,20 @@ static NSUInteger const kUncommittedChangesSourceIndex = 2;
 void setup ()
 {
 	NSApplicationLoad();
+}
+
+// A path the "All" source can be pointed at without starting a real, open-ended directory
+// scan. Selecting the All source (or setting .path under it) kicks off a background walk of
+// that path; the title and menu-validation assertions below only need .path and .sourceIndex
+// set, not a live search — and this test file's contract is that live searches are the app's
+// job (rule 8), not a unit test's. An empty directory scans to completion in microseconds,
+// so the walk cannot outlive the test and read freed state from a later suite — the shape
+// that made the sanitizer flaky when an earlier version pointed the All source at "/".
+static NSString* EmptyScanDir ()
+{
+	NSString* dir = [NSTemporaryDirectory() stringByAppendingPathComponent:[@"tm-filechooser-" stringByAppendingString:NSUUID.UUID.UUIDString]];
+	[NSFileManager.defaultManager createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+	return dir;
 }
 
 void test_file_chooser_shared_instance_is_a_chooser ()
@@ -73,13 +88,15 @@ void test_file_chooser_source_index_drives_the_window_title ()
 
 void test_file_chooser_path_appears_in_the_title ()
 {
+	NSString* dir = EmptyScanDir();
+
 	FileChooser* chooser = [FileChooser new];
 	chooser.sourceIndex = kOpenDocumentsSourceIndex; // no directory search
-	chooser.path = @"/usr/share";
-	OAK_ASSERT([chooser.path isEqualToString:@"/usr/share"]);
+	chooser.path = dir;
+	OAK_ASSERT([chooser.path isEqualToString:dir]);
 
 	chooser.sourceIndex = kAllSourceIndex;
-	OAK_ASSERT([chooser.window.title isEqualToString:@"/usr/share"]);
+	OAK_ASSERT([chooser.window.title isEqualToString:dir.stringByAbbreviatingWithTildeInPath]);
 }
 
 void test_file_chooser_go_to_parent_folder_validation ()
@@ -87,15 +104,21 @@ void test_file_chooser_go_to_parent_folder_validation ()
 	FileChooser* chooser = [FileChooser new];
 	NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:@"Parent" action:@selector(goToParentFolder:) keyEquivalent:@""];
 
+	// "Go to Parent Folder" is enabled only in the All source and only when the current path
+	// has a parent. The source gate and the has-parent branch are asserted here against an
+	// empty temp directory (see EmptyScanDir). The no-parent branch is the pathHasParent("/")
+	// contract — pinned directly, both here and in t_file_chooser_support — rather than driven
+	// through a live path = "/", which would start an unbounded whole-filesystem scan.
+	NSString* dir = EmptyScanDir();
+
 	chooser.sourceIndex = kOpenDocumentsSourceIndex;
-	chooser.path = @"/usr/share";
-	OAK_ASSERT([chooser validateMenuItem:item] == NO); // wrong source: disabled
+	chooser.path = dir;
+	OAK_ASSERT([chooser validateMenuItem:item] == NO); // wrong source: disabled regardless of path
 
 	chooser.sourceIndex = kAllSourceIndex;
-	OAK_ASSERT([chooser validateMenuItem:item] == YES); // has a parent
+	OAK_ASSERT([chooser validateMenuItem:item] == YES); // All source + a path that has a parent
 
-	chooser.path = @"/";
-	OAK_ASSERT([chooser validateMenuItem:item] == NO); // root is its own parent
+	OAK_ASSERT([FileChooserSupport pathHasParent:@"/"] == NO); // root is its own parent → item disabled
 }
 
 void test_file_chooser_keeps_its_selector_surface ()

@@ -180,13 +180,27 @@ class OakDocumentController: NSObject {
 
 	@objc(enumerateDocumentsAtPath:options:usingBlock:)
 	func enumerateDocuments(atPath aDirectory: String, options someOptions: [AnyHashable: Any]?, using block: @escaping (OakDocument, UnsafeMutablePointer<ObjCBool>) -> Void) {
-		enumerateDocuments(atPaths: [ aDirectory ], options: someOptions, using: block)
+		walk([ aDirectory ], someOptions, nil, block)
+	}
+
+	// A distinct selector (not a defaulted parameter) because the three-argument form above is
+	// @objc, and because callers live in another module and reach this across the ObjC face.
+	// `isCancelled` is polled per directory by the walk so a long crawl can be stopped promptly
+	// (see OakDocumentWalk) — a folder search over a huge tree honours cancellation deep in a
+	// file-sparse subtree rather than only at the next file yielded.
+	@objc(enumerateDocumentsAtPath:options:isCancelled:usingBlock:)
+	func enumerateDocuments(atPath aDirectory: String, options someOptions: [AnyHashable: Any]?, isCancelled: @escaping () -> Bool, using block: @escaping (OakDocument, UnsafeMutablePointer<ObjCBool>) -> Void) {
+		walk([ aDirectory ], someOptions, isCancelled, block)
 	}
 
 	@objc(enumerateDocumentsAtPaths:options:usingBlock:)
 	func enumerateDocuments(atPaths items: [String], options someOptions: [AnyHashable: Any]?, using block: @escaping (OakDocument, UnsafeMutablePointer<ObjCBool>) -> Void) {
+		walk(items, someOptions, nil, block)
+	}
+
+	private func walk(_ items: [String], _ someOptions: [AnyHashable: Any]?, _ isCancelled: (() -> Bool)?, _ block: @escaping (OakDocument, UnsafeMutablePointer<ObjCBool>) -> Void) {
 		OakDocumentWalk.enumerateDocuments(atPaths: items, options: someOptions, openDocumentsInDirectory: { directory, ignoreOrdering in
 			return ignoreOrdering ? self.openDocuments(inDirectory: directory) : self.untitledDocuments(inDirectory: directory)
-		}, using: block)
+		}, isCancelled: isCancelled, using: block)
 	}
 }

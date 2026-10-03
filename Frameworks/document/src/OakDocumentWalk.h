@@ -17,7 +17,10 @@ NS_ASSUME_NONNULL_BEGIN
 typedef NSArray<OakDocument*>* _Nonnull (^OakDocumentWalkOpenDocuments)(NSString* directory, BOOL ignoreOrdering);
 
 @interface OakDocumentWalk : NSObject
-+ (void)enumerateDocumentsAtPaths:(NSArray<NSString*>*)items options:(nullable NSDictionary*)someOptions openDocumentsInDirectory:(OakDocumentWalkOpenDocuments)openDocuments usingBlock:(void(^)(OakDocument* document, BOOL* stop))block NS_SWIFT_NAME(enumerateDocuments(atPaths:options:openDocumentsInDirectory:using:));
+// `isCancelled`, if given, is polled once per directory as the walk descends — not only
+// when a file is yielded — so a caller can stop a deep, file-sparse crawl (e.g. "/")
+// promptly rather than waiting for the next file callback. Returning YES ends the walk.
++ (void)enumerateDocumentsAtPaths:(NSArray<NSString*>*)items options:(nullable NSDictionary*)someOptions openDocumentsInDirectory:(OakDocumentWalkOpenDocuments)openDocuments isCancelled:(nullable BOOL(^)(void))isCancelled usingBlock:(void(^)(OakDocument* document, BOOL* stop))block NS_SWIFT_NAME(enumerateDocuments(atPaths:options:openDocumentsInDirectory:isCancelled:using:));
 @end
 
 NS_ASSUME_NONNULL_END

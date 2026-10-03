@@ -25,6 +25,10 @@
 - (void)didTouchDocument:(OakDocument*)aDocument;
 
 - (void)enumerateDocumentsAtPath:(NSString*)aDirectory options:(NSDictionary*)someOptions usingBlock:(void(^)(OakDocument* document, BOOL* stop))block;
+// `isCancelled` is polled per directory by the walk, so a long crawl (e.g. a huge root
+// path) is abandoned promptly when a caller supersedes or tears down the search, rather
+// than only at the next file yielded.
+- (void)enumerateDocumentsAtPath:(NSString*)aDirectory options:(NSDictionary*)someOptions isCancelled:(BOOL(^)(void))isCancelled usingBlock:(void(^)(OakDocument* document, BOOL* stop))block;
 - (void)enumerateDocumentsAtPaths:(NSArray*)items options:(NSDictionary*)someOptions usingBlock:(void(^)(OakDocument* document, BOOL* stop))block;
 
 // For use by OakDocument

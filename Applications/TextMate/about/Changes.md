@@ -2,6 +2,32 @@ Title: Release Notes
 
 # Changes
 
+## 2026-10-03 (v2026.10-alpha.37)
+
+**Nothing you look at has changed.** One commit since alpha.36, underneath. If you
+are on alpha.24 or later this should arrive on its own.
+
+What is in it:
+
+* **The folder search behind “Go to File” can be stopped as it descends.** The
+  background walk that lists a project's files now checks whether it has been
+  superseded once per directory, not only each time it reports a file — so a search
+  over a very large tree winds down promptly instead of running on. Nothing about
+  how the panel looks or behaves changes.
+
+**Why a release for one change you cannot see.** It clears the last thing standing
+between this fork and beta. The sanitized test run that guards every release — the
+one that catches memory faults the ordinary tests sail past — had been failing
+intermittently on a background-thread use-after-free. It turned out to be a test
+that pointed “Go to File” at the whole filesystem and then outlived its own scan,
+not a fault in the application. A stability promise cannot rest on a check that
+passes only sometimes, so the fix ships on its own and restarts the week of quiet
+daily use the beta asks for.
+
+**Where to look if something is off.** Bundles ▸ Go to File (⌘T) on a project:
+opening it, typing to filter, and switching between All, Open Documents and
+Uncommitted should behave exactly as before.
+
 ## 2026-09-25 (v2026.9-alpha.36)
 
 **The dialog plug-ins no longer accept commands from any program on your Mac, and

@@ -1,4 +1,11 @@
-# `wrangler dev` state: the local miniflare cache and its sqlite files, written
-# by bin/test-local. Machine-local and regenerated on every run.
+# `cf dev` / `wrangler dev` local state: miniflare cache + sqlite, regenerated each run.
 .wrangler/
+.cloudflare/
+# Build output and deps.
 node_modules/
+dist/
+# Local secret/var overrides for `cf dev`.
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example

@@ -17,18 +17,17 @@
 // not a secret so much as a private thing. What it does contain is the user's
 // contact string, their machine model, and the stack of whatever was running.
 //
-// Which leaves the developer needing a way to see what arrived, and wrangler
-// cannot give one: there is no `wrangler r2 object list` — the r2 object verbs
-// are get, put and delete, all of which need a key you already have, and the
-// keys here contain a UUID nobody has written down. `wrangler r2 bucket info`
-// reports an object count, but it is a lagging metric: it still read 0 several
-// minutes after two objects were confirmed stored. So the listing has to come
-// from the Worker, which is the only thing holding a binding to the bucket.
+// Which leaves the developer needing a way to see what arrived, and the R2
+// object verbs cannot give one: `cf r2 objects get/put/delete` all need a key
+// you already have, and the keys here contain a UUID nobody has written down. A
+// bucket's object count is a lagging metric — it still read 0 several minutes
+// after two objects were confirmed stored. So the listing has to come from the
+// Worker, which is the only thing holding a binding to the bucket.
 //
-// GET /list does that, behind a bearer token in ADMIN_TOKEN — a wrangler
-// secret, never a value in wrangler.toml:
+// GET /list does that, behind a bearer token in ADMIN_TOKEN — a Worker secret,
+// never a value in cloudflare.config.ts:
 //
-//     wrangler secret put ADMIN_TOKEN        (then: bin/reports)
+//     cf deploy --secrets-file <file>        (then: bin/reports)
 //
 // With no ADMIN_TOKEN set the route answers 404, exactly as an unknown path
 // does, so an endpoint that was never configured is not advertised by its own
@@ -236,7 +235,7 @@ async function handlePost(request, env) {
 		},
 	});
 
-	// The metadata alongside the report, so `wrangler r2 object get` on one
+	// The metadata alongside the report, so `cf r2 objects get` on one
 	// small JSON file answers "what was this" without unzipping anything.
 	await env.REPORTS.put(`${key}.json`, JSON.stringify(metadata, null, 1), {
 		httpMetadata: { contentType: "application/json" },

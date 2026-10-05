@@ -1,35 +1,40 @@
 #!/bin/zsh
-# Exercise the Worker locally: start `wrangler dev`, post a report the way the
+# Exercise the Worker locally: start `cf dev --local`, post a report the way the
 # application does, read it back, and check the refusals. No deploy, no network.
 #
 # Two dev runs, because ADMIN_TOKEN has to be both set and unset to cover /list:
 # configured, it must refuse a wrong token and answer a right one; unconfigured,
 # it must 404 like any unknown path rather than advertise itself with a 401.
+# `cf dev` reads local vars from .dev.vars (gitignored), so each run writes or
+# removes that file rather than passing a flag.
 set -e
 cd "${0:h}/.."
 
-port=8787
+port=8787   # pinned in vite.config.ts (server.port); cf dev serves the Worker there
 token='test-token-not-a-secret'
 
-# miniflare persists its simulated R2 under .wrangler/state between runs, so
-# without this the report count is cumulative and "one report was stored" passes
-# or fails depending on how many times this script has been run before. Local
-# dev state only; the deployed bucket is untouched.
-rm -rf .wrangler/state
+# miniflare persists its simulated R2 between runs; an isolated, throwaway dir
+# keeps "one report was stored" from going cumulative across runs. The deployed
+# bucket is untouched. Cleaned up on exit along with the dev server and .dev.vars.
+state=$(mktemp -d)
+trap 'kill $dev_pid 2>/dev/null || true; rm -rf "$state" .dev.vars' EXIT
 
-start_dev() { # port [extra wrangler args...]
-	local p=$1; shift
-	wrangler dev --port $p --local "$@" > /tmp/crash-collector-dev.log 2>&1 &
+start_dev() { # (ADMIN_TOKEN value, or empty to leave it unset)
+	kill $dev_pid 2>/dev/null || true; wait $dev_pid 2>/dev/null || true
+	if [[ -n "$1" ]]; then print "ADMIN_TOKEN=$1" > .dev.vars; else rm -f .dev.vars; fi
+	cf dev --persist-to "$state" > /tmp/crash-collector-dev.log 2>&1 &
 	dev_pid=$!
-	for i in {1..40}; do
-		curl -fsS "http://127.0.0.1:$p/" >/dev/null 2>&1 && return
+	for i in {1..60}; do
+		# any HTTP answer (even a 4xx for GET /) means the server is up; -f would
+		# reject that, and plain connectivity is all we are waiting on here.
+		[[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://127.0.0.1:$port/" 2>/dev/null)" != 000 ]] && return
 		sleep 0.5
 	done
+	echo "    FAIL  cf dev did not come up on :$port"; cat /tmp/crash-collector-dev.log >&2; exit 1
 }
 
-echo "==> starting wrangler dev on :$port"
-trap 'kill $dev_pid 2>/dev/null || true' EXIT
-start_dev $port --var "ADMIN_TOKEN:$token"
+echo "==> starting cf dev on :$port"
+start_dev "$token"
 
 fail=0
 check() { # description expected actual
@@ -140,11 +145,9 @@ check "carries app version" 2026.9-alpha.29 "$(python3 -c 'import json,sys; prin
 check "no report body"     0 "$(grep -c 'Incident Identifier' /tmp/crash-list.out || true)"
 
 echo "==> the listing, with no ADMIN_TOKEN — must not announce itself"
-kill $dev_pid 2>/dev/null || true
-wait $dev_pid 2>/dev/null || true
-start_dev $port
+start_dev
 check "unconfigured /list" 404 "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/list")"
 check "even with a token"  404 "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" "http://127.0.0.1:$port/list")"
 
-if [[ $fail == 0 ]]; then echo "==> all checks passed"; else echo "==> FAILURES; wrangler log at /tmp/crash-collector-dev.log"; fi
+if [[ $fail == 0 ]]; then echo "==> all checks passed"; else echo "==> FAILURES; cf dev log at /tmp/crash-collector-dev.log"; fi
 exit $fail

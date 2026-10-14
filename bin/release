@@ -49,7 +49,10 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CHANGES="$ROOT/Applications/TextMate/about/Changes.md"
 
 command -v gh >/dev/null || { echo "error: gh not installed (brew install gh)" >&2; exit 1; }
-gh auth status >/dev/null 2>&1 || { echo "error: gh is not authenticated (gh auth login)" >&2; exit 1; }
+# --active: only the account a release actually uses has to be good. A plain
+# `gh auth status` exits non-zero if *any* configured account is broken — e.g. a
+# retired j23labs login still in the keyring — which has nothing to do with this.
+gh auth status --active >/dev/null 2>&1 || { echo "error: the active gh account is not authenticated (gh auth login)" >&2; exit 1; }
 
 # ============================================================
 # = 0. --resign-manifest: refresh the expiry, publish nothing =

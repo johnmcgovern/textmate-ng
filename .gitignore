@@ -13,3 +13,6 @@
 # wrangler leaves this behind when run from the repository root by mistake;
 # the Worker itself lives in Server/crash-collector and ignores its own copy.
 .wrangler/
+
+# cf CLI cache / local state
+.cloudflare/

@@ -2,6 +2,33 @@ Title: Release Notes
 
 # Changes
 
+## 2026-10-13 (v2026.10-beta.1)
+
+**Beta.** The port and the hardening have been finished for a while; what this
+release adds is a promise, and the evidence for it: *you can use this as your
+editor and it will not lose your work or disappear on you.* That is a claim about
+checks that can be shown, not a feeling — a crash collector that can be reached, a
+clean run of the whole test suite under the sanitizers and the fuzzer on this
+exact build, a five-minute pass over every window by eye, nothing unreleased at
+the tag, the updater seen installing on its own, and a week of daily use with no
+crash. Those held on the alpha this came from.
+
+It is still an early release. **Beta promises no *known* crashes and a way for an
+unknown one to reach us — not zero bugs, and not a frozen interface:** bundles,
+settings and key bindings can still change.
+
+What is in it since alpha.37:
+
+* **Crash reports go to this project's own domain now.** The collector moved onto
+  `textmate-ng-diagnostics.j23software.com` — a stable address that does not depend
+  on where it happens to be hosted, so the URL a build reports to will not move out
+  from under it again. Nothing you do changes: it still asks once before sending
+  anything, sends the crash and your Mac's model but never what you were editing,
+  and never sends from a build you compiled yourself.
+
+**Where to look if something is off.** Settings ▸ Software Update, for the crash
+report checkbox and contact field.
+
 ## 2026-10-03 (v2026.10-alpha.37)
 
 **Nothing you look at has changed.** One commit since alpha.36, underneath. If you

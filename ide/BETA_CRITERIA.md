@@ -1,5 +1,18 @@
 # What "beta" will mean
 
+**Declared 2026-10-13 as v2026.10-beta.1**, on the evidence from alpha.37
+(released 2026-10-03): ten days of daily use with no crash on this machine, a
+clean suite under ASan/UBSan and the fuzzer on the tagged commit (Sanitizers run
+37168844364), a full smoke pass, nothing unreleased, and the updater seen
+installing unattended. **One honest caveat:** criterion 2 — reading the collector
+to confirm no reports arrived — could not be mechanically verified, because the
+old-account collector alpha.37 posted to began failing (500 on its R2 routes)
+mid-soak as that account was being retired. beta.1 carries the collector's move to
+`textmate-ng-diagnostics.j23software.com`, so from beta.1 on the app posts to a
+healthy endpoint and 1/2 are satisfiable again; the stability evidence (local
+crash log clean, sanitizers green) stood on its own. See
+`Server/crash-collector/README.md` for the moved collector.
+
 Decided 2026-09-17; criteria 1-3 revised 2026-09-18, when deploying showed that two of their checks named a command that does not exist. Beta is a **stability promise**, not a feature milestone —
 the port and the hardening are finished either way, and saying "beta" because
 the work is done would be describing this project's state rather than the

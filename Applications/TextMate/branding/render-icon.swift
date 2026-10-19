@@ -10,6 +10,8 @@ let size: CGFloat = 1024
 let args = CommandLine.arguments
 let flowerPath = args.count > 1 ? args[1] : "flower.png"
 let outPath    = args.count > 2 ? args[2] : "TextMate-NG_1024.png"
+// Pre-release badge (top-right): "Alpha", "Beta", or "" for none (final releases).
+let stage      = args.count > 3 ? args[3] : "Beta"
 
 func c(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> NSColor {
     NSColor(srgbRed: r/255, green: g/255, blue: b/255, alpha: a)
@@ -112,11 +114,15 @@ if let flower = NSImage(contentsOfFile: flowerPath) {
     cg.restoreGState()
 }
 
-// 5) Badges: purple "NG" bottom-right (matches the flower); red "Alpha" top-right.
+// 5) Badges: purple "NG" bottom-right (matches the flower); pre-release stage
+// top-right — red for Alpha, amber for Beta, omitted when `stage` is empty.
 drawBadge(CGRect(x: size*0.635, y: size*0.075, width: size*0.300, height: size*0.155),
           colors: [c(150,70,246), c(120,40,220)], text: "NG")
-drawBadge(CGRect(x: size*0.575, y: size*0.775, width: size*0.360, height: size*0.150),
-          colors: [c(255,69,58), c(198,18,24)], text: "Alpha")
+if !stage.isEmpty {
+    let stageColors = stage == "Alpha" ? [c(255,69,58), c(198,18,24)] : [c(255,159,10), c(214,104,0)]
+    drawBadge(CGRect(x: size*0.575, y: size*0.775, width: size*0.360, height: size*0.150),
+              colors: stageColors, text: stage)
+}
 
 // 6) Crisp 1px inner edge on the tile for definition.
 cg.saveGState()

@@ -25,8 +25,9 @@ version our own branding without touching the submodule.
 macOS 26 ("Liquid Glass") style: TextMate's heritage purple daisy (enlarged to
 90% of the tile) composited on a full-bleed superellipse (squircle) tile with a
 teal liquid-glass gradient, a glass sheen, a refracted bottom rim light, and two
-glossy pill badges — red **Alpha** (pre-release marker, top-right) and purple
-**NG** (fork marker, bottom-right). The teal ground is deliberate: upstream
+glossy pill badges — a pre-release stage marker (top-right: red **Alpha**,
+amber **Beta**, or none for a final release) and purple **NG** (fork marker,
+bottom-right). The teal ground is deliberate: upstream
 TextMate's icon sits on white/lavender, so NG reads instantly in the Dock and
 in side-by-side comparisons.
 
@@ -34,8 +35,9 @@ in side-by-side comparisons.
 ```bash
 # 1. extract the flower artwork from the current upstream icon (alpha preserved)
 sips -s format png ../icons/TextMate.icns --out flower.png --resampleWidth 1024
-# 2. render the 1024 master
-swift render-icon.swift flower.png TextMate-NG_1024.png
+# 2. render the 1024 master; the third argument is the stage badge
+#    ("Alpha", "Beta", or "" for none) and defaults to "Beta"
+swift render-icon.swift flower.png TextMate-NG_1024.png Beta
 # 3. build the iconset + .icns
 mkdir -p TextMate-NG.iconset
 for s in 16 32 128 256 512; do
